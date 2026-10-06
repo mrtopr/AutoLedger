@@ -91,7 +91,6 @@ export async function POST(
       narration: `Payment received via ${mode} (Ref: ${ref})`,
       debitPaise: '0',
       creditPaise: amt.toString(),
-      runningBalancePaise: newBal.toString(),
     });
 
     return NextResponse.json({
