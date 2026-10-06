@@ -339,9 +339,9 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-3">
             {/* Top-Left: Company Logo & Identity */}
             <div className="space-y-1 max-w-md">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                  <HondaWingIcon className="w-5 h-5" color="#FFFFFF" />
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-xl bg-slate-900 flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1 print:w-12 print:h-12 border border-slate-800">
+                  <img src="/logo.png" alt="Company Logo" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-none uppercase">

@@ -22,9 +22,9 @@ export default function Topbar({ onToggleMobileMenu }: { onToggleMobileMenu?: ()
   const { t } = useLanguage();
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const userName = user?.name || 'Sachin';
-  const userRole = user?.role ? (user.role.charAt(0) + user.role.slice(1).toLowerCase()) : 'Owner';
-  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Bhubaneswar';
+  const userName = user?.name || user?.phone || 'User';
+  const userRole = user?.role ? (user.role.charAt(0) + user.role.slice(1).toLowerCase()) : 'Staff';
+  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Workshop';
 
   const openSearch = () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
@@ -42,8 +42,8 @@ export default function Topbar({ onToggleMobileMenu }: { onToggleMobileMenu?: ()
           <Menu className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-[#C81E1E] flex items-center justify-center text-white">
-            <HondaWingIcon className="w-3.5 h-3.5" color="#FFFFFF" />
+          <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden p-0.5">
+            <img src="/logo.png" alt="AutoLedger Emblem" className="w-full h-full object-contain" />
           </div>
           <span className="font-bold text-slate-900 text-xs">AUTOLEDGER</span>
         </div>

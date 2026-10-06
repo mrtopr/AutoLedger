@@ -59,8 +59,8 @@ export default function SignupPage() {
         <div className="md:col-span-4 p-8 sm:p-10 flex flex-col justify-between items-center text-center text-white relative">
           
           <div className="flex flex-col items-center mt-6">
-            <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-lg mb-4">
-              <HondaWingIcon className="w-9 h-9" color="#FFFFFF" />
+            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white/10 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-2xl mb-4 p-2 overflow-hidden">
+              <img src="/logo.png" alt="AutoLedger ERP Emblem" className="w-full h-full object-contain drop-shadow" />
             </div>
 
             <h2 className="text-2xl font-black tracking-wide text-white">

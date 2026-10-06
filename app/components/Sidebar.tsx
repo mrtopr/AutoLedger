@@ -26,10 +26,10 @@ export default function Sidebar() {
   const { user, tenant, logout } = useAuth();
   const { t } = useLanguage();
 
-  const showroomName = tenant?.name || 'Bhubaneswar Honda';
-  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Bhubaneswar';
-  const userName = user?.name || 'Sachin';
-  const userRole = user?.role || 'OWNER';
+  const showroomName = tenant?.name || 'Dealership';
+  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Workshop';
+  const userName = user?.name || user?.phone || 'User';
+  const userRole = user?.role || 'STAFF';
 
   const navGroups = [
     {
@@ -71,16 +71,16 @@ export default function Sidebar() {
   return (
     <aside className="hidden lg:flex flex-col w-[240px] bg-[#090D16] text-slate-300 border-r border-slate-800/80 fixed inset-y-0 left-0 z-40 select-none">
       {/* Brand Header */}
-      <div className="h-14 px-4 flex items-center border-b border-slate-800/70 bg-[#060910]">
-        <div className="flex items-center gap-2.5 w-full">
-          <div className="w-7 h-7 rounded-lg bg-[#C81E1E] flex items-center justify-center shrink-0 shadow-sm">
-            <HondaWingIcon className="w-4 h-4" color="#FFFFFF" />
+      <div className="h-16 px-4 flex items-center border-b border-slate-800/70 bg-[#060910]">
+        <div className="flex items-center gap-3 w-full">
+          <div className="w-11 h-11 rounded-xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-center shrink-0 shadow-md overflow-hidden p-0.5">
+            <img src="/logo.png" alt="AutoLedger Emblem" className="w-full h-full object-contain" />
           </div>
           <div className="truncate flex-1">
             <div className="flex items-center gap-1.5 leading-none">
-              <span className="text-white font-bold text-xs tracking-wider">AUTOLEDGER</span>
+              <span className="text-white font-extrabold text-sm tracking-wide">AUTOLEDGER</span>
             </div>
-            <div className="text-[10px] text-slate-400 truncate mt-0.5 font-normal">
+            <div className="text-[11px] text-slate-400 truncate mt-1 font-normal">
               Honda · {showroomLocation}
             </div>
           </div>

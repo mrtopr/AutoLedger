@@ -7,6 +7,11 @@ import AppShell from "./AppShell";
 export const metadata: Metadata = {
   title: "Honda Dealership & Workshop ERP | AutoLedger",
   description: "Enterprise management system for Honda showroom, workshop billing, parts catalog and khata ledger",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({

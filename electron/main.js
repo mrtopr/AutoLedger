@@ -59,6 +59,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: 'AutoLedger Dealership & Workshop ERP',
+    icon: path.join(__dirname, '..', 'public', 'logo.png'),
     backgroundColor: '#0F172A',
     webPreferences: {
       nodeIntegration: false,

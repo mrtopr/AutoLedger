@@ -41,8 +41,8 @@ export default function HeaderNav() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <Link href="/" className="flex items-center space-x-3 group">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-lg tracking-wider group-hover:bg-blue-700 transition shadow-sm">
-              {brandInitial}
+            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center overflow-hidden p-0.5 shadow-sm border border-slate-800">
+              <img src="/logo.png" alt="AutoLedger Emblem" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="font-bold text-slate-900 text-base leading-tight tracking-tight flex items-center gap-2">
