@@ -56,7 +56,7 @@ const INDIAN_STATES = [
 
 export default function SettingsPage() {
   const { tenant, updateTenantProfile } = useAuth();
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
 
   // Form states initialized with tenant data
   const [name, setName] = useState('');
