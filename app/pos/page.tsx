@@ -22,10 +22,14 @@ import {
   ArrowRight,
   ShieldCheck,
   Percent,
-  Check
+  Check,
+  Zap,
+  X
 } from 'lucide-react';
 import { calculateInvoiceTax, formatPaiseToRupees, parseRupeesToPaise, LineItemInput } from '@/server/lib/tax';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
+import RazorpayModal from '@/app/components/RazorpayModal';
+import ClientPortal from '@/app/components/ClientPortal';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 
@@ -108,8 +112,23 @@ export default function QuickBillPosPage() {
   const [issuedInvoiceData, setIssuedInvoiceData] = useState<any>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
   const [currentPreviewData, setCurrentPreviewData] = useState<InvoicePreviewData | null>(null);
+  const [isRazorpayModalOpen, setIsRazorpayModalOpen] = useState<boolean>(false);
 
   const placeOfSupply = tenant?.stateCode ? tenant.stateCode.split('-')[0].trim() : '27';
+
+  const refreshCustomers = async () => {
+    try {
+      const res = await fetch('/api/v1/customers');
+      if (res.ok) {
+        const custData = await res.json();
+        if (custData.customers) {
+          setCustomers(custData.customers);
+        }
+      }
+    } catch (e) {
+      console.error('Error refreshing customers:', e);
+    }
+  };
 
   // Load Customers & Product Catalog
   useEffect(() => {
@@ -315,6 +334,8 @@ export default function QuickBillPosPage() {
         return;
       }
 
+      await refreshCustomers();
+
       const invoiceRecord = {
         invoiceNumber: data.invoice?.invoiceNumber || `${tenant?.settings?.invoicePrefix || 'INV/2026-27/'}${Math.floor(1000 + Math.random() * 9000)}`,
         customer: selectedCustomer,
@@ -339,6 +360,7 @@ export default function QuickBillPosPage() {
   };
 
   const startNextBill = () => {
+    refreshCustomers();
     setIsSuccessModal(false);
     setItems([
       {
@@ -491,6 +513,15 @@ export default function QuickBillPosPage() {
               <span>{language === 'hi' ? 'बकाया खाता:' : 'Khata Due:'} {formatPaiseToRupees(Number(selectedCustomer.balancePaise) || 0)}</span>
             </div>
           )}
+
+          <Link
+            href="/invoices"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+            title="Search Past Bills & Invoices"
+          >
+            <FileText className="w-3.5 h-3.5 text-slate-600" />
+            <span>{language === 'hi' ? 'पुराने बिल' : 'Past Bills'}</span>
+          </Link>
 
           <Link
             href="/customers"
@@ -767,6 +798,23 @@ export default function QuickBillPosPage() {
               </div>
             </div>
 
+            {/* FULL_UPI helper banner */}
+            {paymentMode === 'FULL_UPI' && (
+              <div className="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/80 flex items-center justify-between text-xs animate-in fade-in">
+                <div className="text-[11px] text-blue-900 font-medium">
+                  <span>Dynamic QR / Pay Link:</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRazorpayModalOpen(true)}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px] rounded-lg shadow-2xs transition flex items-center gap-1"
+                >
+                  <QrCode className="w-3 h-3" />
+                  <span>Show Dynamic QR</span>
+                </button>
+              </div>
+            )}
+
             {/* Split / Custom Input Details if Selected */}
             {paymentMode === 'SPLIT' && (
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5 text-xs animate-in fade-in">
@@ -881,71 +929,93 @@ export default function QuickBillPosPage() {
 
       {/* 3. SUCCESS / BILL CONFIRMATION MODAL */}
       {isSuccessModal && issuedInvoiceData && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                <CheckCircle2 className="w-6 h-6" />
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-in zoom-in-95 duration-150 relative">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Sale Bill Issued & Recorded!</h3>
+                    <div className="text-xs font-mono font-bold text-emerald-700">{issuedInvoiceData.invoiceNumber}</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSuccessModal(false)}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition"
+                  title="Close (Dismiss)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Sale Bill Issued & Recorded!</h3>
-                <div className="text-xs font-mono font-bold text-emerald-700">{issuedInvoiceData.invoiceNumber}</div>
-              </div>
-            </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Customer:</span>
-                <span className="font-bold text-slate-900">{issuedInvoiceData.customer?.shopName || 'Walk-in Customer'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Grand Total:</span>
-                <span className="font-mono font-bold text-slate-900">
-                  {formatPaiseToRupees(issuedInvoiceData.taxSummary.grandTotal)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Paid at Counter:</span>
-                <span className="font-mono font-bold text-emerald-700">
-                  {formatPaiseToRupees(issuedInvoiceData.paidNowPaise)}
-                </span>
-              </div>
-              {issuedInvoiceData.creditBalancePaise > 0n && (
-                <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                  <span className="text-slate-500 font-medium">Added to Khata Due:</span>
-                  <span className="font-mono font-bold text-amber-700">
-                    {formatPaiseToRupees(issuedInvoiceData.creditBalancePaise)}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Customer:</span>
+                  <span className="font-bold text-slate-900">{issuedInvoiceData.customer?.shopName || 'Walk-in Customer'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Grand Total:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {formatPaiseToRupees(issuedInvoiceData.taxSummary.grandTotal)}
                   </span>
                 </div>
-              )}
-            </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Paid at Counter:</span>
+                  <span className="font-mono font-bold text-emerald-700">
+                    {formatPaiseToRupees(issuedInvoiceData.paidNowPaise)}
+                  </span>
+                </div>
+                {issuedInvoiceData.creditBalancePaise > 0n && (
+                  <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                    <span className="text-slate-500 font-medium">Added to Khata Due:</span>
+                    <span className="font-mono font-bold text-amber-700">
+                      {formatPaiseToRupees(issuedInvoiceData.creditBalancePaise)}
+                    </span>
+                  </div>
+                )}
+              </div>
 
-            {/* Actions */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
+              {/* Actions */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={openCurrentBillPreview}
+                  className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>View & Print PDF</span>
+                </button>
+                <button
+                  onClick={openCurrentBillPreview}
+                  className="py-2.5 px-3 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp Bill</span>
+                </button>
+                {/* Only show online payment link if there is an unpaid balance on credit */}
+                {issuedInvoiceData.creditBalancePaise > 0n && (
+                  <button
+                    onClick={() => setIsRazorpayModalOpen(true)}
+                    className="py-2.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 border border-blue-200 transition col-span-2"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Send Razorpay Payment Link (WhatsApp)</span>
+                  </button>
+                )}
+              </div>
+
               <button
-                onClick={openCurrentBillPreview}
-                className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                onClick={startNextBill}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition"
               >
-                <Eye className="w-4 h-4" />
-                <span>View & Print PDF</span>
-              </button>
-              <button
-                onClick={openCurrentBillPreview}
-                className="py-2.5 px-3 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>WhatsApp Bill</span>
+                Start Next Bill (F2)
               </button>
             </div>
-
-            <button
-              onClick={startNextBill}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition"
-            >
-              Start Next Bill (F2)
-            </button>
           </div>
-        </div>
+        </ClientPortal>
       )}
 
       {/* Invoice Preview Modal */}
@@ -954,6 +1024,19 @@ export default function QuickBillPosPage() {
         onClose={() => setIsPreviewModalOpen(false)}
         invoice={currentPreviewData}
       />
+
+      {/* Razorpay Dynamic Payment Modal */}
+      {isRazorpayModalOpen && (
+        <RazorpayModal
+          isOpen={isRazorpayModalOpen}
+          onClose={() => setIsRazorpayModalOpen(false)}
+          customerId={selectedCustomer?.id}
+          customerName={selectedCustomer?.shopName || selectedCustomer?.name || 'Walk-in Customer'}
+          customerPhone={selectedCustomer?.phone || ''}
+          invoiceNumber={issuedInvoiceData?.invoiceNumber}
+          defaultAmountRupees={(Number(issuedInvoiceData ? issuedInvoiceData.taxSummary.grandTotal : taxSummary.grandTotal) / 100).toFixed(2)}
+        />
+      )}
     </div>
   );
 }

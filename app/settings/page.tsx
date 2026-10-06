@@ -25,7 +25,14 @@ import {
   Database,
   HardDrive,
   ShieldAlert,
-  CheckCircle2
+  CheckCircle2,
+  Lock,
+  Key,
+  Copy,
+  ExternalLink,
+  Globe,
+  Shield,
+  Zap
 } from 'lucide-react';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
 
@@ -79,6 +86,13 @@ export default function SettingsPage() {
     '1. Goods once sold will not be accepted back without original tax invoice.\n2. Parts covered under OEM warranty only. Interest @ 18% p.a. on overdue credit.'
   );
   const [defaultGstRate, setDefaultGstRate] = useState('18');
+
+  // Razorpay Gateway Settings
+  const [razorpayKeyId, setRazorpayKeyId] = useState('');
+  const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
+  const [razorpayWebhookSecret, setRazorpayWebhookSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
@@ -192,6 +206,9 @@ export default function SettingsPage() {
       if (settings.invoicePrefix) setInvoicePrefix(settings.invoicePrefix);
       if (settings.terms) setTerms(settings.terms);
       if (settings.defaultGstRate) setDefaultGstRate(settings.defaultGstRate);
+      if (settings.razorpayKeyId) setRazorpayKeyId(settings.razorpayKeyId);
+      if (settings.razorpayKeySecret) setRazorpayKeySecret(settings.razorpayKeySecret);
+      if (settings.razorpayWebhookSecret) setRazorpayWebhookSecret(settings.razorpayWebhookSecret);
     } else {
       // Fallback defaults for Shree Vishwakarma Honda
       setName('Shree Vishwakarma Honda');
@@ -234,6 +251,9 @@ export default function SettingsPage() {
           invoicePrefix: invoicePrefix.trim(),
           terms: terms.trim(),
           defaultGstRate,
+          razorpayKeyId: razorpayKeyId.trim(),
+          razorpayKeySecret: razorpayKeySecret.trim(),
+          razorpayWebhookSecret: razorpayWebhookSecret.trim(),
         },
       };
 
@@ -622,6 +642,154 @@ export default function SettingsPage() {
                 placeholder="e.g. royalauto@okhdfcbank"
                 className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono font-bold text-blue-700 focus:bg-slate-50 focus:border-blue-600 transition"
               />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2.5 RAZORPAY PAYMENT GATEWAY & KHATA SETTLEMENTS */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
+              <Zap className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <span>Razorpay Gateway & Online Khata Settlements</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                  razorpayKeyId.startsWith('rzp_live') 
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
+                  {razorpayKeyId.startsWith('rzp_live') ? '● Live Production Gateway' : '● Free Sandbox / Test Mode'}
+                </span>
+              </h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Generate dynamic UPI QR codes and instant SMS/WhatsApp payment links. Payments auto-credit customer ledger accounts.
+              </p>
+            </div>
+          </div>
+          <a
+            href="https://dashboard.razorpay.com/app/keys"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 font-semibold transition"
+          >
+            <span>Get Free Razorpay Keys</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div>
+            <label className="block text-slate-700 font-bold mb-1">
+              Razorpay Key ID
+            </label>
+            <div className="relative">
+              <Key className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={razorpayKeyId}
+                onChange={(e) => setRazorpayKeyId(e.target.value.trim())}
+                placeholder="rzp_test_... or rzp_live_..."
+                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono text-slate-800 font-medium focus:bg-slate-50 focus:border-blue-600 transition"
+              />
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">Starts with <code className="text-slate-600 font-mono">rzp_test_</code> (Sandbox) or <code className="text-slate-600 font-mono">rzp_live_</code></span>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-slate-700 font-bold">
+                Razorpay Key Secret
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowSecret(!showSecret)}
+                className="text-[10px] text-blue-600 font-semibold hover:underline"
+              >
+                {showSecret ? 'Hide' : 'Reveal'}
+              </button>
+            </div>
+            <div className="relative">
+              <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+              <input
+                type={showSecret ? 'text' : 'password'}
+                value={razorpayKeySecret}
+                onChange={(e) => setRazorpayKeySecret(e.target.value.trim())}
+                placeholder="••••••••••••••••••••••••"
+                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono text-slate-800 font-medium focus:bg-slate-50 focus:border-blue-600 transition"
+              />
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">Used to securely authorize payment links and check status</span>
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-slate-700 font-bold mb-1">
+              Webhook Secret (Automated Double-Entry Reconciler)
+            </label>
+            <div className="relative">
+              <Shield className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={razorpayWebhookSecret}
+                onChange={(e) => setRazorpayWebhookSecret(e.target.value.trim())}
+                placeholder="e.g. autoledger_webhook_secret_2026"
+                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono text-slate-800 font-medium focus:bg-slate-50 focus:border-blue-600 transition"
+              />
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">Protects against tampering. Verifies SHA256 signature on payment events.</span>
+          </div>
+        </div>
+
+        {/* Webhook Endpoint Display & 1-Click Copy */}
+        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="font-bold text-slate-800 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-blue-600" />
+              <span>Razorpay Webhook Callback URL</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const url = typeof window !== 'undefined' 
+                  ? `${window.location.origin}/api/v1/webhooks/razorpay` 
+                  : 'https://x-autoledger.vercel.app/api/v1/webhooks/razorpay';
+                navigator.clipboard.writeText(url);
+                setCopiedWebhook(true);
+                setTimeout(() => setCopiedWebhook(false), 3000);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold rounded-md border border-slate-300 transition"
+            >
+              {copiedWebhook ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span className="text-emerald-700">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3 text-slate-600" />
+                  <span>Copy Webhook URL</span>
+                </>
+              )}
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-600 font-mono bg-white p-2 rounded border border-slate-200 break-all select-all">
+            {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/webhooks/razorpay` : 'https://x-autoledger.vercel.app/api/v1/webhooks/razorpay'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px] text-slate-600">
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>payment.captured auto-settles Khata</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span>payment.failed logs audit & retries</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>payment.dispute marks RED flag</span>
             </div>
           </div>
         </div>

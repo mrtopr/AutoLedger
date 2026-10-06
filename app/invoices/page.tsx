@@ -115,11 +115,27 @@ export default function InvoicesPage() {
   };
 
   const filteredInvoices = invoices.filter(inv => {
-    const q = search.toLowerCase();
-    const matchesSearch = !search.trim() || 
-      (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(q)) ||
-      (inv.customerName && inv.customerName.toLowerCase().includes(q)) ||
-      (inv.customerShop && inv.customerShop.toLowerCase().includes(q));
+    const q = search.toLowerCase().trim();
+    if (!q) {
+      return filterMode === 'ALL' ||
+        (filterMode === 'PAID' && BigInt(inv.creditBalancePaise || 0) === 0n) ||
+        (filterMode === 'KHATA' && BigInt(inv.creditBalancePaise || 0) > 0n);
+    }
+
+    const digitQuery = q.replace(/\D/g, '');
+    const invNum = (inv.invoiceNumber || inv.number || '').toLowerCase();
+    const custName = (inv.customerName || inv.customer || '').toLowerCase();
+    const custShop = (inv.customerShop || '').toLowerCase();
+    const custPhone = (inv.customerPhone || '').toLowerCase();
+    const amountRs = (Number(BigInt(inv.grandTotalPaise || inv.amountPaise || 0)) / 100).toString();
+
+    const matchesSearch =
+      invNum.includes(q) ||
+      (digitQuery && invNum.includes(digitQuery)) ||
+      custName.includes(q) ||
+      custShop.includes(q) ||
+      custPhone.includes(q) ||
+      amountRs.includes(q);
 
     const matchesFilter = filterMode === 'ALL' ||
       (filterMode === 'PAID' && BigInt(inv.creditBalancePaise || 0) === 0n) ||

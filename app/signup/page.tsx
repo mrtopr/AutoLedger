@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-import { Store, User, Phone, Mail, Lock, FileText, MapPin, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Store, User, Phone, Mail, Lock, FileText, MapPin, ArrowRight, AlertCircle, Loader2, ShieldCheck, Building2 } from 'lucide-react';
+import { HondaWingIcon } from '@/app/components/HondaLogo';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function SignupPage() {
     password: '',
     gstin: '',
     address: '',
-    stateCode: '27',
+    stateCode: '21', // Default 21 - Odisha / 27 - Maharashtra
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -49,212 +50,259 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-lg w-full space-y-6 bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-lg">
-        {/* Brand Header */}
-        <div className="text-center">
-          <div className="inline-flex w-12 h-12 rounded-xl bg-blue-600 items-center justify-center font-black text-white text-2xl shadow-sm mb-3">
-            R
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-8">
+      
+      {/* Outer Curved Container */}
+      <div className="w-full max-w-4xl bg-gradient-to-r from-[#B91C1C] via-[#DC2626] to-[#EA580C] rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[580px]">
+        
+        {/* LEFT BRAND SECTION */}
+        <div className="md:col-span-4 p-8 sm:p-10 flex flex-col justify-between items-center text-center text-white relative">
+          
+          <div className="flex flex-col items-center mt-6">
+            <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-lg mb-4">
+              <HondaWingIcon className="w-9 h-9" color="#FFFFFF" />
+            </div>
+
+            <h2 className="text-2xl font-black tracking-wide text-white">
+              Register Dealership
+            </h2>
+            <p className="text-xs text-white/90 mt-2 font-medium">
+              Start Your Digital Workshop & Khata OS
+            </p>
+            
+            <p className="text-xs text-white/75 mt-4 leading-relaxed max-w-[220px]">
+              Set up your custom inventory catalog, customer credit limits, GST invoices, and POS billing terminal.
+            </p>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Register Wholesale Business
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Setup your B2B Digital Khata, inventory ledger, & POS billing system
-          </p>
-          <div className="mt-3 inline-block">
-            <Link 
-              href="/onboarding"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition"
+
+          <div className="mt-8 mb-2 flex flex-col items-center gap-2">
+            <span className="text-[11px] text-white/80">Already have an account?</span>
+            <Link
+              href="/login"
+              className="px-6 py-2 bg-white text-[#C81E1E] hover:bg-slate-50 text-xs font-bold rounded-full shadow-md transition-transform active:scale-95 inline-block"
             >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              <span>Prefer Animated 2-Step Setup? Click Here</span>
+              Sign In Instead
             </Link>
           </div>
         </div>
 
-        {error && (
-          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-            <span>{error}</span>
-          </div>
-        )}
+        {/* RIGHT FORM SECTION */}
+        <div className="md:col-span-8 bg-white md:rounded-l-[48px] p-6 sm:p-10 flex flex-col justify-between shadow-xl">
+          
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+              <Building2 className="w-4 h-4 text-slate-400" />
+              <span>New Business Registration</span>
+            </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          {/* Business & Owner Name */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[11px] text-emerald-700 font-bold">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Production Ready</span>
+            </div>
+          </div>
+
+          <div className="my-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Create Dealership Account
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Fill in your business details. You can configure inventory, staff & bank QR codes next.
+            </p>
+          </div>
+
+          {error && (
+            <div className="p-3 my-2 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form className="space-y-3 my-auto pt-1" onSubmit={handleSubmit}>
+            {/* Row 1: Business Name & Owner Name */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Dealership / Business Name *
+                </label>
+                <div className="relative">
+                  <Store className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    name="businessName"
+                    value={formData.businessName}
+                    onChange={handleChange}
+                    placeholder="e.g. Royal Honda Auto Spares"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Owner / Proprietor Name *
+                </label>
+                <div className="relative">
+                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    name="ownerName"
+                    value={formData.ownerName}
+                    onChange={handleChange}
+                    placeholder="e.g. Ramesh Kumar"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Phone & Email */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Primary Mobile Number (Login ID) *
+                </label>
+                <div className="relative">
+                  <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="tel"
+                    required
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    placeholder="e.g. 9822012345"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Email Address (Optional)
+                </label>
+                <div className="relative">
+                  <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="contact@dealership.com"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Row 3: Password */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Shop / Business Name *
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Account Master Password / PIN (Min 6 chars) *
               </label>
               <div className="relative">
-                <Store className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Row 4: GSTIN & State */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  GSTIN (Optional)
+                </label>
+                <div className="relative">
+                  <FileText className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    name="gstin"
+                    value={formData.gstin}
+                    onChange={handleChange}
+                    placeholder="21ABCDE1234F1Z5"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  State of Registration
+                </label>
+                <select
+                  name="stateCode"
+                  value={formData.stateCode}
+                  onChange={handleChange}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium"
+                >
+                  <option value="21">21 - Odisha</option>
+                  <option value="27">27 - Maharashtra</option>
+                  <option value="24">24 - Gujarat</option>
+                  <option value="29">29 - Karnataka</option>
+                  <option value="07">07 - Delhi</option>
+                  <option value="09">09 - Uttar Pradesh</option>
+                  <option value="33">33 - Tamil Nadu</option>
+                  <option value="19">19 - West Bengal</option>
+                  <option value="10">10 - Bihar</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Row 5: Address */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Showroom / Workshop Address
+              </label>
+              <div className="relative">
+                <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  required
-                  name="businessName"
-                  value={formData.businessName}
+                  name="address"
+                  value={formData.address}
                   onChange={handleChange}
-                  placeholder="e.g. Pune Auto Spares"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 font-medium"
+                  placeholder="e.g. NH-16, Cuttack Road, Bhubaneswar"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Owner / Proprietor Name *
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  required
-                  name="ownerName"
-                  value={formData.ownerName}
-                  onChange={handleChange}
-                  placeholder="e.g. Rajesh Sharma"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 font-medium"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Primary Phone / Mobile *
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="tel"
-                  required
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="e.g. 9822012345"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 font-medium font-mono"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Email Address (Optional)
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="rajesh@puneauto.com"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 font-medium"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Account Password (Min 6 chars) *
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="password"
-                required
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 font-medium"
-              />
-            </div>
-          </div>
-
-          {/* GSTIN & State */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                GSTIN (Optional)
-              </label>
-              <div className="relative">
-                <FileText className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  name="gstin"
-                  value={formData.gstin}
-                  onChange={handleChange}
-                  placeholder="27ABCDE1234F1Z5"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 font-medium font-mono uppercase"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                State of Registration
-              </label>
-              <select
-                name="stateCode"
-                value={formData.stateCode}
-                onChange={handleChange}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium"
+            {/* Bottom Row */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <Link 
+                href="/login" 
+                className="text-xs font-semibold text-slate-500 hover:text-[#C81E1E] transition"
               >
-                <option value="27">27 - Maharashtra</option>
-                <option value="24">24 - Gujarat</option>
-                <option value="29">29 - Karnataka</option>
-                <option value="07">07 - Delhi</option>
-                <option value="09">09 - Uttar Pradesh</option>
-                <option value="33">33 - Tamil Nadu</option>
-              </select>
+                ← Back to Login
+              </Link>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-8 py-2.5 bg-[#B91C1C] hover:bg-[#991B1B] text-white font-bold rounded-full text-xs shadow-md transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Complete Setup</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
             </div>
-          </div>
+          </form>
 
-          {/* Shop Address */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Market Address / Location
-            </label>
-            <div className="relative">
-              <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                placeholder="e.g. Shop 14, Nana Peth Auto Market, Pune"
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 font-medium"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full mt-2 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <span>Creating Your Account...</span>
-            ) : (
-              <>
-                <span>Complete Business Registration</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="text-center pt-2 border-t border-slate-100 text-xs text-slate-600">
-          Already have an account?{' '}
-          <Link href="/login" className="font-bold text-blue-600 hover:text-blue-800">
-            Sign In Here
-          </Link>
         </div>
       </div>
     </div>

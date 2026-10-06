@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { HondaWingIcon } from './HondaLogo';
 import { formatPaiseToRupees } from '@/server/lib/tax';
+import ClientPortal from './ClientPortal';
 
 export interface InvoicePreviewItem {
   id?: string;
@@ -259,10 +260,11 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:block print:h-auto">
+    <ClientPortal>
+      <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:block print:h-auto">
       
       {/* Modal Card Container */}
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full flex flex-col max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:w-full print:rounded-none print:block print:p-0 print:m-0">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-4xl w-full flex flex-col max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:w-full print:rounded-none print:block print:p-0 print:m-0">
         
         {/* Top Modal Controls (Strictly Hidden on Print) */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-[#F8FAFC] rounded-t-2xl print:hidden shrink-0">
@@ -637,5 +639,6 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
         </div>
       </div>
     </div>
+    </ClientPortal>
   );
 }

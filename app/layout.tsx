@@ -15,13 +15,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-      </head>
-      <body className="min-h-screen bg-[#F7F8FA] text-[#172033] font-sans antialiased">
+    <html lang="en" className="h-full">
+      <body className="min-h-full m-0 p-0 bg-[#F7F8FA] text-[#172033] font-sans antialiased">
         <LanguageProvider>
           <AuthProvider>
             <AppShell>

@@ -16,9 +16,12 @@ import {
   X,
   Store,
   User,
-  FileText
+  FileText,
+  Zap
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
+import RazorpayModal from '@/app/components/RazorpayModal';
+import ClientPortal from '@/app/components/ClientPortal';
 
 interface CustomerItem {
   id: string;
@@ -46,6 +49,9 @@ export default function CustomersPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Razorpay Payment Link Modal
+  const [paymentModalCustomer, setPaymentModalCustomer] = useState<CustomerItem | null>(null);
 
   const [newCustomer, setNewCustomer] = useState({
     shopName: '',
@@ -299,6 +305,17 @@ export default function CustomersPage() {
                   >
                     View Khata Ledger
                   </Link>
+                  {balPaise > 0n && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentModalCustomer(cust)}
+                      className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg shadow-2xs font-semibold text-xs transition flex items-center gap-1"
+                      title="Send Razorpay Payment Link / WhatsApp QR"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Pay Link</span>
+                    </button>
+                  )}
                   <Link
                     href="/pos"
                     className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition"
@@ -315,8 +332,9 @@ export default function CustomersPage() {
 
       {/* ----------------- ADD CUSTOMER MODAL ----------------- */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl my-8">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl my-8">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Users className="w-5 h-5 text-blue-600" />
@@ -454,6 +472,23 @@ export default function CustomersPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
+      )}
+
+      {/* ----------------- RAZORPAY PAYMENT LINK MODAL ----------------- */}
+      {paymentModalCustomer && (
+        <RazorpayModal
+          isOpen={Boolean(paymentModalCustomer)}
+          onClose={() => setPaymentModalCustomer(null)}
+          customerId={paymentModalCustomer.id}
+          customerName={paymentModalCustomer.shopName || paymentModalCustomer.name}
+          customerPhone={paymentModalCustomer.phone}
+          defaultAmountRupees={(Number(BigInt(paymentModalCustomer.balancePaise || 0)) / 100).toFixed(2)}
+          onPaymentSuccess={() => {
+            setPaymentModalCustomer(null);
+            fetchCustomers();
+          }}
+        />
       )}
     </div>
   );

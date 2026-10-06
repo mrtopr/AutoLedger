@@ -51,9 +51,9 @@ export default function ProgressBar() {
   if (!loading && progress === 0) return null;
 
   return (
-    <div className="fixed top-0 inset-x-0 z-50 pointer-events-none h-1 bg-transparent">
+    <div className="fixed top-0 left-0 right-0 z-50 pointer-events-none h-1 bg-transparent">
       <div 
-        className="h-full bg-linear-to-r from-[#E60012] via-[#1570EF] to-[#12B76A] shadow-md transition-all duration-200 ease-out"
+        className="h-full bg-gradient-to-r from-[#E60012] via-[#1570EF] to-[#12B76A] shadow-md transition-all duration-200 ease-out"
         style={{ 
           width: `${progress}%`,
           opacity: progress === 100 ? 0 : 1,

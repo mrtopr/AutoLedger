@@ -9,9 +9,12 @@ import {
   Phone, 
   MapPin, 
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Zap
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
+import RazorpayModal from '@/app/components/RazorpayModal';
+import ClientPortal from '@/app/components/ClientPortal';
 
 interface LedgerItem {
   id: string;
@@ -31,6 +34,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   // Payment modal state
   const [isPaymentModal, setIsPaymentModal] = useState<boolean>(false);
+  const [isRazorpayModal, setIsRazorpayModal] = useState<boolean>(false);
   const [paymentAmount, setPaymentAmount] = useState<string>('5000.00');
   const [paymentMode, setPaymentMode] = useState<string>('UPI');
   const [paymentRef, setPaymentRef] = useState<string>('UPI/392019481023');
@@ -123,6 +127,13 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         </Link>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setIsRazorpayModal(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-sm transition flex items-center gap-1.5"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Send Razorpay Link / QR</span>
+          </button>
+          <button
             onClick={() => setIsPaymentModal(true)}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg shadow-sm transition flex items-center gap-1.5"
           >
@@ -131,7 +142,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           </button>
           <Link
             href="/pos"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-sm transition flex items-center gap-1.5"
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm transition flex items-center gap-1.5"
           >
             <Receipt className="w-3.5 h-3.5" />
             <span>New Bill (F2)</span>
@@ -293,8 +304,9 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
       {/* Record Payment Modal */}
       {isPaymentModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-emerald-600" />
@@ -373,6 +385,23 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             </form>
           </div>
         </div>
+        </ClientPortal>
+      )}
+
+      {/* Razorpay Instant Link & QR Modal */}
+      {isRazorpayModal && customer && (
+        <RazorpayModal
+          isOpen={isRazorpayModal}
+          onClose={() => setIsRazorpayModal(false)}
+          customerId={customer.id}
+          customerName={customer.shopName || customer.name}
+          customerPhone={customer.phone}
+          defaultAmountRupees={(Number(BigInt(customer.balancePaise || 0)) / 100).toFixed(2)}
+          onPaymentSuccess={() => {
+            setIsRazorpayModal(false);
+            fetchCustomerDetail();
+          }}
+        />
       )}
     </div>
   );

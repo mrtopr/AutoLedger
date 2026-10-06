@@ -113,6 +113,7 @@ export interface LocalStoreData {
   ledgerEntries: LocalLedgerEntry[];
   invoices: LocalInvoice[];
   payments: LocalPayment[];
+  paymentAttempts?: Record<string, { status: 'paid' | 'failed' | 'pending'; reason?: string; paymentId?: string; updatedAt: string }>;
 }
 
 function getInitialData(): LocalStoreData {
@@ -124,6 +125,7 @@ function getInitialData(): LocalStoreData {
     ledgerEntries: [],
     invoices: [],
     payments: [],
+    paymentAttempts: {},
   };
 }
 
@@ -400,26 +402,45 @@ class LocalStore {
 
   // Ledger & Invoices
   getLedger(customerId: string): LocalLedgerEntry[] {
-    return this.data.ledgerEntries
+    const entries = this.data.ledgerEntries
       .filter((l) => l.customerId === customerId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    let running = 0n;
+    const withRunning = entries.map((entry) => {
+      const d = BigInt(entry.debitPaise || 0);
+      const c = BigInt(entry.creditPaise || 0);
+      running = running + d - c;
+      return {
+        ...entry,
+        date: entry.date || entry.createdAt.split('T')[0],
+        runningBalancePaise: running.toString(),
+      };
+    });
+
+    return withRunning.reverse();
   }
 
-  addLedgerEntry(entry: Omit<LocalLedgerEntry, 'id' | 'createdAt'>): LocalLedgerEntry {
+  addLedgerEntry(entry: Omit<LocalLedgerEntry, 'id' | 'createdAt' | 'runningBalancePaise' | 'date'> & { date?: string }): LocalLedgerEntry {
     const newEntry: LocalLedgerEntry = {
       ...entry,
-      id: `led-${Date.now()}`,
+      id: `led-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      date: entry.date || new Date().toISOString().split('T')[0],
+      runningBalancePaise: '0',
       createdAt: new Date().toISOString(),
     };
     this.data.ledgerEntries.unshift(newEntry);
 
-    // Update customer balance
+    // Update customer balance & credit health status
     const cust = this.getCustomerById(entry.customerId);
     if (cust) {
       const current = BigInt(cust.balancePaise || 0);
       const debit = BigInt(entry.debitPaise || 0);
       const credit = BigInt(entry.creditPaise || 0);
-      cust.balancePaise = (current + debit - credit).toString();
+      const newBal = current + debit - credit;
+      cust.balancePaise = newBal.toString();
+      const limit = BigInt(cust.creditLimitPaise || 5000000);
+      cust.status = newBal <= limit ? 'GREEN' : 'YELLOW';
     }
 
     this.save();
@@ -468,6 +489,22 @@ class LocalStore {
     this.data.payments.unshift(newPayment);
     this.save();
     return newPayment;
+  }
+
+  recordPaymentAttempt(linkId: string, attempt: { status: 'paid' | 'failed' | 'pending'; reason?: string; paymentId?: string }) {
+    if (!this.data.paymentAttempts) {
+      this.data.paymentAttempts = {};
+    }
+    this.data.paymentAttempts[linkId] = {
+      ...attempt,
+      updatedAt: new Date().toISOString(),
+    };
+    this.save();
+  }
+
+  getPaymentAttempt(linkId: string) {
+    if (!this.data.paymentAttempts) return null;
+    return this.data.paymentAttempts[linkId] || null;
   }
 }
 

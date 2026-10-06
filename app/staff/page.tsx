@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
+import ClientPortal from '@/app/components/ClientPortal';
 import { 
   Users, 
   UserPlus, 
@@ -413,7 +414,8 @@ export default function StaffManagementPage() {
 
       {/* ----------------- 1. ADD STAFF MODAL ----------------- */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -527,11 +529,13 @@ export default function StaffManagementPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
 
       {/* ----------------- 2. EDIT STAFF MODAL ----------------- */}
       {isEditModalOpen && selectedMember && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -633,11 +637,13 @@ export default function StaffManagementPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
 
       {/* ----------------- 3. RESET PIN MODAL ----------------- */}
       {isResetPinModalOpen && selectedMember && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -690,6 +696,7 @@ export default function StaffManagementPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
 
     </div>

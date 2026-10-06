@@ -15,6 +15,7 @@ import {
   Package
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
+import ClientPortal from '@/app/components/ClientPortal';
 
 interface ProductItem {
   id: string;
@@ -624,7 +625,8 @@ export default function InventoryPage() {
       {/* MODAL: ADD PART */}
       {/* ========================================================= */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white rounded-xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden text-xs">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-sm font-medium text-slate-900">Add New Spare Part</h3>
@@ -777,13 +779,15 @@ export default function InventoryPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
 
       {/* ========================================================= */}
       {/* MODAL: STOCK ADJUSTMENT (+ / -) */}
       {/* ========================================================= */}
       {isAdjustModalOpen && selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white rounded-xl max-w-sm w-full border border-slate-200 shadow-2xl overflow-hidden text-xs">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div>
@@ -883,13 +887,15 @@ export default function InventoryPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
 
       {/* ========================================================= */}
       {/* MODAL: EDIT PART */}
       {/* ========================================================= */}
       {isEditModalOpen && selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white rounded-xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden text-xs">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-sm font-medium text-slate-900">Edit Spare Part</h3>
@@ -1011,13 +1017,15 @@ export default function InventoryPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
 
       {/* ========================================================= */}
       {/* MODAL: DELETE CONFIRMATION */}
       {/* ========================================================= */}
       {isDeleteModalOpen && selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white rounded-xl max-w-xs w-full border border-slate-200 shadow-2xl p-5 text-center text-xs">
             <h3 className="text-sm font-medium text-slate-900">Delete Part</h3>
             <p className="text-xs text-slate-500 mt-1 font-normal">
@@ -1043,6 +1051,7 @@ export default function InventoryPage() {
             </div>
           </div>
         </div>
+        </ClientPortal>
       )}
     </div>
   );

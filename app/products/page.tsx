@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
+import ClientPortal from '@/app/components/ClientPortal';
 
 interface ProductItem {
   id: string;
@@ -366,8 +367,9 @@ export default function ProductsPage() {
 
       {/* ----------------- ADD NEW PRODUCT MODAL ----------------- */}
       {isAddProductModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl my-8">
+        <ClientPortal>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-xl my-8 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-200">
@@ -616,12 +618,14 @@ export default function ProductsPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
 
       {/* ----------------- ADJUST STOCK MODAL ----------------- */}
       {isAdjustStockModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <ClientPortal>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Boxes className="w-5 h-5 text-blue-600" />
@@ -716,6 +720,7 @@ export default function ProductsPage() {
             </form>
           </div>
         </div>
+        </ClientPortal>
       )}
     </div>
   );

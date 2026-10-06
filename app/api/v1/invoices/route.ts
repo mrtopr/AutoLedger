@@ -3,7 +3,7 @@ import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { calculateInvoiceTax, LineItemInput } from '@/server/lib/tax';
-import { InvoiceStatus, InvoiceType } from '@prisma/client';
+import { InvoiceStatus, InvoiceType, LedgerEntryType, PaymentMode, PaymentStatus } from '@prisma/client';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -180,6 +180,72 @@ export async function POST(req: NextRequest) {
           }
         });
         dbInvoice = invoice;
+
+        // Double-Entry Ledger Posting in Postgres
+        if (customerId && isUuid(customerId)) {
+          // 1. Post Debit Ledger Entry for the Invoice
+          await prisma.ledgerEntry.create({
+            data: {
+              tenantId: targetTenantId,
+              customerId,
+              entryType: LedgerEntryType.INVOICE,
+              refId: invoice.id,
+              debit: taxSummary.grandTotal,
+              credit: 0n,
+              narration: `Tax Invoice #${invoiceNumber}`,
+            },
+          });
+
+          // 2. If paid at counter (full or partial), post Credit Ledger Entry & Payment Record
+          if (totalPaidNow > 0n) {
+            const mappedMode = Number(upiPaidPaise) > 0 ? PaymentMode.UPI : PaymentMode.CASH;
+            const payment = await prisma.payment.create({
+              data: {
+                tenantId: targetTenantId,
+                customerId,
+                amount: totalPaidNow,
+                mode: mappedMode,
+                reference: upiRef || `POS-${invoiceNumber}`,
+                status: PaymentStatus.CLEARED,
+                notes: `Counter Settlement for Invoice #${invoiceNumber}`,
+              },
+            });
+
+            await prisma.paymentAllocation.create({
+              data: {
+                paymentId: payment.id,
+                invoiceId: invoice.id,
+                amount: totalPaidNow,
+                strategy: 'DIRECT_LINK',
+              },
+            });
+
+            await prisma.ledgerEntry.create({
+              data: {
+                tenantId: targetTenantId,
+                customerId,
+                entryType: LedgerEntryType.PAYMENT,
+                refId: invoice.id,
+                debit: 0n,
+                credit: totalPaidNow,
+                narration: `Counter Settlement (${mappedMode}) for Invoice #${invoiceNumber}`,
+              },
+            });
+          }
+
+          // 3. Re-calculate customer balance and update credit health status
+          const customer = await prisma.customer.findUnique({
+            where: { id: customerId },
+            include: { ledgerEntries: { select: { debit: true, credit: true } } },
+          });
+          if (customer) {
+            const runningBal = customer.ledgerEntries.reduce((sum, e) => sum + e.debit - e.credit, 0n);
+            await prisma.customer.update({
+              where: { id: customerId },
+              data: { status: runningBal <= customer.creditLimit ? 'GREEN' : 'YELLOW' },
+            });
+          }
+        }
       } catch (dbErr) {
         console.warn('Postgres unavailable for invoice create, using localStore fallback', dbErr);
       }
@@ -200,6 +266,42 @@ export async function POST(req: NextRequest) {
         ratePaise: it.ratePaise,
       })),
     });
+
+    // Double-Entry Ledger Posting in localStore
+    if (customerId) {
+      // 1. Post Debit Ledger Entry for the Invoice
+      localStore.addLedgerEntry({
+        tenantId: targetTenantId,
+        customerId,
+        type: 'INVOICE',
+        refNo: invoiceNumber,
+        narration: `Tax Invoice #${invoiceNumber}`,
+        debitPaise: taxSummary.grandTotal.toString(),
+        creditPaise: '0',
+      });
+
+      // 2. If paid at counter (full or partial), post Credit Ledger Entry & Payment Record
+      if (totalPaidNow > 0n) {
+        const payMode = Number(upiPaidPaise) > 0 ? 'UPI' : 'CASH';
+        localStore.createPayment({
+          tenantId: targetTenantId,
+          customerId,
+          amountPaise: totalPaidNow.toString(),
+          mode: payMode,
+          referenceNumber: upiRef || `POS-${invoiceNumber}`,
+        });
+
+        localStore.addLedgerEntry({
+          tenantId: targetTenantId,
+          customerId,
+          type: 'PAYMENT',
+          refNo: invoiceNumber,
+          narration: `Counter Settlement (${payMode}) for Invoice #${invoiceNumber}`,
+          debitPaise: '0',
+          creditPaise: totalPaidNow.toString(),
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,29 +1,24 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { 
   BarChart3, 
   Download, 
-  FileSpreadsheet, 
-  Calendar, 
-  FileText, 
   Receipt, 
   Boxes, 
   BookOpen, 
   Percent, 
   CheckCircle2, 
-  Eye, 
-  RefreshCw, 
-  Printer,
-  TrendingUp,
-  Search,
-  Filter,
-  ArrowDownToLine,
-  SlidersHorizontal
+  Search, 
+  FileText,
+  Plus,
+  ArrowRight
 } from 'lucide-react';
 import { formatPaiseToRupees } from '@/server/lib/tax';
 import { useLanguage } from '@/app/context/LanguageContext';
+import ModernLoader from '@/app/components/ModernLoader';
 
 type ReportType = 'SALES' | 'AGING' | 'INVENTORY' | 'GST';
 
@@ -57,14 +52,17 @@ export default function ReportsPage() {
         if (invRes.ok) {
           const invData = await invRes.json();
           if (invData.invoices) setInvoices(invData.invoices);
+          else if (Array.isArray(invData)) setInvoices(invData);
         }
         if (custRes.ok) {
           const custData = await custRes.json();
           if (custData.customers) setCustomers(custData.customers);
+          else if (Array.isArray(custData)) setCustomers(custData);
         }
         if (prodRes.ok) {
           const prodData = await prodRes.json();
           if (prodData.products) setProducts(prodData.products);
+          else if (Array.isArray(prodData)) setProducts(prodData);
         }
       } catch (err) {
         console.error('Error fetching report data:', err);
@@ -95,6 +93,10 @@ export default function ReportsPage() {
 
   // 1. Export Sales & Invoicing Report
   const exportSalesReport = () => {
+    if (invoices.length === 0) {
+      triggerToast('No invoice records to export');
+      return;
+    }
     setIsExporting(true);
     try {
       const headers = [
@@ -112,7 +114,7 @@ export default function ReportsPage() {
         'Status'
       ];
 
-      const rows = (invoices.length > 0 ? invoices : sampleSalesData).map(inv => {
+      const rows = invoices.map(inv => {
         const grandTotal = Number(inv.grandTotalPaise || inv.amountPaise || 0) / 100;
         const paidNow = Number(inv.paidNowPaise || (inv.creditBalancePaise === '0' ? inv.grandTotalPaise : 0)) / 100;
         const balance = Number(inv.creditBalancePaise || (grandTotal - paidNow)) / 100;
@@ -121,7 +123,7 @@ export default function ReportsPage() {
 
         return [
           `"${inv.invoiceNumber || 'INV-001'}"`,
-          `"${inv.issuedAt || inv.date || '2026-10-06'}"`,
+          `"${inv.issuedAt || inv.date || inv.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0]}"`,
           `"${inv.customerName || inv.customerShop || 'Counter Customer'}"`,
           `"${inv.customerGstin || 'URP'}"`,
           taxable.toFixed(2),
@@ -137,7 +139,7 @@ export default function ReportsPage() {
 
       const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
       downloadCSV(`Sales_Invoicing_Report_${new Date().toISOString().split('T')[0]}.csv`, csv);
-      triggerToast('Sales & Invoicing Report downloaded successfully (.CSV)');
+      triggerToast('Sales & Invoicing Report exported (.CSV)');
     } finally {
       setIsExporting(false);
     }
@@ -145,6 +147,10 @@ export default function ReportsPage() {
 
   // 2. Export Garage Khata Ledger Aging Report
   const exportAgingReport = () => {
+    if (customers.length === 0) {
+      triggerToast('No customer khata records to export');
+      return;
+    }
     setIsExporting(true);
     try {
       const headers = [
@@ -160,7 +166,7 @@ export default function ReportsPage() {
         'Risk Status'
       ];
 
-      const rows = (customers.length > 0 ? customers : sampleAgingData).map(c => {
+      const rows = customers.map(c => {
         const bal = Number(c.balancePaise || 0) / 100;
         const cur = (bal * 0.4).toFixed(2);
         const d15 = (bal * 0.3).toFixed(2);
@@ -183,7 +189,7 @@ export default function ReportsPage() {
 
       const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
       downloadCSV(`Garage_Khata_Aging_Report_${new Date().toISOString().split('T')[0]}.csv`, csv);
-      triggerToast('Garage Khata Aging Schedule downloaded successfully (.CSV)');
+      triggerToast('Garage Khata Aging Schedule exported (.CSV)');
     } finally {
       setIsExporting(false);
     }
@@ -191,6 +197,10 @@ export default function ReportsPage() {
 
   // 3. Export Inventory Valuation Report
   const exportInventoryReport = () => {
+    if (products.length === 0) {
+      triggerToast('No product inventory records to export');
+      return;
+    }
     setIsExporting(true);
     try {
       const headers = [
@@ -206,7 +216,7 @@ export default function ReportsPage() {
         'Stock Health'
       ];
 
-      const rows = (products.length > 0 ? products : sampleInventoryData).map(p => {
+      const rows = products.map(p => {
         const purchase = Number(p.purchasePricePaise || 0) / 100;
         const selling = Number(p.salePricePaise || p.mrpPaise || 0) / 100;
         const qty = Number(p.stockQty || 0);
@@ -229,18 +239,64 @@ export default function ReportsPage() {
 
       const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
       downloadCSV(`Inventory_Valuation_Report_${new Date().toISOString().split('T')[0]}.csv`, csv);
-      triggerToast('Inventory Valuation & Stock Asset Report downloaded (.CSV)');
+      triggerToast('Inventory Valuation Report exported (.CSV)');
     } finally {
       setIsExporting(false);
     }
   };
 
-  // 4. Export GSTR-1 & GSTR-3B Tax Summary
+  // 4. Calculate Real Dynamic GST Return Schedule
+  const gstSummary = useMemo(() => {
+    let b2bCount = 0;
+    let b2bTaxable = 0;
+    let b2bTax = 0;
+
+    let b2cLargeCount = 0;
+    let b2cLargeTaxable = 0;
+    let b2cLargeTax = 0;
+
+    let b2cSmallCount = 0;
+    let b2cSmallTaxable = 0;
+    let b2cSmallTax = 0;
+
+    invoices.forEach((inv) => {
+      const grandTotal = Number(inv.grandTotalPaise || inv.amountPaise || 0) / 100;
+      const taxable = grandTotal / 1.18;
+      const tax = grandTotal - taxable;
+      const hasGstin = inv.customerGstin && inv.customerGstin !== 'URP' && inv.customerGstin.trim().length >= 15;
+
+      if (hasGstin) {
+        b2bCount++;
+        b2bTaxable += taxable;
+        b2bTax += tax;
+      } else if (grandTotal > 250000) {
+        b2cLargeCount++;
+        b2cLargeTaxable += taxable;
+        b2cLargeTax += tax;
+      } else {
+        b2cSmallCount++;
+        b2cSmallTaxable += taxable;
+        b2cSmallTax += tax;
+      }
+    });
+
+    const totalInvoices = invoices.length;
+    const totalTaxable = b2bTaxable + b2cLargeTaxable + b2cSmallTaxable;
+    const totalTax = b2bTax + b2cLargeTax + b2cSmallTax;
+
+    return {
+      b2b: { count: b2bCount, taxable: b2bTaxable, tax: b2bTax },
+      b2cLarge: { count: b2cLargeCount, taxable: b2cLargeTaxable, tax: b2cLargeTax },
+      b2cSmall: { count: b2cSmallCount, taxable: b2cSmallTaxable, tax: b2cSmallTax },
+      total: { count: totalInvoices, taxable: totalTaxable, tax: totalTax },
+    };
+  }, [invoices]);
+
   const exportTaxReport = () => {
     setIsExporting(true);
     try {
-      const showroom = tenant?.name || 'Honda Auto Spares';
-      const gstin = tenant?.gstin || '27ABCDE1234F1Z5';
+      const showroom = tenant?.name || 'Dealership Workshop';
+      const gstin = tenant?.gstin || 'URP / Not Set';
 
       const headers = [
         'GST Return Table',
@@ -255,51 +311,58 @@ export default function ReportsPage() {
       ];
 
       const rows = [
-        ['"GSTR-1 Table 4A"', '"B2B Registered Garages (with GSTIN)"', '"8714"', '18', '245000.00', '0.00', '22050.00', '22050.00', '44100.00'],
-        ['"GSTR-1 Table 5A"', '"B2C Large Invoices (> 2.5 Lakhs)"', '"8714"', '2', '52000.00', '0.00', '4680.00', '4680.00', '9360.00'],
-        ['"GSTR-1 Table 7"', '"B2C Small Retail Counter Sales"', '"8714"', '42', '186000.00', '0.00', '16740.00', '16740.00', '33480.00'],
-        ['"GSTR-3B Table 3.1(a)"', '"Outward Taxable Supplies (Total)"', '"ALL"', '62', '483000.00', '0.00', '43470.00', '43470.00', '86940.00']
+        ['"GSTR-1 Table 4A"', '"B2B Registered Garages (with GSTIN)"', '"8714"', gstSummary.b2b.count.toString(), gstSummary.b2b.taxable.toFixed(2), '0.00', (gstSummary.b2b.tax / 2).toFixed(2), (gstSummary.b2b.tax / 2).toFixed(2), gstSummary.b2b.tax.toFixed(2)],
+        ['"GSTR-1 Table 5A"', '"B2C Large Invoices (> 2.5 Lakhs)"', '"8714"', gstSummary.b2cLarge.count.toString(), gstSummary.b2cLarge.taxable.toFixed(2), '0.00', (gstSummary.b2cLarge.tax / 2).toFixed(2), (gstSummary.b2cLarge.tax / 2).toFixed(2), gstSummary.b2cLarge.tax.toFixed(2)],
+        ['"GSTR-1 Table 7"', '"B2C Small Retail Counter Sales"', '"8714"', gstSummary.b2cSmall.count.toString(), gstSummary.b2cSmall.taxable.toFixed(2), '0.00', (gstSummary.b2cSmall.tax / 2).toFixed(2), (gstSummary.b2cSmall.tax / 2).toFixed(2), gstSummary.b2cSmall.tax.toFixed(2)],
+        ['"GSTR-3B Table 3.1(a)"', '"Outward Taxable Supplies (Total)"', '"ALL"', gstSummary.total.count.toString(), gstSummary.total.taxable.toFixed(2), '0.00', (gstSummary.total.tax / 2).toFixed(2), (gstSummary.total.tax / 2).toFixed(2), gstSummary.total.tax.toFixed(2)]
       ];
 
       const csv = [
         `"GST COMPLIANCE SUMMARY - ${showroom}"`,
         `"DEALERSHIP GSTIN: ${gstin}"`,
-        `"PERIOD: October 2026 / FY 2026-27"`,
+        `"PERIOD: Current Financial Period"`,
         '',
         headers.join(','),
         ...rows.map(r => r.join(','))
       ].join('\n');
 
       downloadCSV(`GSTR1_GSTR3B_Tax_Schedule_${new Date().toISOString().split('T')[0]}.csv`, csv);
-      triggerToast('GSTR-1 & GSTR-3B Tax Schedule exported successfully (.CSV)');
+      triggerToast('GSTR-1 & GSTR-3B Tax Schedule exported (.CSV)');
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Sample data fallbacks for preview if DB is clean
-  const sampleSalesData = [
-    { invoiceNumber: 'INV/2026-27/0048', date: '2026-10-06', customerName: 'Ramesh Auto Works & Garage', customerGstin: '27AALPJ1122K1Z9', grandTotalPaise: 348100, paidNowPaise: 348100, creditBalancePaise: 0 },
-    { invoiceNumber: 'INV/2026-27/0047', date: '2026-10-06', customerName: 'Om Sai Two Wheeler Care', customerGstin: 'URP', grandTotalPaise: 685000, paidNowPaise: 200000, creditBalancePaise: 485000 },
-    { invoiceNumber: 'INV/2026-27/0046', date: '2026-10-05', customerName: 'Walk-in Counter Customer', customerGstin: 'URP', grandTotalPaise: 89000, paidNowPaise: 89000, creditBalancePaise: 0 },
-    { invoiceNumber: 'INV/2026-27/0045', date: '2026-10-05', customerName: 'Pravin Bike Point', customerGstin: '27AALPJ3344M1Z8', grandTotalPaise: 420000, paidNowPaise: 0, creditBalancePaise: 420000 },
-    { invoiceNumber: 'INV/2026-27/0044', date: '2026-10-04', customerName: 'New Maharashtra Auto Garage', customerGstin: '27AALPJ5566N1Z7', grandTotalPaise: 185000, paidNowPaise: 185000, creditBalancePaise: 0 },
-  ];
+  // Filter lists based on search
+  const filteredInvoices = useMemo(() => {
+    if (!searchTerm.trim()) return invoices;
+    const term = searchTerm.toLowerCase();
+    return invoices.filter(inv => 
+      (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(term)) ||
+      (inv.customerName && inv.customerName.toLowerCase().includes(term)) ||
+      (inv.customerGstin && inv.customerGstin.toLowerCase().includes(term))
+    );
+  }, [invoices, searchTerm]);
 
-  const sampleAgingData = [
-    { shopName: 'Ramesh Auto Works & Garage', name: 'Ramesh Jadhav', phone: '9822100001', gstin: '27AALPJ1122K1Z9', balancePaise: 4250000, status: 'HIGH OVERDUE' },
-    { shopName: 'Om Sai Two Wheeler Care', name: 'Vikram Shinde', phone: '9822100002', gstin: 'URP', balancePaise: 3180000, status: 'HIGH OVERDUE' },
-    { shopName: 'Pravin Bike Point', name: 'Pravin Pawar', phone: '9822100003', gstin: '27AALPJ3344M1Z8', balancePaise: 2400000, status: 'MEDIUM' },
-    { shopName: 'New Maharashtra Auto Garage', name: 'Sunil Jagtap', phone: '9822100004', gstin: '27AALPJ5566N1Z7', balancePaise: 1850000, status: 'NORMAL' },
-  ];
+  const filteredCustomers = useMemo(() => {
+    if (!searchTerm.trim()) return customers;
+    const term = searchTerm.toLowerCase();
+    return customers.filter(c => 
+      (c.shopName && c.shopName.toLowerCase().includes(term)) ||
+      (c.name && c.name.toLowerCase().includes(term)) ||
+      (c.phone && c.phone.includes(term))
+    );
+  }, [customers, searchTerm]);
 
-  const sampleInventoryData = [
-    { name: 'Drive Chain & Sprocket Kit OEM', partNumber: '40530-KTC-900', category: 'Transmission', stockQty: 3, unit: 'set', purchasePricePaise: 95000, salePricePaise: 125000, reorderLevel: 15 },
-    { name: 'Front Brake Pad Set Premium', partNumber: '06455-KPP-901', category: 'Braking', stockQty: 4, unit: 'set', purchasePricePaise: 32000, salePricePaise: 45000, reorderLevel: 20 },
-    { name: 'Honda 4T 10W-30 Engine Oil (1L)', partNumber: 'OIL-4T-10W30', category: 'Lubricants', stockQty: 8, unit: 'can', purchasePricePaise: 26000, salePricePaise: 38000, reorderLevel: 50 },
-    { name: 'Spark Plug Resistor NGK CPR8EA', partNumber: '31918-K96-V01', category: 'Electrical', stockQty: 5, unit: 'pcs', purchasePricePaise: 11000, salePricePaise: 18000, reorderLevel: 25 },
-    { name: 'Clutch Plate Friction Disk Set', partNumber: '22201-KTC-900', category: 'Engine', stockQty: 2, unit: 'set', purchasePricePaise: 55000, salePricePaise: 78000, reorderLevel: 12 },
-  ];
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    const term = searchTerm.toLowerCase();
+    return products.filter(p => 
+      (p.name && p.name.toLowerCase().includes(term)) ||
+      (p.partNumber && p.partNumber.toLowerCase().includes(term)) ||
+      (p.category && p.category.toLowerCase().includes(term))
+    );
+  }, [products, searchTerm]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-14">
@@ -357,7 +420,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* 2. THE 4 CORE REPORT TILES (WITH DIRECT 1-CLICK EXPORTS) */}
+      {/* 2. THE 4 CORE REPORT TILES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Card 1: Sales & Invoicing */}
@@ -373,7 +436,7 @@ export default function ReportsPage() {
                 <Receipt className="w-4 h-4" />
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                CSV / Excel
+                {invoices.length} Bills
               </span>
             </div>
             <div className="text-sm font-bold text-slate-900 mt-3">
@@ -412,7 +475,7 @@ export default function ReportsPage() {
                 <BookOpen className="w-4 h-4" />
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                {language === 'hi' ? 'बकाया खाता' : 'Aging Ledger'}
+                {customers.length} Accounts
               </span>
             </div>
             <div className="text-sm font-bold text-slate-900 mt-3">
@@ -451,7 +514,7 @@ export default function ReportsPage() {
                 <Boxes className="w-4 h-4" />
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {language === 'hi' ? 'स्टॉक मूल्यांकन' : 'Stock Valuation'}
+                {products.length} Items
               </span>
             </div>
             <div className="text-sm font-bold text-slate-900 mt-3">
@@ -490,7 +553,7 @@ export default function ReportsPage() {
                 <Percent className="w-4 h-4" />
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                {language === 'hi' ? 'जीएसटी रिपोर्ट' : 'GST Schedule'}
+                GST Ready
               </span>
             </div>
             <div className="text-sm font-bold text-slate-900 mt-3">
@@ -561,209 +624,276 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* REPORT 1: SALES REGISTER PREVIEW */}
-        {activeReport === 'SALES' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
-                  <th className="py-2.5 px-3">Invoice No</th>
-                  <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3">Customer / Garage</th>
-                  <th className="py-2.5 px-3">GSTIN</th>
-                  <th className="py-2.5 px-3 text-right">Taxable (₹)</th>
-                  <th className="py-2.5 px-3 text-right">GST (₹)</th>
-                  <th className="py-2.5 px-3 text-right">Grand Total (₹)</th>
-                  <th className="py-2.5 px-3 text-right">Paid (₹)</th>
-                  <th className="py-2.5 px-3 text-right">Khata Due (₹)</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {(invoices.length > 0 ? invoices : sampleSalesData).map((inv, idx) => {
-                  const grandTotal = Number(inv.grandTotalPaise || inv.amountPaise || 0) / 100;
-                  const paidNow = Number(inv.paidNowPaise || (inv.creditBalancePaise === '0' ? inv.grandTotalPaise : 0)) / 100;
-                  const balance = Number(inv.creditBalancePaise || (grandTotal - paidNow)) / 100;
-                  const taxable = grandTotal / 1.18;
-                  const tax = grandTotal - taxable;
+        {loading ? (
+          <div className="py-12">
+            <ModernLoader title="Loading Report Data..." />
+          </div>
+        ) : (
+          <>
+            {/* REPORT 1: SALES REGISTER PREVIEW */}
+            {activeReport === 'SALES' && (
+              filteredInvoices.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 space-y-3">
+                  <Receipt className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">No Sales Invoices Recorded</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      Create invoices from the New Bill (POS) terminal to generate real sales and GST register records.
+                    </p>
+                  </div>
+                  <Link
+                    href="/pos"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Create First Invoice (POS)</span>
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Invoice No</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Customer / Garage</th>
+                        <th className="py-2.5 px-3">GSTIN</th>
+                        <th className="py-2.5 px-3 text-right">Taxable (₹)</th>
+                        <th className="py-2.5 px-3 text-right">GST (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Grand Total (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Paid (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Khata Due (₹)</th>
+                        <th className="py-2.5 px-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                      {filteredInvoices.map((inv, idx) => {
+                        const grandTotal = Number(inv.grandTotalPaise || inv.amountPaise || 0) / 100;
+                        const paidNow = Number(inv.paidNowPaise || (inv.creditBalancePaise === '0' ? inv.grandTotalPaise : 0)) / 100;
+                        const balance = Number(inv.creditBalancePaise || (grandTotal - paidNow)) / 100;
+                        const taxable = grandTotal / 1.18;
+                        const tax = grandTotal - taxable;
 
-                  return (
-                    <tr key={idx} className="hover:bg-slate-50 transition">
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{inv.invoiceNumber || `INV-00${idx + 1}`}</td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">{inv.issuedAt || inv.date || '06 Oct 2026'}</td>
-                      <td className="py-2.5 px-3 font-bold text-slate-900">{inv.customerName || inv.customerShop || 'Walk-in Counter'}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600">{inv.customerGstin || 'URP'}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{taxable.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{tax.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹{grandTotal.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric text-emerald-700 font-bold">₹{paidNow.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric text-amber-700 font-bold">₹{balance.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          balance <= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {balance <= 0 ? '● Paid' : '● Due on Khata'}
-                        </span>
-                      </td>
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 transition">
+                            <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{inv.invoiceNumber || `INV-${idx + 1}`}</td>
+                            <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">{inv.issuedAt || inv.date || inv.createdAt?.split('T')[0] || 'Today'}</td>
+                            <td className="py-2.5 px-3 font-bold text-slate-900">{inv.customerName || inv.customerShop || 'Counter Customer'}</td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600">{inv.customerGstin || 'URP'}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric">₹{taxable.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric">₹{tax.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹{grandTotal.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric text-emerald-700 font-bold">₹{paidNow.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric text-amber-700 font-bold">₹{balance.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                balance <= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {balance <= 0 ? '● Paid' : '● Due on Khata'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+
+            {/* REPORT 2: GARAGE AGING PREVIEW */}
+            {activeReport === 'AGING' && (
+              filteredCustomers.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 space-y-3">
+                  <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">No Customer Khata Accounts</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      Add your partner garages and customers to track outstanding credit and aging schedules.
+                    </p>
+                  </div>
+                  <Link
+                    href="/customers"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Customer Khata</span>
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Garage Workshop</th>
+                        <th className="py-2.5 px-3">Contact</th>
+                        <th className="py-2.5 px-3">GSTIN</th>
+                        <th className="py-2.5 px-3 text-right">Total Balance (₹)</th>
+                        <th className="py-2.5 px-3 text-right">0-15 Days (₹)</th>
+                        <th className="py-2.5 px-3 text-right">16-30 Days (₹)</th>
+                        <th className="py-2.5 px-3 text-right">31-60 Days (₹)</th>
+                        <th className="py-2.5 px-3 text-right">60+ Days (₹)</th>
+                        <th className="py-2.5 px-3 text-center">Collection Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                      {filteredCustomers.map((c, idx) => {
+                        const bal = Number(c.balancePaise || 0) / 100;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 transition">
+                            <td className="py-2.5 px-3 font-bold text-slate-900">{c.shopName || c.name || 'Garage'}</td>
+                            <td className="py-2.5 px-3 text-slate-600 font-mono">{c.phone || 'N/A'}</td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600">{c.gstin || 'URP'}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric font-black text-amber-700">₹{bal.toLocaleString('en-IN')}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(bal * 0.4).toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(bal * 0.3).toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric text-amber-600 font-semibold">₹{(bal * 0.2).toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric text-red-600 font-bold">₹{(bal * 0.1).toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                bal > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {bal > 0 ? (c.status || 'Active Khata') : 'Clear'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+
+            {/* REPORT 3: INVENTORY STOCK PREVIEW */}
+            {activeReport === 'INVENTORY' && (
+              filteredProducts.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 space-y-3">
+                  <Boxes className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">No Inventory Parts Found</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      Add OEM and spare parts catalog items to see live valuation and stock levels.
+                    </p>
+                  </div>
+                  <Link
+                    href="/inventory"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Parts to Inventory</span>
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Item Description</th>
+                        <th className="py-2.5 px-3">OEM Part Number</th>
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3 text-center">In Stock</th>
+                        <th className="py-2.5 px-3 text-right">Cost Price (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Selling Price (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Stock Valuation (₹)</th>
+                        <th className="py-2.5 px-3 text-center">Reorder Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                      {filteredProducts.map((p, idx) => {
+                        const cost = Number(p.purchasePricePaise || 0) / 100;
+                        const sell = Number(p.salePricePaise || p.mrpPaise || 0) / 100;
+                        const qty = Number(p.stockQty || 0);
+                        const total = (cost * qty).toFixed(2);
+                        const min = Number(p.reorderLevel || 10);
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 transition">
+                            <td className="py-2.5 px-3 font-bold text-slate-900">{p.name}</td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600">{p.partNumber || 'N/A'}</td>
+                            <td className="py-2.5 px-3 text-slate-500">{p.category || 'Spares'}</td>
+                            <td className="py-2.5 px-3 text-center font-bold font-mono text-slate-900">{qty} {p.unit || 'pcs'}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric">₹{cost.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric font-semibold text-slate-900">₹{sell.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-emerald-700">₹{total}</td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                qty <= min ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {qty <= min ? `● Low (${qty}/${min})` : '● Healthy'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+
+            {/* REPORT 4: GSTR-1 & 3B PREVIEW (CALCULATED FROM REAL INVOICES) */}
+            {activeReport === 'GST' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
+                      <th className="py-2.5 px-3">GST Return Table</th>
+                      <th className="py-2.5 px-3">Transaction Category</th>
+                      <th className="py-2.5 px-3 text-center">HSN</th>
+                      <th className="py-2.5 px-3 text-center">Invoices</th>
+                      <th className="py-2.5 px-3 text-right">Taxable Value (₹)</th>
+                      <th className="py-2.5 px-3 text-right">CGST (9%) (₹)</th>
+                      <th className="py-2.5 px-3 text-right">SGST (9%) (₹)</th>
+                      <th className="py-2.5 px-3 text-right">Total Tax Liability (₹)</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* REPORT 2: GARAGE AGING PREVIEW */}
-        {activeReport === 'AGING' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
-                  <th className="py-2.5 px-3">Garage Workshop</th>
-                  <th className="py-2.5 px-3">Contact</th>
-                  <th className="py-2.5 px-3">GSTIN</th>
-                  <th className="py-2.5 px-3 text-right">Total Balance (₹)</th>
-                  <th className="py-2.5 px-3 text-right">0-15 Days (₹)</th>
-                  <th className="py-2.5 px-3 text-right">16-30 Days (₹)</th>
-                  <th className="py-2.5 px-3 text-right">31-60 Days (₹)</th>
-                  <th className="py-2.5 px-3 text-right">60+ Days (₹)</th>
-                  <th className="py-2.5 px-3 text-center">Collection Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {(customers.length > 0 ? customers : sampleAgingData).map((c, idx) => {
-                  const bal = Number(c.balancePaise || 0) / 100;
-                  return (
-                    <tr key={idx} className="hover:bg-slate-50 transition">
-                      <td className="py-2.5 px-3 font-bold text-slate-900">{c.shopName || c.name || 'Garage'}</td>
-                      <td className="py-2.5 px-3 text-slate-600 font-mono">{c.phone || 'N/A'}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600">{c.gstin || 'URP'}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric font-black text-amber-700">₹{bal.toLocaleString('en-IN')}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(bal * 0.4).toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(bal * 0.3).toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric text-amber-600 font-semibold">₹{(bal * 0.2).toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric text-red-600 font-bold">₹{(bal * 0.1).toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                          {c.status || 'Active Follow-up'}
-                        </span>
-                      </td>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                    <tr className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-mono font-bold text-blue-700">GSTR-1 Table 4A</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-900">B2B Invoices to Registered Garages (with GSTIN)</td>
+                      <td className="py-2.5 px-3 text-center font-mono">8714</td>
+                      <td className="py-2.5 px-3 text-center font-bold">{gstSummary.b2b.count}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{gstSummary.b2b.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(gstSummary.b2b.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(gstSummary.b2b.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹{gstSummary.b2b.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* REPORT 3: INVENTORY STOCK PREVIEW */}
-        {activeReport === 'INVENTORY' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
-                  <th className="py-2.5 px-3">Item Description</th>
-                  <th className="py-2.5 px-3">OEM Part Number</th>
-                  <th className="py-2.5 px-3">Category</th>
-                  <th className="py-2.5 px-3 text-center">In Stock</th>
-                  <th className="py-2.5 px-3 text-right">Cost Price (₹)</th>
-                  <th className="py-2.5 px-3 text-right">Selling Price (₹)</th>
-                  <th className="py-2.5 px-3 text-right">Stock Valuation (₹)</th>
-                  <th className="py-2.5 px-3 text-center">Reorder Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {(products.length > 0 ? products : sampleInventoryData).map((p, idx) => {
-                  const cost = Number(p.purchasePricePaise || 0) / 100;
-                  const sell = Number(p.salePricePaise || p.mrpPaise || 0) / 100;
-                  const qty = Number(p.stockQty || 0);
-                  const total = (cost * qty).toFixed(2);
-                  const min = Number(p.reorderLevel || 10);
-
-                  return (
-                    <tr key={idx} className="hover:bg-slate-50 transition">
-                      <td className="py-2.5 px-3 font-bold text-slate-900">{p.name}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600">{p.partNumber || 'N/A'}</td>
-                      <td className="py-2.5 px-3 text-slate-500">{p.category || 'Spares'}</td>
-                      <td className="py-2.5 px-3 text-center font-bold font-mono text-slate-900">{qty} {p.unit || 'pcs'}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{cost.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric font-semibold text-slate-900">₹{sell.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-emerald-700">₹{total}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          qty <= min ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {qty <= min ? `● Low (${qty}/${min})` : '● Healthy'}
-                        </span>
-                      </td>
+                    <tr className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-mono font-bold text-blue-700">GSTR-1 Table 5A</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-900">B2C Large Outward Supplies (&gt; ₹2.5 Lakhs)</td>
+                      <td className="py-2.5 px-3 text-center font-mono">8714</td>
+                      <td className="py-2.5 px-3 text-center font-bold">{gstSummary.b2cLarge.count}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{gstSummary.b2cLarge.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(gstSummary.b2cLarge.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(gstSummary.b2cLarge.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹{gstSummary.b2cLarge.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* REPORT 4: GSTR-1 & 3B PREVIEW */}
-        {activeReport === 'GST' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase text-[10px]">
-                  <th className="py-2.5 px-3">GST Return Table</th>
-                  <th className="py-2.5 px-3">Transaction Category</th>
-                  <th className="py-2.5 px-3 text-center">HSN</th>
-                  <th className="py-2.5 px-3 text-center">Invoices</th>
-                  <th className="py-2.5 px-3 text-right">Taxable Value (₹)</th>
-                  <th className="py-2.5 px-3 text-right">CGST (9%) (₹)</th>
-                  <th className="py-2.5 px-3 text-right">SGST (9%) (₹)</th>
-                  <th className="py-2.5 px-3 text-right">Total Tax Liability (₹)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                <tr className="hover:bg-slate-50">
-                  <td className="py-2.5 px-3 font-mono font-bold text-blue-700">GSTR-1 Table 4A</td>
-                  <td className="py-2.5 px-3 font-bold text-slate-900">B2B Invoices to Registered Garages (with GSTIN)</td>
-                  <td className="py-2.5 px-3 text-center font-mono">8714</td>
-                  <td className="py-2.5 px-3 text-center font-bold">18</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹2,45,000.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹22,050.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹22,050.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹44,100.00</td>
-                </tr>
-                <tr className="hover:bg-slate-50">
-                  <td className="py-2.5 px-3 font-mono font-bold text-blue-700">GSTR-1 Table 5A</td>
-                  <td className="py-2.5 px-3 font-bold text-slate-900">B2C Large Outward Supplies</td>
-                  <td className="py-2.5 px-3 text-center font-mono">8714</td>
-                  <td className="py-2.5 px-3 text-center font-bold">2</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹52,000.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹4,680.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹4,680.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹9,360.00</td>
-                </tr>
-                <tr className="hover:bg-slate-50">
-                  <td className="py-2.5 px-3 font-mono font-bold text-blue-700">GSTR-1 Table 7</td>
-                  <td className="py-2.5 px-3 font-bold text-slate-900">B2C Retail Walk-in Counter Cash Bills</td>
-                  <td className="py-2.5 px-3 text-center font-mono">8714</td>
-                  <td className="py-2.5 px-3 text-center font-bold">42</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹1,86,000.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹16,740.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric">₹16,740.00</td>
-                  <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹33,480.00</td>
-                </tr>
-                <tr className="bg-slate-100/70 font-bold">
-                  <td className="py-3 px-3 font-mono text-slate-900">GSTR-3B Table 3.1</td>
-                  <td className="py-3 px-3 text-slate-900">Total Outward Taxable Supplies (Net GST Liability)</td>
-                  <td className="py-3 px-3 text-center font-mono">ALL</td>
-                  <td className="py-3 px-3 text-center text-slate-900">62</td>
-                  <td className="py-3 px-3 text-right font-mono-numeric text-slate-900">₹4,83,000.00</td>
-                  <td className="py-3 px-3 text-right font-mono-numeric text-slate-900">₹43,470.00</td>
-                  <td className="py-3 px-3 text-right font-mono-numeric text-slate-900">₹43,470.00</td>
-                  <td className="py-3 px-3 text-right font-mono-numeric font-black text-[#DC2626] text-sm">₹86,940.00</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                    <tr className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-mono font-bold text-blue-700">GSTR-1 Table 7</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-900">B2C Retail Walk-in Counter Cash Bills</td>
+                      <td className="py-2.5 px-3 text-center font-mono">8714</td>
+                      <td className="py-2.5 px-3 text-center font-bold">{gstSummary.b2cSmall.count}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{gstSummary.b2cSmall.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(gstSummary.b2cSmall.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric">₹{(gstSummary.b2cSmall.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-numeric font-bold text-slate-900">₹{gstSummary.b2cSmall.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                    <tr className="bg-slate-100/70 font-bold">
+                      <td className="py-3 px-3 font-mono text-slate-900">GSTR-3B Table 3.1</td>
+                      <td className="py-3 px-3 text-slate-900">Total Outward Taxable Supplies (Net GST Liability)</td>
+                      <td className="py-3 px-3 text-center font-mono">ALL</td>
+                      <td className="py-3 px-3 text-center text-slate-900">{gstSummary.total.count}</td>
+                      <td className="py-3 px-3 text-right font-mono-numeric text-slate-900">₹{gstSummary.total.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-3 text-right font-mono-numeric text-slate-900">₹{(gstSummary.total.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-3 text-right font-mono-numeric text-slate-900">₹{(gstSummary.total.tax / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-3 text-right font-mono-numeric font-black text-[#DC2626] text-sm">₹{gstSummary.total.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
 
       </div>
