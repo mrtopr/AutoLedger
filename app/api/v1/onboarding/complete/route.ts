@@ -90,11 +90,10 @@ export async function POST(req: NextRequest) {
             stockMovements: {
               create: {
                 tenantId: tenant.id,
-                movementType: 'OPENING_STOCK',
+                reason: 'OPENING',
                 qty: p.stockQty || 0,
-                unitCostPaise: purchasePaise,
-                referenceType: 'ONBOARDING',
-                referenceId: 'INITIAL_SETUP',
+                unitCost: purchasePaise,
+                refType: 'ONBOARDING',
               }
             }
           }
