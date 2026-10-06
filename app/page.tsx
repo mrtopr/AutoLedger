@@ -410,26 +410,26 @@ export default function DealershipDashboardPage() {
 
           <div className="flex items-center gap-4 text-xs font-medium">
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-slate-800" />
+              <div className="w-3 h-3 rounded-sm bg-blue-600 shadow-2xs" />
               <span className="text-slate-700">Gross Billed Sales</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-emerald-600" />
+              <div className="w-3 h-3 rounded-sm bg-emerald-500 shadow-2xs" />
               <span className="text-slate-700">Collected Cash/UPI</span>
             </div>
           </div>
         </div>
 
         {/* Active Inspection Card */}
-        <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="bg-slate-50/90 border border-slate-200/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 font-semibold text-slate-900">
-            <Calendar className="w-4 h-4 text-slate-400" />
+            <Calendar className="w-4 h-4 text-blue-600" />
             <span>{activePoint.date} ({activePoint.day})</span>
           </div>
           <div className="flex items-center gap-6 font-mono font-medium">
             <div>
               <span className="text-slate-500 font-sans font-normal text-[11px]">Billed Sales: </span>
-              <span className="text-slate-900 font-semibold">₹{activePoint.salesRupees.toLocaleString('en-IN')}</span>
+              <span className="text-blue-700 font-semibold">₹{activePoint.salesRupees.toLocaleString('en-IN')}</span>
             </div>
             <div>
               <span className="text-slate-500 font-sans font-normal text-[11px]">Collected: </span>
@@ -454,25 +454,25 @@ export default function DealershipDashboardPage() {
                 key={item.day}
                 onMouseEnter={() => setActiveDataIndex(idx)}
                 className={`flex-1 flex flex-col items-center cursor-pointer transition group relative ${
-                  isSelected ? 'scale-[1.02]' : 'opacity-85 hover:opacity-100'
+                  isSelected ? 'scale-[1.02]' : 'opacity-90 hover:opacity-100'
                 }`}
               >
                 {/* Bar Pair */}
-                <div className={`w-full flex items-end justify-center gap-1.5 h-48 rounded-xl p-1.5 transition-colors ${
-                  isSelected ? 'bg-slate-100/90 ring-1 ring-slate-200' : 'bg-slate-50/70 hover:bg-slate-100/50'
+                <div className={`w-full flex items-end justify-center gap-1.5 h-48 rounded-xl p-1.5 transition-all ${
+                  isSelected ? 'bg-blue-50/60 ring-1 ring-blue-200/80 shadow-xs' : 'bg-slate-50/70 hover:bg-slate-100/60'
                 }`}>
-                  {/* Sales Bar */}
+                  {/* Sales Bar (Electric Royal Blue) */}
                   <div
                     style={{ height: `${salesHeightPct}%` }}
-                    className={`w-1/2 rounded-t transition-all duration-300 ${
-                      isSelected ? 'bg-slate-900 shadow-sm' : 'bg-slate-700 group-hover:bg-slate-800'
+                    className={`w-1/2 rounded-t-md transition-all duration-300 ${
+                      isSelected ? 'bg-blue-600 shadow-sm ring-1 ring-blue-400' : 'bg-blue-500/85 group-hover:bg-blue-600'
                     }`}
                   />
-                  {/* Collections Bar */}
+                  {/* Collections Bar (Mint Emerald) */}
                   <div
                     style={{ height: `${collectionsHeightPct}%` }}
-                    className={`w-1/2 rounded-t transition-all duration-300 ${
-                      isSelected ? 'bg-emerald-600 shadow-sm' : 'bg-emerald-500 group-hover:bg-emerald-600'
+                    className={`w-1/2 rounded-t-md transition-all duration-300 ${
+                      isSelected ? 'bg-emerald-500 shadow-sm ring-1 ring-emerald-300' : 'bg-emerald-400/90 group-hover:bg-emerald-500'
                     }`}
                   />
                 </div>
