@@ -157,10 +157,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate JWT auth token
-    const token = await signToken({
+    const token = signToken({
       userId: createdUser.id,
       tenantId: createdTenant.id,
       role: createdUser.role,
+      name: createdUser.name,
+      phone: createdUser.phone,
     });
 
     const response = NextResponse.json({
