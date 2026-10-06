@@ -14,39 +14,6 @@ function toDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-// Deterministic pseudorandom generator based on date string and seed
-function getDeterministicDayStats(dateStr: string, seed: string = 'honda') {
-  let hash = 0;
-  const str = `${dateStr}-${seed}`;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  const absHash = Math.abs(hash);
-  
-  // Base daily sales between ₹2.8L and ₹5.4L (in paise)
-  const salesRupees = 280000 + (absHash % 260000);
-  const salesPaise = BigInt(salesRupees) * 100n;
-
-  // Collection ratio between 75% and 92%
-  const collRatio = 0.75 + ((absHash % 18) / 100);
-  const collRupees = Math.round(salesRupees * collRatio);
-  const collPaise = BigInt(collRupees) * 100n;
-
-  // Payment splits: Cash ~20-25%, UPI ~55-65%, Khata ~15-20%
-  const cashPaise = (collPaise * 22n) / 100n;
-  const upiPaise = collPaise - cashPaise;
-  const khataPaise = salesPaise > collPaise ? salesPaise - collPaise : (salesPaise * 18n) / 100n;
-
-  return {
-    salesPaise,
-    collPaise,
-    cashPaise,
-    upiPaise,
-    khataPaise,
-  };
-}
-
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
@@ -92,21 +59,31 @@ export async function GET(req: NextRequest) {
     const dayEnd = new Date(targetDate);
     dayEnd.setHours(23, 59, 59, 999);
 
-    // 1. Try Prisma first if available
-    let totalOutstanding = 128400000n; // ₹12.84L fallback
-    let totalOverdue = 21600000n;      // ₹2.16L fallback
+    // Real dynamic metrics
+    let totalOutstanding = 0n;
+    let totalOverdue = 0n;
     let daySalesPaise = 0n;
     let dayCollectedPaise = 0n;
     let dayCashPaise = 0n;
     let dayUpiPaise = 0n;
     let dayKhataPaise = 0n;
-    let lowStockCount = 18;
+    let prevDaySalesPaise = 0n;
+    let lowStockCount = 0;
     let recentTransactions: any[] = [];
-    let productsList: any[] = [];
+    let categoryMap: Record<string, number> = {};
+
+    // 7-day trend map: dateStr -> { salesPaise: bigint, collPaise: bigint }
+    const weekMap: Record<string, { salesPaise: bigint; collPaise: bigint }> = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(targetDate);
+      d.setDate(d.getDate() - i);
+      weekMap[toDateStr(d)] = { salesPaise: 0n, collPaise: 0n };
+    }
 
     const hasDb = await isPostgresAvailable();
     if (hasDb && isUuid(targetTenantId)) {
       try {
+        // 1. Customers & Ledger
         const customers = await prisma.customer.findMany({
           where: { tenantId: targetTenantId, isActive: true },
           include: {
@@ -118,44 +95,50 @@ export async function GET(req: NextRequest) {
           }
         });
 
-        if (customers.length > 0) {
-          totalOutstanding = 0n;
-          totalOverdue = 0n;
-          for (const c of customers) {
-            const bal = c.ledgerEntries
-              .filter(e => new Date(e.createdAt) <= dayEnd)
-              .reduce((sum, e) => sum + e.debit - e.credit, 0n);
-            let ovd = 0n;
-            for (const inv of c.invoices) {
-              if (inv.dueDate && new Date(inv.dueDate) < dayStart && (inv.status === 'ISSUED' || inv.status === 'PARTIALLY_PAID')) {
-                ovd += inv.grandTotal;
-              }
+        for (const c of customers) {
+          const bal = c.ledgerEntries
+            .filter(e => new Date(e.createdAt) <= dayEnd)
+            .reduce((sum, e) => sum + e.debit - e.credit, 0n);
+          let ovd = 0n;
+          for (const inv of c.invoices) {
+            if (inv.dueDate && new Date(inv.dueDate) < dayStart && (inv.status === 'ISSUED' || inv.status === 'PARTIALLY_PAID')) {
+              ovd += inv.grandTotal;
             }
-            totalOutstanding += bal;
-            totalOverdue += ovd;
+          }
+          totalOutstanding += bal;
+          totalOverdue += ovd;
+        }
+
+        // 2. Payments on target date & 7-day window
+        const sevenDaysAgo = new Date(targetDate);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+
+        const allRecentPayments = await prisma.payment.findMany({
+          where: { 
+            tenantId: targetTenantId, 
+            createdAt: { gte: sevenDaysAgo, lte: dayEnd } 
+          },
+          select: { amount: true, mode: true, createdAt: true },
+        });
+
+        for (const p of allRecentPayments) {
+          const pDate = toDateStr(new Date(p.createdAt));
+          if (weekMap[pDate]) {
+            weekMap[pDate].collPaise += p.amount;
+          }
+          if (pDate === selectedDateStr) {
+            dayCollectedPaise += p.amount;
+            if (p.mode === 'CASH') dayCashPaise += p.amount;
+            if (p.mode === 'UPI') dayUpiPaise += p.amount;
           }
         }
 
-        // Payments on this date
-        const dayPayments = await prisma.payment.findMany({
-          where: { 
-            tenantId: targetTenantId, 
-            createdAt: { gte: dayStart, lte: dayEnd } 
-          },
-          select: { amount: true, mode: true },
-        });
-
-        if (dayPayments.length > 0) {
-          dayCollectedPaise = dayPayments.reduce((s, p) => s + p.amount, 0n);
-          dayCashPaise = dayPayments.filter(p => p.mode === 'CASH').reduce((s, p) => s + p.amount, 0n);
-          dayUpiPaise = dayPayments.filter(p => p.mode === 'UPI').reduce((s, p) => s + p.amount, 0n);
-        }
-
-        // Invoices on this date
-        const dayInvoices = await prisma.invoice.findMany({
+        // 3. Invoices on target date & 7-day window
+        const allRecentInvoices = await prisma.invoice.findMany({
           where: { 
             tenantId: targetTenantId,
-            createdAt: { gte: dayStart, lte: dayEnd }
+            createdAt: { gte: sevenDaysAgo, lte: dayEnd }
           },
           orderBy: { createdAt: 'desc' },
           include: { 
@@ -164,167 +147,155 @@ export async function GET(req: NextRequest) {
           }
         });
 
-        if (dayInvoices.length > 0) {
-          daySalesPaise = dayInvoices.reduce((s, inv) => s + inv.grandTotal, 0n);
-          dayKhataPaise = dayInvoices.reduce((s, inv) => {
+        for (const inv of allRecentInvoices) {
+          const invDate = toDateStr(new Date(inv.createdAt));
+          if (weekMap[invDate]) {
+            weekMap[invDate].salesPaise += inv.grandTotal;
+          }
+          if (invDate === prevDayStr) {
+            prevDaySalesPaise += inv.grandTotal;
+          }
+          if (invDate === selectedDateStr) {
+            daySalesPaise += inv.grandTotal;
             const paid = inv.amountPaid > 0n ? inv.amountPaid : inv.paidNow;
-            return s + (inv.grandTotal > paid ? inv.grandTotal - paid : 0n);
-          }, 0n);
+            if (inv.grandTotal > paid) {
+              dayKhataPaise += inv.grandTotal - paid;
+            }
 
-          recentTransactions = dayInvoices.map(inv => {
-            const paid = inv.amountPaid > 0n ? inv.amountPaid : inv.paidNow;
-            const isFull = paid >= inv.grandTotal;
+            const isFull = paid >= inv.grandTotal && inv.grandTotal > 0n;
             const isZero = paid === 0n;
             const modes = inv.allocations.map(a => a.payment.mode);
             const modeText = modes.length > 0 ? modes.join(' + ') : (isZero ? 'CREDIT' : 'PAID');
-            return {
+
+            recentTransactions.push({
               id: inv.id,
               invoiceNumber: inv.number || `INV-${inv.id.slice(0, 6)}`,
-              customer: inv.customer?.shopName || inv.customer?.name || 'Walk-in Workshop',
+              customer: inv.customer?.shopName || inv.customer?.name || 'Retail Counter',
               amountPaise: inv.grandTotal.toString(),
               paidPaise: paid.toString(),
               paymentMode: modeText,
               status: isFull ? 'PAID' : (isZero ? 'OVERDUE' : 'PARTIAL'),
               date: new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-            };
-          });
+            });
+          }
         }
+
+        // 4. Products & Stock levels
+        const products = await prisma.product.findMany({
+          where: { tenantId: targetTenantId, isActive: true },
+          include: { stockMovements: { select: { qty: true } } }
+        });
+
+        for (const pr of products) {
+          const cat = pr.category || 'General Spares';
+          categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+          const currentQty = pr.stockMovements.reduce((sum, m) => sum + m.qty, 0);
+          if (currentQty <= (pr.reorderLevel || 10)) {
+            lowStockCount++;
+          }
+        }
+
       } catch (err) {
-        console.warn('Postgres query fallback for historical date:', err);
+        console.warn('Postgres query error in dashboard, localStore fallback:', err);
       }
     }
 
-    // 2. LocalStore calculation
-    const localInvoices = localStore.getInvoices(targetTenantId);
-    const localInvoicesForDay = localInvoices.filter(inv => {
-      const invDateStr = toDateStr(new Date(inv.createdAt));
-      return invDateStr === selectedDateStr;
-    });
+    // LocalStore fallback integration if Postgres returned zero or offline
+    if (daySalesPaise === 0n && recentTransactions.length === 0) {
+      const localInvoices = localStore.getInvoices(targetTenantId);
+      const localCusts = localStore.getCustomers(targetTenantId);
+      const localProducts = localStore.getProducts(targetTenantId);
 
-    if (localInvoicesForDay.length > 0) {
-      daySalesPaise = localInvoicesForDay.reduce((s, inv) => s + BigInt(inv.grandTotalPaise || 0), 0n);
-      const paidSum = localInvoicesForDay.reduce((s, inv) => s + BigInt(inv.paidNowPaise || 0), 0n);
-      dayCollectedPaise = paidSum;
-      dayKhataPaise = daySalesPaise > paidSum ? daySalesPaise - paidSum : 0n;
-      dayCashPaise = (dayCollectedPaise * 30n) / 100n;
-      dayUpiPaise = dayCollectedPaise - dayCashPaise;
+      // Outstanding from local customers
+      totalOutstanding = localCusts.reduce((sum, c) => sum + BigInt(c.balancePaise || 0), 0n);
+      totalOverdue = localCusts.reduce((sum, c) => sum + BigInt(c.overduePaise || 0), 0n);
 
-      recentTransactions = localInvoicesForDay.map(inv => {
-        const cust = localStore.getCustomerById(inv.customerId || '');
-        const paid = BigInt(inv.paidNowPaise || 0);
-        const total = BigInt(inv.grandTotalPaise || 0);
-        const isFull = paid >= total;
-        const isZero = paid === 0n;
-        return {
-          id: inv.id,
-          invoiceNumber: inv.invoiceNumber,
-          customer: cust?.shopName || cust?.name || 'Retail Counter',
-          amountPaise: inv.grandTotalPaise,
-          paidPaise: inv.paidNowPaise,
-          paymentMode: isZero ? 'CREDIT' : (isFull ? 'UPI' : 'SPLIT'),
-          status: isFull ? 'PAID' : (isZero ? 'OVERDUE' : 'PARTIAL'),
-          date: new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        };
-      });
+      for (const pr of localProducts) {
+        const cat = pr.category || 'General Spares';
+        categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+        if (pr.stockQty <= (pr.reorderLevel || 10)) {
+          lowStockCount++;
+        }
+      }
+
+      for (const inv of localInvoices) {
+        const invDate = toDateStr(new Date(inv.createdAt));
+        const gTotal = BigInt(inv.grandTotalPaise || 0);
+        const pNow = BigInt(inv.paidNowPaise || 0);
+
+        if (weekMap[invDate]) {
+          weekMap[invDate].salesPaise += gTotal;
+          weekMap[invDate].collPaise += pNow;
+        }
+        if (invDate === prevDayStr) {
+          prevDaySalesPaise += gTotal;
+        }
+        if (invDate === selectedDateStr) {
+          daySalesPaise += gTotal;
+          dayCollectedPaise += pNow;
+          if (gTotal > pNow) {
+            dayKhataPaise += gTotal - pNow;
+          }
+          dayCashPaise += (pNow * 30n) / 100n;
+          dayUpiPaise += pNow - ((pNow * 30n) / 100n);
+
+          const cust = localStore.getCustomerById(inv.customerId || '');
+          const isFull = pNow >= gTotal && gTotal > 0n;
+          const isZero = pNow === 0n;
+
+          recentTransactions.push({
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            customer: cust?.shopName || cust?.name || 'Retail Counter',
+            amountPaise: inv.grandTotalPaise,
+            paidPaise: inv.paidNowPaise,
+            paymentMode: isZero ? 'CREDIT' : (isFull ? 'UPI' : 'SPLIT'),
+            status: isFull ? 'PAID' : (isZero ? 'OVERDUE' : 'PARTIAL'),
+            date: new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          });
+        }
+      }
     }
 
-    // If day has no direct manual transactions recorded, synthesize realistic deterministic day metrics
-    if (daySalesPaise === 0n) {
-      const dayStats = getDeterministicDayStats(selectedDateStr, targetTenantId);
-      daySalesPaise = dayStats.salesPaise;
-      dayCollectedPaise = dayStats.collPaise;
-      dayCashPaise = dayStats.cashPaise;
-      dayUpiPaise = dayStats.upiPaise;
-      dayKhataPaise = dayStats.khataPaise;
+    // Calculate real growth percentage
+    let growthText = '+0.0%';
+    if (prevDaySalesPaise > 0n) {
+      const growthPercent = Number(((daySalesPaise - prevDaySalesPaise) * 10000n) / prevDaySalesPaise) / 100;
+      growthText = growthPercent >= 0 ? `+${growthPercent.toFixed(1)}%` : `${growthPercent.toFixed(1)}%`;
+    } else if (daySalesPaise > 0n) {
+      growthText = '+100.0%';
     }
 
-    // Previous day stats for growth indicator
-    const prevStats = getDeterministicDayStats(prevDayStr, targetTenantId);
-    const growthPercent = prevStats.salesPaise > 0n
-      ? Number(((daySalesPaise - prevStats.salesPaise) * 10000n) / prevStats.salesPaise) / 100
-      : 0;
-    const growthText = growthPercent >= 0 ? `+${growthPercent.toFixed(1)}%` : `${growthPercent.toFixed(1)}%`;
-
-    // Generate 7-Day Performance trend array ending on targetDate
+    // Generate 7-Day Performance trend array
     const chartDays = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(targetDate);
       d.setDate(d.getDate() - i);
       const dStr = toDateStr(d);
-      const dStats = getDeterministicDayStats(dStr, targetTenantId);
-      
+      const dayData = weekMap[dStr] || { salesPaise: 0n, collPaise: 0n };
       const dayLabel = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      
       chartDays.push({
         date: dStr,
         day: dayLabel,
-        sales: Number(dStats.salesPaise / 100n) / 100000,
-        coll: Number(dStats.collPaise / 100n) / 100000,
+        sales: Number(dayData.salesPaise / 100n) / 100000,
+        coll: Number(dayData.collPaise / 100n) / 100000,
       });
     }
 
-    // Fallback recent transactions for historical view if none generated
-    if (recentTransactions.length === 0) {
-      const dayPrefix = isHistorical ? selectedDateFormatted.split(',')[0] : 'Today';
-      recentTransactions = [
-        {
-          id: `inv-${selectedDateStr}-1`,
-          invoiceNumber: `INV-${selectedDateStr.replace(/-/g, '').slice(2)}-01`,
-          customer: 'Raj Motors & Garage',
-          amountPaise: '4280000',
-          paidPaise: '4280000',
-          paymentMode: 'UPI',
-          status: 'PAID',
-          date: `${dayPrefix}, 04:30 PM`,
-        },
-        {
-          id: `inv-${selectedDateStr}-2`,
-          invoiceNumber: `INV-${selectedDateStr.replace(/-/g, '').slice(2)}-02`,
-          customer: 'S K Auto Spares',
-          amountPaise: '1820000',
-          paidPaise: '1000000',
-          paymentMode: 'SPLIT',
-          status: 'PARTIAL',
-          date: `${dayPrefix}, 02:15 PM`,
-        },
-        {
-          id: `inv-${selectedDateStr}-3`,
-          invoiceNumber: `INV-${selectedDateStr.replace(/-/g, '').slice(2)}-03`,
-          customer: 'M.S Motors & Service',
-          amountPaise: '6750000',
-          paidPaise: '0',
-          paymentMode: 'CREDIT',
-          status: 'OVERDUE',
-          date: `${dayPrefix}, 12:45 PM`,
-        },
-        {
-          id: `inv-${selectedDateStr}-4`,
-          invoiceNumber: `INV-${selectedDateStr.replace(/-/g, '').slice(2)}-04`,
-          customer: 'Aman Honda Workshop',
-          amountPaise: '1240000',
-          paidPaise: '1240000',
-          paymentMode: 'CASH',
-          status: 'PAID',
-          date: `${dayPrefix}, 11:20 AM`,
-        },
-        {
-          id: `inv-${selectedDateStr}-5`,
-          invoiceNumber: `INV-${selectedDateStr.replace(/-/g, '').slice(2)}-05`,
-          customer: 'Pooja Two Wheeler Works',
-          amountPaise: '2930000',
-          paidPaise: '2930000',
-          paymentMode: 'UPI',
-          status: 'PAID',
-          date: `${dayPrefix}, 10:05 AM`,
-        },
-      ];
-    }
+    // Generate real category breakdown array
+    const totalCatCount = Object.values(categoryMap).reduce((a, b) => a + b, 0) || 1;
+    const catColors = ['bg-emerald-600', 'bg-blue-600', 'bg-amber-500', 'bg-rose-500', 'bg-purple-600'];
+    const categoryBreakdown = Object.entries(categoryMap).map(([name, count], index) => ({
+      name,
+      count,
+      percentage: Math.round((count / totalCatCount) * 100),
+      barColor: catColors[index % catColors.length],
+    }));
 
-    const categoryBreakdown = [
-      { name: 'Engine & Transmission', count: 48, percentage: 84, barColor: 'bg-emerald-600' },
-      { name: 'Electricals & Battery', count: 32, percentage: 68, barColor: 'bg-blue-600' },
-      { name: 'Brakes & Suspension', count: 19, percentage: 52, barColor: 'bg-amber-500' },
-      { name: 'Lubricants & Fluids', count: 26, percentage: 42, barColor: 'bg-rose-500' },
-    ];
+    if (categoryBreakdown.length === 0) {
+      categoryBreakdown.push({ name: 'General Spares', count: 0, percentage: 0, barColor: 'bg-emerald-600' });
+    }
 
     return NextResponse.json({
       success: true,
