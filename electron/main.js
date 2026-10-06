@@ -6,7 +6,10 @@ const { spawn } = require('child_process');
 let mainWindow = null;
 let serverProcess = null;
 const PORT = process.env.PORT || 3000;
-const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+const PRODUCTION_URL = 'https://x-autoledger.vercel.app';
+const APP_URL = process.env.NODE_ENV === 'development'
+  ? (process.env.APP_URL || `http://localhost:${PORT}`)
+  : PRODUCTION_URL;
 
 // Check if server is already running on port 3000
 function checkServer(url) {
@@ -209,13 +212,21 @@ function createWindow() {
     }
   }
 
-  // Check if we need to start the background server
-  checkServer(`http://localhost:${PORT}`).then((alreadyRunning) => {
-    if (!alreadyRunning) {
-      startBackgroundServer();
-    }
-    pollAndLoad();
-  });
+  // If pointing to remote cloud instance (Vercel), load directly
+  if (APP_URL.startsWith('https://')) {
+    mainWindow.loadURL(APP_URL).catch((err) => {
+      console.error('Failed to load cloud URL:', err);
+      setTimeout(() => mainWindow?.loadURL(APP_URL), 2000);
+    });
+  } else {
+    // Local development mode: Check if we need to start background server
+    checkServer(`http://localhost:${PORT}`).then((alreadyRunning) => {
+      if (!alreadyRunning) {
+        startBackgroundServer();
+      }
+      pollAndLoad();
+    });
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://api.whatsapp.com') || (url.startsWith('http') && !url.includes(`localhost:${PORT}`))) {
