@@ -122,6 +122,18 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     days90Plus: '0',
   };
 
+  const rawBalance = BigInt(customer.balancePaise || 0);
+  const isAdvance = rawBalance < 0n;
+  const isDue = rawBalance > 0n;
+  const absBalance = isAdvance ? -rawBalance : rawBalance;
+  const creditLimit = BigInt(customer.creditLimitPaise || 5000000);
+  const utilizationPct = creditLimit > 0n && isDue ? Math.min(100, Math.round(Number((rawBalance * 100n) / creditLimit))) : 0;
+
+  const currentAging = isDue ? BigInt(aging.current || 0) : 0n;
+  const days31to60 = isDue ? BigInt(aging.days31to60 || 0) : 0n;
+  const days61to90 = isDue ? BigInt(aging.days61to90 || 0) : 0n;
+  const days90Plus = isDue ? BigInt(aging.days90Plus || 0) : 0n;
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
       {/* Top Header & Breadcrumb */}
@@ -137,21 +149,21 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setIsEditModalOpen(true)}
-            className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-md border border-slate-300 transition inline-flex items-center gap-1.5 shadow-2xs"
+            className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-md border border-slate-300 transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5 text-slate-500" />
             <span>Edit Customer</span>
           </button>
           <button
             onClick={() => setIsRazorpayModal(true)}
-            className="h-8 px-3 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] font-semibold text-xs rounded-md border border-[#86EFAC] transition inline-flex items-center gap-1.5 shadow-2xs"
+            className="h-8 px-3 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] font-semibold text-xs rounded-md border border-[#86EFAC] transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <Zap className="w-3.5 h-3.5 text-[#16A34A]" />
             <span>Send Payment Link / QR</span>
           </button>
           <button
             onClick={() => setIsPaymentModal(true)}
-            className="h-8 px-3 bg-[#0F172A] hover:bg-[#1E293B] text-white font-medium text-xs rounded-md transition inline-flex items-center gap-1.5 shadow-2xs"
+            className="h-8 px-3 bg-[#0F172A] hover:bg-[#1E293B] text-white font-medium text-xs rounded-md transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <CreditCard className="w-3.5 h-3.5" />
             <span>Record Payment (Jama)</span>
@@ -205,14 +217,29 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           </div>
 
           {/* Balance & Limit Box */}
-          <div className="flex items-center gap-4 bg-[#F8F9FA] border border-[#E2E8F0] p-3 rounded-md">
+          <div className="flex items-center gap-4 bg-[#F8FAFC] border border-[#E2E8F0] p-3.5 rounded-lg shadow-2xs">
             <div className="text-right">
-              <div className="text-[11px] uppercase tracking-wider text-[#64748B] font-semibold">Khata Balance (Baaki)</div>
-              <div className="text-xl font-bold font-mono text-[#0F172A] tabular-nums mt-0.5">
-                {formatPaiseToRupees(BigInt(customer.balancePaise || 0))}
+              <div className="flex items-center justify-end gap-1.5 mb-0.5">
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                  isAdvance 
+                    ? 'bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]' 
+                    : isDue 
+                    ? 'bg-[#FEF2F2] text-[#DC2626] border border-[#FECACA]' 
+                    : 'bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]'
+                }`}>
+                  {isAdvance ? 'ADVANCE (JAMA)' : isDue ? 'OUTSTANDING (BAAKI)' : 'SETTLED (CHUKTA)'}
+                </span>
+                <span className="text-[11px] uppercase tracking-wider text-[#64748B] font-semibold">
+                  {isAdvance ? 'Advance Credit' : 'Khata Balance'}
+                </span>
               </div>
-              <div className="text-[11px] text-[#64748B] font-mono mt-0.5">
-                Limit: {formatPaiseToRupees(BigInt(customer.creditLimitPaise || 5000000))} ({customer.termsDays}d terms)
+              <div className={`text-2xl font-bold font-mono tabular-nums ${
+                isAdvance ? 'text-[#15803D]' : isDue ? 'text-[#DC2626]' : 'text-[#0F172A]'
+              }`}>
+                {formatPaiseToRupees(absBalance)} {isAdvance && <span className="text-xs font-bold text-[#16A34A] font-sans">(Cr)</span>}
+              </div>
+              <div className="text-[11px] text-[#64748B] font-mono mt-1">
+                Limit: {formatPaiseToRupees(creditLimit)} ({customer.termsDays}d terms) • {isAdvance ? <span className="text-[#15803D] font-semibold">0% used (Advance Credit)</span> : <span>{utilizationPct}% limit used</span>}
               </div>
             </div>
           </div>
@@ -220,28 +247,28 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
         {/* Aging Buckets Strip */}
         <div className="mt-4 pt-4 border-t border-[#E2E8F0] grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
-          <div className="bg-[#F8F9FA] p-2.5 rounded-md border border-[#E2E8F0]">
+          <div className="bg-[#F8FAFC] p-2.5 rounded-md border border-[#E2E8F0]">
             <div className="text-[10px] uppercase text-[#64748B] font-semibold">0-30 Days (Current)</div>
             <div className="text-xs font-bold font-mono text-[#0F172A] mt-1 tabular-nums">
-              {formatPaiseToRupees(BigInt(aging.current || 0))}
+              {formatPaiseToRupees(currentAging)}
             </div>
           </div>
-          <div className="bg-[#F8F9FA] p-2.5 rounded-md border border-[#E2E8F0]">
+          <div className="bg-[#F8FAFC] p-2.5 rounded-md border border-[#E2E8F0]">
             <div className="text-[10px] uppercase text-[#64748B] font-semibold">31-60 Days</div>
             <div className="text-xs font-bold font-mono text-[#0F172A] mt-1 tabular-nums">
-              {formatPaiseToRupees(BigInt(aging.days31to60 || 0))}
+              {formatPaiseToRupees(days31to60)}
             </div>
           </div>
-          <div className="bg-[#F8F9FA] p-2.5 rounded-md border border-[#E2E8F0]">
+          <div className="bg-[#F8FAFC] p-2.5 rounded-md border border-[#E2E8F0]">
             <div className="text-[10px] uppercase text-[#64748B] font-semibold">61-90 Days</div>
             <div className="text-xs font-bold font-mono text-[#D97706] mt-1 tabular-nums">
-              {formatPaiseToRupees(BigInt(aging.days61to90 || 0))}
+              {formatPaiseToRupees(days61to90)}
             </div>
           </div>
-          <div className="bg-[#F8F9FA] p-2.5 rounded-md border border-[#E2E8F0]">
+          <div className="bg-[#F8FAFC] p-2.5 rounded-md border border-[#E2E8F0]">
             <div className="text-[10px] uppercase text-[#64748B] font-semibold">90+ Days (Critical)</div>
             <div className="text-xs font-bold font-mono text-[#DC2626] mt-1 tabular-nums">
-              {formatPaiseToRupees(BigInt(aging.days90Plus || 0))}
+              {formatPaiseToRupees(days90Plus)}
             </div>
           </div>
         </div>
@@ -306,31 +333,44 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                     </td>
                   </tr>
                 ) : (
-                  ledger.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-[#F8F9FA] transition">
-                      <td className="py-3 px-4 text-[#64748B]">{entry.date}</td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          entry.type === 'INVOICE' 
-                            ? 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]' 
-                            : 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+                  ledger.map((entry) => {
+                    const runBal = BigInt(entry.runningBalancePaise || 0);
+                    const isEntryAdvance = runBal < 0n;
+                    const absRunBal = isEntryAdvance ? -runBal : runBal;
+
+                    return (
+                      <tr key={entry.id} className="hover:bg-[#F8F9FA] transition">
+                        <td className="py-3 px-4 text-[#64748B]">{entry.date}</td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            entry.type === 'INVOICE' 
+                              ? 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]' 
+                              : 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+                          }`}>
+                            {entry.type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-[#0F172A] font-semibold">{entry.refNo}</td>
+                        <td className="py-3 px-4 text-[#475569] font-sans">{entry.narration}</td>
+                        <td className="py-3 px-4 text-right font-semibold text-[#DC2626] tabular-nums">
+                          {BigInt(entry.debitPaise || 0) > 0n ? formatPaiseToRupees(BigInt(entry.debitPaise)) : '-'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-semibold text-[#16A34A] tabular-nums">
+                          {BigInt(entry.creditPaise || 0) > 0n ? formatPaiseToRupees(BigInt(entry.creditPaise)) : '-'}
+                        </td>
+                        <td className={`py-3 px-4 text-right font-bold tabular-nums ${
+                          isEntryAdvance ? 'text-[#15803D]' : runBal > 0n ? 'text-[#DC2626]' : 'text-[#0F172A]'
                         }`}>
-                          {entry.type}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-[#0F172A] font-semibold">{entry.refNo}</td>
-                      <td className="py-3 px-4 text-[#475569] font-sans">{entry.narration}</td>
-                      <td className="py-3 px-4 text-right font-semibold text-[#DC2626] tabular-nums">
-                        {BigInt(entry.debitPaise || 0) > 0n ? formatPaiseToRupees(BigInt(entry.debitPaise)) : '-'}
-                      </td>
-                      <td className="py-3 px-4 text-right font-semibold text-[#16A34A] tabular-nums">
-                        {BigInt(entry.creditPaise || 0) > 0n ? formatPaiseToRupees(BigInt(entry.creditPaise)) : '-'}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-[#0F172A] tabular-nums">
-                        {formatPaiseToRupees(BigInt(entry.runningBalancePaise || 0))}
-                      </td>
-                    </tr>
-                  ))
+                          {formatPaiseToRupees(absRunBal)}
+                          {isEntryAdvance ? (
+                            <span className="ml-1 text-[9px] font-bold text-[#16A34A] bg-[#F0FDF4] px-1 py-0.2 rounded border border-[#BBF7D0]">Cr</span>
+                          ) : runBal > 0n ? (
+                            <span className="ml-1 text-[9px] font-bold text-[#DC2626] bg-[#FEF2F2] px-1 py-0.2 rounded border border-[#FECACA]">Dr</span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

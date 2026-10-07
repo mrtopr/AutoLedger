@@ -158,7 +158,14 @@ export default function CustomersPage() {
   };
 
   // Aggregated Telemetry
-  const totalOutstandingPaise = customers.reduce((acc, c) => acc + BigInt(c.balancePaise || 0), 0n);
+  const totalReceivablesPaise = customers.reduce((acc, c) => {
+    const b = BigInt(c.balancePaise || 0);
+    return b > 0n ? acc + b : acc;
+  }, 0n);
+  const totalAdvancesPaise = customers.reduce((acc, c) => {
+    const b = BigInt(c.balancePaise || 0);
+    return b < 0n ? acc + (-b) : acc;
+  }, 0n);
   const totalOverduePaise = customers.reduce((acc, c) => acc + BigInt(c.overduePaise || 0), 0n);
   const redCount = customers.filter(c => c.status === 'RED').length;
   const greenCount = customers.filter(c => c.status === 'GREEN').length;
@@ -189,7 +196,7 @@ export default function CustomersPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="h-8 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md transition inline-flex items-center gap-1.5 shadow-2xs"
+            className="h-8 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{t('khata.add_customer', 'Register Khata')}</span>
@@ -200,11 +207,19 @@ export default function CustomersPage() {
       {/* 4-Stat Metric Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-[#64748B] uppercase tracking-wider block">Total Outstanding Khata</span>
-          <div className="text-lg font-bold font-mono text-[#0F172A] mt-1 tabular-nums">
-            {formatPaiseToRupees(totalOutstandingPaise)}
+          <span className="text-[11px] font-medium text-[#64748B] uppercase tracking-wider block">
+            {totalReceivablesPaise > 0n ? 'Total Outstanding (Baaki)' : totalAdvancesPaise > 0n ? 'Advance Deposited (Jama)' : 'Total Outstanding Khata'}
+          </span>
+          <div className={`text-lg font-bold font-mono mt-1 tabular-nums ${totalReceivablesPaise > 0n ? 'text-[#0F172A]' : totalAdvancesPaise > 0n ? 'text-[#15803D]' : 'text-[#0F172A]'}`}>
+            {totalReceivablesPaise > 0n ? formatPaiseToRupees(totalReceivablesPaise) : totalAdvancesPaise > 0n ? formatPaiseToRupees(totalAdvancesPaise) : '₹0.00'}
           </div>
-          <span className="text-[11px] text-[#64748B] block mt-0.5">Total active garage debtor balance</span>
+          <span className="text-[11px] text-[#64748B] block mt-0.5">
+            {totalReceivablesPaise > 0n 
+              ? `Total active receivables ${totalAdvancesPaise > 0n ? `(₹${(Number(totalAdvancesPaise)/100).toFixed(2)} advance)` : ''}`
+              : totalAdvancesPaise > 0n
+              ? 'Total advance credit deposited'
+              : 'All customer accounts settled'}
+          </span>
         </div>
 
         <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
@@ -300,9 +315,12 @@ export default function CustomersPage() {
               ) : (
                 customers.map((cust) => {
                   const balPaise = BigInt(cust.balancePaise || 0);
-                  const limPaise = BigInt(cust.creditLimitPaise || 1);
+                  const limPaise = BigInt(cust.creditLimitPaise || 5000000);
                   const overdue = BigInt(cust.overduePaise || 0);
-                  const utilizationPct = Number((balPaise * 100n) / (limPaise || 1n));
+                  const isCustAdvance = balPaise < 0n;
+                  const isCustDue = balPaise > 0n;
+                  const absBal = isCustAdvance ? -balPaise : balPaise;
+                  const utilizationPct = limPaise > 0n && isCustDue ? Math.min(100, Math.round(Number((balPaise * 100n) / limPaise))) : 0;
 
                   return (
                     <tr key={cust.id} className="hover:bg-[#F8F9FA] transition">
@@ -335,10 +353,17 @@ export default function CustomersPage() {
                         <span className="text-[10px] text-[#94A3B8]">{cust.termsDays}d terms</span>
                       </td>
 
-                      <td className="py-3 px-4 text-right font-mono font-semibold text-[#0F172A] tabular-nums">
-                        <div>{formatPaiseToRupees(balPaise)}</div>
-                        <span className={`text-[10px] ${utilizationPct > 90 ? 'text-[#DC2626]' : 'text-[#64748B]'}`}>
-                          {utilizationPct}% limit used
+                      <td className="py-3 px-4 text-right font-mono tabular-nums">
+                        <div className={`font-bold ${isCustAdvance ? 'text-[#15803D]' : isCustDue ? 'text-[#0F172A]' : 'text-[#64748B]'}`}>
+                          {formatPaiseToRupees(absBal)}
+                          {isCustAdvance ? (
+                            <span className="ml-1 text-[9px] font-bold text-[#16A34A] bg-[#F0FDF4] px-1 py-0.2 rounded border border-[#BBF7D0]">Cr</span>
+                          ) : isCustDue ? (
+                            <span className="ml-1 text-[9px] font-bold text-[#DC2626] bg-[#FEF2F2] px-1 py-0.2 rounded border border-[#FECACA]">Dr</span>
+                          ) : null}
+                        </div>
+                        <span className={`text-[10px] ${isCustAdvance ? 'text-[#16A34A] font-medium' : utilizationPct > 90 ? 'text-[#DC2626] font-semibold' : 'text-[#64748B]'}`}>
+                          {isCustAdvance ? 'Advance Credit (0% used)' : `${utilizationPct}% limit used`}
                         </span>
                       </td>
 

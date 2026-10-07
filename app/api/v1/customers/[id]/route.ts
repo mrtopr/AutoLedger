@@ -60,7 +60,7 @@ export async function GET(
               onTimeRate: '94%',
               relationshipDays: 120,
               aging: {
-                current: currentBalance.toString(),
+                current: currentBalance > 0n ? currentBalance.toString() : '0',
                 days31to60: '0',
                 days61to90: '0',
                 days90Plus: '0',
@@ -81,6 +81,7 @@ export async function GET(
     }
 
     const ledgerEntries = localStore.getLedger(customerId);
+    const localBal = BigInt(localCust.balancePaise || 0);
 
     return NextResponse.json({
       success: true,
@@ -98,7 +99,7 @@ export async function GET(
         onTimeRate: '92%',
         relationshipDays: 180,
         aging: {
-          current: localCust.balancePaise || '0',
+          current: localBal > 0n ? localBal.toString() : '0',
           days31to60: '0',
           days61to90: '0',
           days90Plus: '0',
