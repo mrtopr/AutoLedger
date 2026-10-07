@@ -16,15 +16,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/onboarding';
+  const isStandalonePage = pathname === '/login' || pathname === '/signup' || pathname === '/onboarding' || pathname.startsWith('/portal');
 
   useEffect(() => {
-    if (!loading && !user && !isAuthPage) {
+    if (!loading && !user && !isStandalonePage) {
       router.push('/login');
     }
-  }, [user, loading, isAuthPage, router]);
+  }, [user, loading, isStandalonePage, router]);
 
-  if (isAuthPage) {
+  if (isStandalonePage) {
     return (
       <div className="min-h-screen bg-[#F5F6F8]">
         <Suspense fallback={null}>

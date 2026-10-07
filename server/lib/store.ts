@@ -343,6 +343,15 @@ class LocalStore {
     return this.data.customers.find((c) => c.id === id);
   }
 
+  getCustomerByPhone(phone: string): LocalCustomer | undefined {
+    const clean = phone.replace(/[^0-9]/g, '').slice(-10);
+    if (!clean) return undefined;
+    return this.data.customers.find((c) => {
+      const cClean = (c.phone || '').replace(/[^0-9]/g, '').slice(-10);
+      return cClean === clean;
+    });
+  }
+
   createCustomer(customer: Omit<LocalCustomer, 'id' | 'createdAt'>): LocalCustomer {
     const newCustomer: LocalCustomer = {
       ...customer,
