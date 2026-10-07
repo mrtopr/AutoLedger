@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!customer) {
       customer = localStore.getCustomerByPhone(cleanPhone);
       if (customer) {
-        const tenant = localStore.getTenant();
+        const tenant = localStore.getTenant(customer.tenantId);
         if (tenant) tenantName = tenant.name;
       }
     }

@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
       }
 
       if (customer) {
-        tenant = localStore.getTenant();
+        tenant = localStore.getTenant(customer.tenantId);
         ledger = localStore.getLedger(customer.id);
         const allInvoices = localStore.getInvoices();
         invoices = allInvoices
@@ -164,6 +164,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const finalBalancePaise = ledger.length > 0 ? ledger[0].runningBalancePaise : (customer.balancePaise || '0');
+
     return NextResponse.json({
       success: true,
       customer: {
@@ -174,7 +176,7 @@ export async function GET(req: NextRequest) {
         address: customer.address,
         gstin: customer.gstin,
         customerType: customer.customerType || 'GARAGE',
-        balancePaise: customer.balancePaise || '0',
+        balancePaise: finalBalancePaise,
         creditLimitPaise: customer.creditLimitPaise || customer.creditLimit?.toString() || '5000000',
         termsDays: customer.termsDays || customer.paymentTermsDays || 15,
         status: customer.status || 'GREEN',

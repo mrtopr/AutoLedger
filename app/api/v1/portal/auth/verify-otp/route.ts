@@ -60,7 +60,9 @@ export async function POST(req: NextRequest) {
 
     if (!customer) {
       customer = localStore.getCustomerByPhone(cleanPhone);
-      tenant = localStore.getTenant();
+      if (customer) {
+        tenant = localStore.getTenant(customer.tenantId);
+      }
     }
 
     if (!customer) {

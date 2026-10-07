@@ -185,6 +185,13 @@ class LocalStore {
     return this.data.tenants;
   }
 
+  getTenant(id?: string): LocalTenant | undefined {
+    if (id) {
+      return this.getTenantById(id) || this.data.tenants[0];
+    }
+    return this.data.tenants[0];
+  }
+
   getTenantById(id: string): LocalTenant | undefined {
     return this.data.tenants.find((t) => t.id === id);
   }
@@ -518,9 +525,15 @@ class LocalStore {
 }
 
 // Global singleton instance
-if (!(globalThis as any)._localStore || typeof (globalThis as any)._localStore.upsertProduct !== 'function') {
-  (globalThis as any)._localStore = new LocalStore();
+const globalStore = globalThis as unknown as { _localStore?: LocalStore };
+
+if (
+  !globalStore._localStore ||
+  typeof globalStore._localStore.getCustomerByPhone !== 'function' ||
+  typeof globalStore._localStore.getTenant !== 'function'
+) {
+  globalStore._localStore = new LocalStore();
 }
 
-export const localStore: LocalStore = (globalThis as any)._localStore;
+export const localStore: LocalStore = globalStore._localStore;
 

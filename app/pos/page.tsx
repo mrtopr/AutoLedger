@@ -923,6 +923,52 @@ export default function QuickBillPosPage() {
                   <span className="text-[#92400E]">Khata: {formatPaiseToRupees(balanceOnCreditPaise)}</span>
                 )}
               </div>
+
+              {/* Smart Credit Risk & Limit Check Banner */}
+              {balanceOnCreditPaise > 0n && selectedCustomer.id && (() => {
+                const curBal = BigInt(selectedCustomer.balancePaise || '0');
+                const limit = BigInt(selectedCustomer.creditLimitPaise || '5000000');
+                const projected = curBal + balanceOnCreditPaise;
+                const isOver = projected > limit;
+
+                return (
+                  <div className={`mt-2 p-2.5 rounded-lg border text-xs space-y-1 ${
+                    isOver 
+                      ? 'bg-red-50 border-red-200 text-red-900' 
+                      : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                  }`}>
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="flex items-center gap-1">
+                        {isOver ? (
+                          <>
+                            <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+                            <span>Credit Limit Exceeded!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Within Approved Credit Limit</span>
+                          </>
+                        )}
+                      </span>
+                      <span className="font-mono text-[10px]">
+                        Limit: {formatPaiseToRupees(limit)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-mono text-slate-600 pt-0.5">
+                      <span>Projected Khata Due:</span>
+                      <span className={`font-bold ${isOver ? 'text-red-700' : 'text-slate-900'}`}>
+                        {formatPaiseToRupees(projected)}
+                      </span>
+                    </div>
+                    {isOver && (
+                      <p className="text-[10px] text-red-700 leading-tight pt-0.5">
+                        ⚠️ Over limit by {formatPaiseToRupees(projected - limit)}. Counter staff review required.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Primary Action Buttons */}
