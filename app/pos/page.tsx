@@ -24,12 +24,16 @@ import {
   Percent,
   Check,
   Zap,
-  X
+  X,
+  Edit3
 } from 'lucide-react';
 import { calculateInvoiceTax, formatPaiseToRupees, parseRupeesToPaise, LineItemInput } from '@/server/lib/tax';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
 import RazorpayModal from '@/app/components/RazorpayModal';
 import ClientPortal from '@/app/components/ClientPortal';
+import ModernLoader from '@/app/components/ModernLoader';
+import PageSkeleton from '@/app/components/PageSkeleton';
+import EditCustomerModal from '@/app/components/EditCustomerModal';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 
@@ -106,7 +110,8 @@ export default function QuickBillPosPage() {
   const [upiAmount, setUpiAmount] = useState<string>('0.00');
   const [upiRef, setUpiRef] = useState<string>('');
 
-  // Invoice / Success Modal states
+  // Invoice / Success / Customer Modal states
+  const [isEditCustomerOpen, setIsEditCustomerOpen] = useState<boolean>(false);
   const [isSubmittingBill, setIsSubmittingBill] = useState<boolean>(false);
   const [isSuccessModal, setIsSuccessModal] = useState<boolean>(false);
   const [issuedInvoiceData, setIssuedInvoiceData] = useState<any>(null);
@@ -143,7 +148,9 @@ export default function QuickBillPosPage() {
           const custData = await custRes.json();
           if (custData.customers && custData.customers.length > 0) {
             setCustomers(custData.customers);
-            setSelectedCustomerId(custData.customers[0].id);
+            const urlParamCustId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('customerId') : null;
+            const matched = urlParamCustId && custData.customers.find((c: any) => c.id === urlParamCustId);
+            setSelectedCustomerId(matched ? matched.id : custData.customers[0].id);
           }
         }
 
@@ -178,97 +185,7 @@ export default function QuickBillPosPage() {
     loadData();
   }, []);
 
-  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || customers[0] || {
-    id: '',
-    name: 'Walk-in Customer',
-    shopName: 'Walk-in Customer',
-    phone: '',
-    balancePaise: '0',
-    creditLimitPaise: '0',
-    status: 'GREEN',
-    termsDays: 0,
-  };
-
-  // Real-time tax and totals calculation
-  const taxSummary = useMemo(() => {
-    const calculationInputs: LineItemInput[] = items.map((item) => {
-      const parsedRate = parseRupeesToPaise(item.rateRupees);
-      const discountPaise = item.discountType === 'FLAT' ? parseRupeesToPaise(item.discountValue) : 0n;
-      const discountPercent = item.discountType === 'PERCENT' ? parseFloat(item.discountValue) || 0 : 0;
-
-      return {
-        qty: item.qty || 0,
-        rate: parsedRate,
-        discountPaise,
-        discountPercent,
-        gstRateBp: item.gstRateBp,
-        isTaxInclusive: item.isTaxInclusive,
-      };
-    });
-
-    return calculateInvoiceTax(calculationInputs, placeOfSupply, placeOfSupply);
-  }, [items, placeOfSupply]);
-
-  // Sync payment amounts whenever grand total or payment mode changes
-  const grandTotalRupees = (Number(taxSummary.grandTotal) / 100).toFixed(2);
-
-  useEffect(() => {
-    if (paymentMode === 'FULL_CASH') {
-      setCashAmount(grandTotalRupees);
-      setUpiAmount('0.00');
-    } else if (paymentMode === 'FULL_UPI') {
-      setCashAmount('0.00');
-      setUpiAmount(grandTotalRupees);
-    } else if (paymentMode === 'FULL_KHATA') {
-      setCashAmount('0.00');
-      setUpiAmount('0.00');
-    }
-  }, [paymentMode, grandTotalRupees]);
-
-  const cashPaise = parseRupeesToPaise(cashAmount);
-  const upiPaise = parseRupeesToPaise(upiAmount);
-  const totalPaidNowPaise = cashPaise + upiPaise;
-  const balanceOnCreditPaise = taxSummary.grandTotal > totalPaidNowPaise ? taxSummary.grandTotal - totalPaidNowPaise : 0n;
-
-  // Add Item Row
-  const addItemRow = (product?: CatalogOption) => {
-    const rateRupees = product ? (Number(product.salePricePaise) / 100).toFixed(2) : '0.00';
-    const newItem: PosLineItem = {
-      id: Date.now().toString(),
-      productId: product?.id,
-      name: product?.name || '',
-      partNumber: product?.partNumber || '',
-      qty: 1,
-      unit: product?.unit || 'pcs',
-      rateRupees: rateRupees,
-      discountType: 'FLAT',
-      discountValue: '0',
-      gstRateBp: product?.gstRateBp || 1800,
-      isTaxInclusive: false,
-    };
-    setItems((prev) => [...prev, newItem]);
-    setSearchQuery('');
-    setIsSearchOpen(false);
-  };
-
-  const removeItemRow = (id: string) => {
-    if (items.length <= 1) {
-      setItems([{ id: Date.now().toString(), name: '', qty: 1, unit: 'pcs', rateRupees: '0.00', discountType: 'FLAT', discountValue: '0', gstRateBp: 1800, isTaxInclusive: false }]);
-      return;
-    }
-    setItems((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  const updateItemRow = (id: string, field: keyof PosLineItem, value: any) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        return { ...item, [field]: value };
-      })
-    );
-  };
-
-  // Keyboard shortcut (F2 = Add Row)
+  // Keyboard shortcut listener: F2 for new line item
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
@@ -280,52 +197,157 @@ export default function QuickBillPosPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Filter catalog products for search
+  const selectedCustomer = useMemo(() => {
+    return customers.find(c => c.id === selectedCustomerId) || (customers[0] || {
+      id: '',
+      name: 'Counter Walk-in Customer',
+      shopName: 'Cash Retail Counter',
+      phone: '',
+      balancePaise: '0',
+      creditLimitPaise: '5000000',
+      status: 'GREEN',
+      termsDays: 0,
+    });
+  }, [customers, selectedCustomerId]);
+
+  // Filter Catalog by search
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
     return catalog.filter(p => 
       p.name.toLowerCase().includes(q) || 
-      p.partNumber.toLowerCase().includes(q) ||
-      (p.category && p.category.toLowerCase().includes(q))
+      (p.partNumber && p.partNumber.toLowerCase().includes(q))
     ).slice(0, 6);
-  }, [searchQuery, catalog]);
+  }, [catalog, searchQuery]);
 
-  // Issue Bill & Save to Database
+  // Calculation Engine via tax library
+  const taxSummary = useMemo(() => {
+    const lines: LineItemInput[] = items
+      .filter(it => it.name.trim() !== '')
+      .map(it => {
+        const rate = parseRupeesToPaise(it.rateRupees || '0');
+        const isPercent = it.discountType === 'PERCENT';
+        return {
+          rate,
+          qty: it.qty,
+          gstRateBp: it.gstRateBp,
+          discountPercent: isPercent ? parseFloat(it.discountValue) || 0 : 0,
+          discountPaise: !isPercent ? parseRupeesToPaise(it.discountValue || '0') : 0n,
+          isTaxInclusive: it.isTaxInclusive,
+        };
+      });
+
+    return calculateInvoiceTax(lines, placeOfSupply, placeOfSupply);
+  }, [items, placeOfSupply]);
+
+  // Payment Breakdown Calculation
+  const grandTotalPaise = taxSummary.grandTotal;
+  const cashPaise = paymentMode === 'FULL_CASH' 
+    ? grandTotalPaise 
+    : paymentMode === 'SPLIT' 
+    ? parseRupeesToPaise(cashAmount || '0') 
+    : 0n;
+  const upiPaise = paymentMode === 'FULL_UPI' 
+    ? grandTotalPaise 
+    : paymentMode === 'SPLIT' 
+    ? parseRupeesToPaise(upiAmount || '0') 
+    : 0n;
+  const totalPaidNowPaise = cashPaise + upiPaise;
+  const balanceOnCreditPaise = grandTotalPaise > totalPaidNowPaise ? (grandTotalPaise - totalPaidNowPaise) : 0n;
+
+  // Add Item Row
+  const addItemRow = (prod?: CatalogOption) => {
+    const newItem: PosLineItem = prod ? {
+      id: Math.random().toString(),
+      productId: prod.id,
+      name: prod.name,
+      partNumber: prod.partNumber,
+      qty: 1,
+      unit: prod.unit || 'pcs',
+      rateRupees: (Number(prod.salePricePaise) / 100).toFixed(2),
+      discountType: 'FLAT',
+      discountValue: '0',
+      gstRateBp: prod.gstRateBp || 1800,
+      isTaxInclusive: false,
+    } : {
+      id: Math.random().toString(),
+      name: '',
+      qty: 1,
+      unit: 'pcs',
+      rateRupees: '0.00',
+      discountType: 'FLAT',
+      discountValue: '0',
+      gstRateBp: 1800,
+      isTaxInclusive: false,
+    };
+
+    setItems(prev => [...prev, newItem]);
+    setSearchQuery('');
+    setIsSearchOpen(false);
+  };
+
+  // Remove Item Row
+  const removeItemRow = (id: string) => {
+    setItems(prev => {
+      if (prev.length === 1) {
+        return [{
+          id: '1',
+          name: '',
+          qty: 1,
+          unit: 'pcs',
+          rateRupees: '0.00',
+          discountType: 'FLAT',
+          discountValue: '0',
+          gstRateBp: 1800,
+          isTaxInclusive: false,
+        }];
+      }
+      return prev.filter(it => it.id !== id);
+    });
+  };
+
+  // Update Item Row
+  const updateItemRow = (id: string, field: keyof PosLineItem, value: any) => {
+    setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: value } : it));
+  };
+
+  // Handle Complete Bill Submission
   const handleIssueInvoice = async () => {
-    const validItems = items.filter(it => it.name.trim() !== '' || Number(it.rateRupees) > 0);
+    const validItems = items.filter(it => it.name.trim() !== '');
     if (validItems.length === 0) {
-      alert('Please add at least one spare part or labor item.');
+      alert('Please add at least 1 spare part to generate invoice.');
       return;
     }
 
     try {
       setIsSubmittingBill(true);
 
-      const payloadItems = validItems.map((item) => ({
-        productId: item.productId,
-        name: item.name || 'Motorcycle Spare Part',
-        partNumber: item.partNumber,
-        qty: item.qty,
-        unit: item.unit,
-        ratePaise: parseRupeesToPaise(item.rateRupees).toString(),
-        discountPaise: item.discountType === 'FLAT' ? parseRupeesToPaise(item.discountValue).toString() : '0',
-        discountPercent: item.discountType === 'PERCENT' ? parseFloat(item.discountValue) || 0 : 0,
-        gstRateBp: item.gstRateBp,
-        isTaxInclusive: item.isTaxInclusive,
-      }));
+      const payload = {
+        customerId: selectedCustomer.id || undefined,
+        customerName: selectedCustomer.shopName || selectedCustomer.name,
+        customerPhone: selectedCustomer.phone,
+        customerGstin: selectedCustomer.gstin,
+        items: validItems.map(it => ({
+          productId: it.productId,
+          name: it.name,
+          partNumber: it.partNumber,
+          qty: it.qty,
+          unit: it.unit,
+          ratePaise: parseRupeesToPaise(it.rateRupees).toString(),
+          discountType: it.discountType,
+          discountValue: it.discountType === 'PERCENT' ? it.discountValue : parseRupeesToPaise(it.discountValue).toString(),
+          gstRateBp: it.gstRateBp,
+        })),
+        cashPaidPaise: cashPaise.toString(),
+        upiPaidPaise: upiPaise.toString(),
+        upiRef: upiRef || undefined,
+        creditBalancePaise: balanceOnCreditPaise.toString(),
+      };
 
       const res = await fetch('/api/v1/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId: selectedCustomer.id || null,
-          placeOfSupply: placeOfSupply,
-          items: payloadItems,
-          cashPaidPaise: cashPaise.toString(),
-          upiPaidPaise: upiPaise.toString(),
-          upiRef: upiRef,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -334,37 +356,32 @@ export default function QuickBillPosPage() {
         return;
       }
 
-      await refreshCustomers();
-
-      const invoiceRecord = {
-        invoiceNumber: data.invoice?.invoiceNumber || `${tenant?.settings?.invoicePrefix || 'INV/2026-27/'}${Math.floor(1000 + Math.random() * 9000)}`,
+      setIssuedInvoiceData({
+        ...data.invoice,
         customer: selectedCustomer,
         items: validItems,
-        taxSummary: taxSummary,
-        paidNowPaise: totalPaidNowPaise,
+        taxSummary,
         cashPaidPaise: cashPaise,
         upiPaidPaise: upiPaise,
-        upiRef: upiRef,
         creditBalancePaise: balanceOnCreditPaise,
-        newTotalCustomerBalancePaise: BigInt(selectedCustomer.balancePaise || 0) + balanceOnCreditPaise,
-        issuedAt: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      };
+        paidNowPaise: totalPaidNowPaise,
+      });
 
-      setIssuedInvoiceData(invoiceRecord);
       setIsSuccessModal(true);
-    } catch (err) {
-      console.error(err);
+      refreshCustomers();
+    } catch (err: any) {
+      console.error('Invoice issuance error:', err);
+      alert(err.message || 'Error communicating with billing server');
     } finally {
       setIsSubmittingBill(false);
     }
   };
 
   const startNextBill = () => {
-    refreshCustomers();
     setIsSuccessModal(false);
     setItems([
       {
-        id: Date.now().toString(),
+        id: Math.random().toString(),
         name: '',
         qty: 1,
         unit: 'pcs',
@@ -375,28 +392,31 @@ export default function QuickBillPosPage() {
         isTaxInclusive: false,
       }
     ]);
-    setPaymentMode('FULL_CASH');
     setCashAmount('0.00');
     setUpiAmount('0.00');
     setUpiRef('');
+    setPaymentMode('FULL_CASH');
   };
 
-  // Open Preview Modal
   const openCurrentBillPreview = () => {
-    const previewItems = items
-      .filter((it) => it.name.trim() !== '' || Number(it.rateRupees) > 0)
-      .map((it) => {
-        const rateP = parseRupeesToPaise(it.rateRupees);
-        const discP = it.discountType === 'FLAT' ? parseRupeesToPaise(it.discountValue) : 0n;
+    const validItems = items.filter(it => it.name.trim() !== '');
+    const previewItems = validItems.map(it => {
+        const rateP = parseRupeesToPaise(it.rateRupees || '0');
+        const discVal = parseRupeesToPaise(it.discountValue || '0');
+        const discP = it.discountType === 'PERCENT'
+          ? (rateP * BigInt(parseInt(it.discountValue, 10) || 0)) / 100n
+          : discVal;
         const totalP = (rateP - discP) * BigInt(it.qty || 1);
+
         return {
-          name: it.name || 'Motorcycle Spare Part',
-          partNumber: it.partNumber,
+          productId: it.productId,
+          name: it.name,
+          partNumber: it.partNumber || 'SP-GEN-01',
+          hsnCode: '8714',
           qty: it.qty,
           unit: it.unit,
-          rateRupees: it.rateRupees,
           ratePaise: rateP.toString(),
-          discountValue: it.discountValue,
+          rateRupees: it.rateRupees,
           discountType: it.discountType,
           discountPaise: discP.toString(),
           gstRateBp: it.gstRateBp,
@@ -462,41 +482,46 @@ export default function QuickBillPosPage() {
     setIsPreviewModalOpen(true);
   };
 
+  if (loadingInitial) {
+    return (
+      <PageSkeleton 
+        title={language === 'hi' ? 'काउंटर पीओएस लोड हो रहा है...' : 'Initializing POS Billing...'} 
+        subtitle={language === 'hi' ? 'इन्वेंट्री कैटलॉग और ग्राहक डेटा लोड हो रहा है...' : 'Fetching parts catalog, real-time rates, and customer accounts...'} 
+      />
+    );
+  }
+
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-16">
-      
-      {/* 1. TOP HEADER: CLEAN BILL INFO & CUSTOMER BAR */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        
+    <div className="space-y-3.5 max-w-7xl mx-auto pb-12">
+      {/* 1. TOP HEADER: BILL INFO & CUSTOMER SELECTION */}
+      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 sm:px-4 sm:py-3 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
         {/* Left: Bill Meta */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C81E1E] flex items-center justify-center font-bold shadow-2xs">
-            <Receipt className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-md bg-[#FEF2F2] text-[#C81E1E] flex items-center justify-center font-bold border border-[#FEE2E2] shrink-0 shadow-2xs">
+            <Receipt className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
-                {language === 'hi' ? 'नया काउंटर बिक्री बिल' : 'New Counter Sale Bill'}
+              <h1 className="text-sm sm:text-base font-bold text-[#0F172A] tracking-tight">
+                {language === 'hi' ? 'काउंटर बिक्री बिलिंग' : 'Fast Counter POS Billing'}
               </h1>
-              <span className="text-xs font-mono font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+              <span className="text-[10px] font-mono font-semibold bg-[#F1F5F9] text-[#475569] px-2 py-0.5 rounded border border-[#E2E8F0]">
                 {tenant?.settings?.invoicePrefix || 'INV/2026-27/'}DRAFT
               </span>
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">
-              {language === 'hi' 
-                ? 'जीएसटी गणना · लाइव स्टॉक डिडक्शन · दोहरा खाता प्रविष्टि' 
-                : 'Instant GST calculation · Auto-inventory decrement · Double-entry khata'}
+            <div className="text-[11px] text-[#64748B]">
+              Real-time GST calculations · Instant inventory allocation · Double-entry khata
             </div>
           </div>
         </div>
 
         {/* Right: Customer & Khata Pill */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[260px] sm:min-w-[320px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] sm:min-w-[280px]">
             <select
               value={selectedCustomerId}
               onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 px-3 text-xs font-medium text-slate-900 focus:bg-white focus:border-slate-800 transition"
+              className="w-full bg-[#F8F9FA] border border-[#CBD5E1] rounded-md py-1.5 px-3 text-xs font-medium text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
             >
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -506,43 +531,56 @@ export default function QuickBillPosPage() {
             </select>
           </div>
 
+          {/* Edit Customer Button */}
+          {selectedCustomer.id && (
+            <button
+              type="button"
+              onClick={() => setIsEditCustomerOpen(true)}
+              className="h-8 px-2.5 flex items-center gap-1 bg-white hover:bg-[#F8F9FA] text-[#334155] text-xs font-medium rounded-md border border-[#CBD5E1] transition shadow-2xs"
+              title="Edit Selected Customer Details"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-[#64748B]" />
+              <span className="hidden sm:inline">Edit</span>
+            </button>
+          )}
+
           {/* Current Khata Balance Pill */}
           {selectedCustomer.id && (
-            <div className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-1.5 text-xs font-medium text-amber-800">
-              <BookOpen className="w-3.5 h-3.5 text-amber-600" />
-              <span>{language === 'hi' ? 'बकाया खाता:' : 'Khata Due:'} {formatPaiseToRupees(Number(selectedCustomer.balancePaise) || 0)}</span>
+            <div className="px-2.5 py-1 bg-[#FFFBEB] border border-[#FEF3C7] rounded-md flex items-center gap-1.5 text-xs font-semibold text-[#92400E] font-mono tabular-nums shadow-2xs">
+              <BookOpen className="w-3 h-3 text-[#D97706]" />
+              <span>Due: {formatPaiseToRupees(Number(selectedCustomer.balancePaise) || 0)}</span>
             </div>
           )}
 
           <Link
             href="/invoices"
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+            className="h-8 inline-flex items-center gap-1.5 px-3 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium text-xs rounded-md border border-[#CBD5E1] transition shadow-2xs"
             title="Search Past Bills & Invoices"
           >
-            <FileText className="w-3.5 h-3.5 text-slate-600" />
-            <span>{language === 'hi' ? 'पुराने बिल' : 'Past Bills'}</span>
+            <FileText className="w-3.5 h-3.5 text-[#64748B]" />
+            <span>Past Invoices</span>
           </Link>
 
           <Link
             href="/customers"
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
+            className="h-8 w-8 flex items-center justify-center bg-white hover:bg-[#F8F9FA] text-[#334155] rounded-md border border-[#CBD5E1] transition shadow-2xs"
             title={t('khata.add_customer', 'Add New Customer / Garage')}
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-3.5 h-3.5 text-[#64748B]" />
           </Link>
         </div>
       </div>
 
-      {/* 2. MAIN 2-COLUMN ERGONOMIC WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      {/* 2. MAIN 2-COLUMN WORKSPACE */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
         
         {/* LEFT PANEL (8 COLS): PARTS SEARCH & LINE ITEMS TABLE */}
-        <div className="lg:col-span-8 space-y-4">
+        <div className="lg:col-span-8 space-y-3.5">
           
           {/* Quick Auto-Complete Part Search Bar */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs space-y-2.5 relative">
+          <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-2.5 relative">
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-3" />
               <input
                 type="text"
                 value={searchQuery}
@@ -552,26 +590,26 @@ export default function QuickBillPosPage() {
                   setIsSearchOpen(true);
                 }}
                 placeholder={t('pos.search_parts', 'Type part name, OEM SKU, or scan barcode...')}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-slate-800 transition"
+                className="w-full bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl py-2 pl-9 pr-3 text-xs text-[#0F172A] placeholder-[#94A3B8] focus:bg-white focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden transition shadow-2xs"
               />
             </div>
 
             {/* Live Search Results Dropdown */}
             {isSearchOpen && searchResults.length > 0 && (
-              <div className="absolute left-3.5 right-3.5 top-14 bg-white rounded-xl shadow-xl border border-slate-200 divide-y divide-slate-100 z-30 max-h-60 overflow-y-auto">
+              <div className="absolute left-3.5 right-3.5 top-[52px] bg-white rounded-xl shadow-xl border border-[#CBD5E1] divide-y divide-[#F1F5F9] z-30 max-h-56 overflow-y-auto">
                 {searchResults.map((prod) => (
                   <div
                     key={prod.id}
                     onClick={() => addItemRow(prod)}
-                    className="p-2.5 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition text-xs"
+                    className="p-2.5 hover:bg-[#F8F9FA] flex items-center justify-between cursor-pointer transition text-xs"
                   >
                     <div>
-                      <div className="font-semibold text-slate-900">{prod.name}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">SKU: {prod.partNumber} · Stock: {prod.stockQty} {prod.unit}</div>
+                      <div className="font-semibold text-[#0F172A]">{prod.name}</div>
+                      <div className="text-[10px] text-[#64748B] font-mono">SKU: {prod.partNumber} · Stock: {prod.stockQty} {prod.unit}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono font-semibold text-slate-900">₹{(Number(prod.salePricePaise) / 100).toFixed(2)}</div>
-                      <span className="text-[9px] text-slate-900 font-medium bg-slate-100 px-1.5 py-0.5 rounded">{language === 'hi' ? '+ जोड़ें' : '+ Add'}</span>
+                      <div className="font-mono font-bold text-[#0F172A] tabular-nums">₹{(Number(prod.salePricePaise) / 100).toFixed(2)}</div>
+                      <span className="text-[9px] text-[#166534] font-semibold bg-[#F0FDF4] px-1.5 py-0.5 rounded-md border border-[#DCFCE7]">+ Add</span>
                     </div>
                   </div>
                 ))}
@@ -579,40 +617,40 @@ export default function QuickBillPosPage() {
             )}
 
             {/* Fast-Add Popular Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider shrink-0 mr-1">{language === 'hi' ? 'त्वरित जोड़ें:' : 'Fast Add:'}</span>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs">
+              <span className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider shrink-0 mr-0.5">Quick Add:</span>
               {catalog.slice(0, 4).map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => addItemRow(p)}
-                  className="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg text-[11px] transition flex items-center gap-1"
+                  className="shrink-0 px-2.5 py-1 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#334155] font-medium rounded-lg text-[11px] border border-[#E2E8F0] transition flex items-center gap-1 shadow-2xs"
                 >
-                  <Plus className="w-3 h-3 text-[#DC2626]" />
+                  <Plus className="w-2.5 h-2.5 text-[#C81E1E]" />
                   <span>{p.name.split(' ')[0]} {p.name.split(' ')[1] || ''}</span>
-                  <span className="font-mono text-slate-500">₹{(Number(p.salePricePaise) / 100).toFixed(0)}</span>
+                  <span className="font-mono tabular-nums text-[#64748B]">₹{(Number(p.salePricePaise) / 100).toFixed(0)}</span>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Line Items Table Container */}
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
+          <div className="bg-white border border-[#E2E8F0] rounded-lg shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-medium uppercase text-[10px]">
+                  <tr className="border-b border-[#E2E8F0] bg-[#F8F9FA] text-[#64748B] font-semibold uppercase text-[10px]">
                     <th className="py-2.5 px-3 w-8 text-center">#</th>
-                    <th className="py-2.5 px-3 min-w-[200px]">{t('pos.item_name', 'Item Description & OEM SKU')}</th>
+                    <th className="py-2.5 px-3 min-w-[200px]">{t('pos.item_name', 'Item Description & SKU')}</th>
                     <th className="py-2.5 px-2 w-16 text-center">{t('pos.quantity', 'Qty')}</th>
-                    <th className="py-2.5 px-2 w-16 text-center">{language === 'hi' ? 'इकाई' : 'Unit'}</th>
-                    <th className="py-2.5 px-3 w-24 text-right">{t('pos.rate', 'Rate (₹)')}</th>
+                    <th className="py-2.5 px-2 w-16 text-center">Unit</th>
+                    <th className="py-2.5 px-3 w-26 text-right">{t('pos.rate', 'Rate (₹)')}</th>
                     <th className="py-2.5 px-2 w-16 text-center">GST</th>
-                    <th className="py-2.5 px-3 w-24 text-right">{t('pos.amount', 'Amount (₹)')}</th>
+                    <th className="py-2.5 px-3 w-26 text-right">{t('pos.amount', 'Amount (₹)')}</th>
                     <th className="py-2.5 px-2 w-8 text-center"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-800">
+                <tbody className="divide-y divide-[#F1F5F9] text-[#334155]">
                   {items.map((item, idx) => {
                     const rateNum = parseFloat(item.rateRupees) || 0;
                     const discNum = item.discountType === 'PERCENT' 
@@ -621,37 +659,37 @@ export default function QuickBillPosPage() {
                     const lineTotal = Math.max(0, (rateNum - discNum) * (item.qty || 1));
 
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/70 transition">
-                        <td className="py-2.5 px-3 text-center font-mono text-slate-400 text-[11px]">{idx + 1}</td>
+                      <tr key={item.id} className="hover:bg-[#F8F9FA] transition-colors">
+                        <td className="py-2 px-2.5 text-center font-mono text-[#94A3B8] text-[11px]">{idx + 1}</td>
                         
                         {/* Name & SKU */}
-                        <td className="py-2.5 px-3">
+                        <td className="py-2 px-2.5">
                           <input
                             type="text"
                             value={item.name}
                             onChange={(e) => updateItemRow(item.id, 'name', e.target.value)}
-                            placeholder={language === 'hi' ? 'पार्ट या सर्विस का नाम दर्ज करें...' : 'Enter item name or custom work...'}
-                            className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-medium text-slate-900 focus:bg-white focus:border-slate-800 transition"
+                            placeholder="Enter item description..."
+                            className="w-full bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg px-2.5 py-1 text-xs font-medium text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
                           />
                         </td>
 
                         {/* Qty */}
-                        <td className="py-2.5 px-2 text-center">
+                        <td className="py-2 px-2 text-center">
                           <input
                             type="number"
                             min="1"
                             value={item.qty}
                             onChange={(e) => updateItemRow(item.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-14 text-center bg-slate-50 border border-slate-300 rounded-lg py-1 font-semibold font-mono text-slate-900 focus:bg-white focus:border-slate-800"
+                            className="w-14 text-center bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 font-semibold font-mono tabular-nums text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
                           />
                         </td>
 
                         {/* Unit */}
-                        <td className="py-2.5 px-2 text-center">
+                        <td className="py-2 px-2 text-center">
                           <select
                             value={item.unit}
                             onChange={(e) => updateItemRow(item.id, 'unit', e.target.value)}
-                            className="bg-slate-50 border border-slate-300 rounded-lg py-1 px-1 text-[11px] font-medium text-slate-700"
+                            className="bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-1.5 text-[11px] font-medium text-[#334155] outline-hidden shadow-2xs"
                           >
                             <option value="pcs">pcs</option>
                             <option value="set">set</option>
@@ -662,21 +700,21 @@ export default function QuickBillPosPage() {
                         </td>
 
                         {/* Rate (₹) */}
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2 px-2.5 text-right">
                           <input
                             type="text"
                             value={item.rateRupees}
                             onChange={(e) => updateItemRow(item.id, 'rateRupees', e.target.value)}
-                            className="w-20 text-right bg-slate-50 border border-slate-300 rounded-lg py-1 px-2 font-mono font-semibold text-slate-900 focus:bg-white focus:border-slate-800"
+                            className="w-22 text-right bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-2 font-mono tabular-nums font-semibold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
                           />
                         </td>
 
                         {/* GST Slab */}
-                        <td className="py-2.5 px-2 text-center">
+                        <td className="py-2 px-2 text-center">
                           <select
                             value={item.gstRateBp}
                             onChange={(e) => updateItemRow(item.id, 'gstRateBp', parseInt(e.target.value))}
-                            className="bg-slate-50 border border-slate-300 rounded-lg py-1 px-1 text-[11px] font-semibold font-mono text-slate-700"
+                            className="bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-1.5 text-[11px] font-medium font-mono text-[#334155] outline-hidden shadow-2xs"
                           >
                             <option value={1800}>18%</option>
                             <option value={2800}>28%</option>
@@ -687,16 +725,16 @@ export default function QuickBillPosPage() {
                         </td>
 
                         {/* Line Total */}
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-900">
+                        <td className="py-2 px-2.5 text-right font-mono tabular-nums font-semibold text-[#0F172A]">
                           ₹{lineTotal.toFixed(2)}
                         </td>
 
                         {/* Delete */}
-                        <td className="py-2.5 px-2 text-center">
+                        <td className="py-2 px-2 text-center">
                           <button
                             type="button"
                             onClick={() => removeItemRow(item.id)}
-                            className="p-1 text-slate-400 hover:text-red-600 rounded transition"
+                            className="p-1 text-[#94A3B8] hover:text-[#DC2626] rounded-md transition"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -709,132 +747,129 @@ export default function QuickBillPosPage() {
             </div>
 
             {/* Bottom Row: + Add Row Button */}
-            <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+            <div className="p-3 border-t border-[#F1F5F9] bg-[#F8F9FA] flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => addItemRow()}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 font-medium text-xs rounded-xl border border-slate-300 shadow-2xs transition"
+                className="h-8 inline-flex items-center gap-1.5 px-3.5 bg-white hover:bg-[#F1F5F9] text-[#0F172A] font-semibold text-xs rounded-md border border-[#CBD5E1] shadow-2xs transition"
               >
-                <Plus className="w-3.5 h-3.5 text-[#DC2626]" />
-                <span>{language === 'hi' ? '+ नया आइटम जोड़ें (F2)' : 'Add Item Row (F2)'}</span>
+                <Plus className="w-3.5 h-3.5 text-[#C81E1E]" />
+                <span>Add Item Row (F2)</span>
               </button>
 
-              <span className="text-[11px] text-slate-500 font-medium">
-                {items.length} {language === 'hi' ? 'आइटम्स बिल पर' : 'items on bill'}
+              <span className="text-[11px] text-[#64748B]">
+                {items.length} line items on bill
               </span>
             </div>
           </div>
 
         </div>
 
-        {/* RIGHT PANEL (4 COLS): STICKY SETTLEMENT & INSTANT CHECKOUT */}
-        <div className="lg:col-span-4 space-y-4">
+        {/* RIGHT PANEL (4 COLS): SETTLEMENT & CHECKOUT */}
+        <div className="lg:col-span-4 space-y-3.5">
           
-          {/* Bill Summary & Payment Card */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4 sticky top-20">
+          <div className="bg-white border border-[#E2E8F0] rounded-lg p-4 sm:p-5 shadow-2xs space-y-4 sticky top-16">
             
-            <div className="border-b border-slate-100 pb-3">
-              <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Wallet className="w-4 h-4 text-emerald-600" />
-                <span>{language === 'hi' ? 'भुगतान एवं त्वरित बिलिंग' : 'Settlement & Instant Payment'}</span>
+            <div className="border-b border-[#F1F5F9] pb-2.5">
+              <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5 text-[#16A34A]" />
+                <span>Settlement & Checkout</span>
               </h2>
             </div>
 
             {/* Quick 1-Click Payment Presets */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block">{t('pos.payment_type', 'Payment Mode:')}</label>
+              <label className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider block">{t('pos.payment_type', 'Payment Mode:')}</label>
               <div className="grid grid-cols-2 gap-2 text-xs font-medium">
                 <button
                   type="button"
                   onClick={() => setPaymentMode('FULL_CASH')}
-                  className={`py-2 px-2.5 rounded-xl border transition flex items-center justify-center gap-1.5 ${
+                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
                     paymentMode === 'FULL_CASH' 
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 ring-2 ring-emerald-500/20' 
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold' 
+                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
                   }`}
                 >
-                  <span>💵 {t('pos.cash_payment', 'Cash')}</span>
-                  {paymentMode === 'FULL_CASH' && <Check className="w-3 h-3 text-emerald-600" />}
+                  <span>💵 Cash</span>
+                  {paymentMode === 'FULL_CASH' && <Check className="w-3.5 h-3.5 text-white" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPaymentMode('FULL_UPI')}
-                  className={`py-2 px-2.5 rounded-xl border transition flex items-center justify-center gap-1.5 ${
+                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
                     paymentMode === 'FULL_UPI' 
-                      ? 'bg-blue-50 text-blue-800 border-blue-300 ring-2 ring-blue-500/20' 
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold' 
+                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
                   }`}
                 >
-                  <span>📱 {t('pos.upi_payment', 'UPI / QR')}</span>
-                  {paymentMode === 'FULL_UPI' && <Check className="w-3 h-3 text-blue-600" />}
+                  <span>📱 UPI / QR</span>
+                  {paymentMode === 'FULL_UPI' && <Check className="w-3.5 h-3.5 text-white" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPaymentMode('FULL_KHATA')}
-                  className={`py-2 px-2.5 rounded-xl border transition flex items-center justify-center gap-1.5 ${
+                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
                     paymentMode === 'FULL_KHATA' 
-                      ? 'bg-amber-50 text-amber-800 border-amber-300 ring-2 ring-amber-500/20' 
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-[#D97706] text-white border-[#D97706] font-semibold' 
+                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
                   }`}
                 >
-                  <span>📖 {t('pos.credit_khata', 'Credit / Khata')}</span>
-                  {paymentMode === 'FULL_KHATA' && <Check className="w-3 h-3 text-amber-600" />}
+                  <span>📖 Khata</span>
+                  {paymentMode === 'FULL_KHATA' && <Check className="w-3.5 h-3.5 text-white" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPaymentMode('SPLIT')}
-                  className={`py-2 px-2.5 rounded-xl border transition flex items-center justify-center gap-1.5 ${
+                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
                     paymentMode === 'SPLIT' 
-                      ? 'bg-purple-50 text-purple-800 border-purple-300 ring-2 ring-purple-500/20' 
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold' 
+                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
                   }`}
                 >
-                  <span>⚡ {t('pos.split_payment', 'Split / Part')}</span>
-                  {paymentMode === 'SPLIT' && <Check className="w-3 h-3 text-purple-600" />}
+                  <span>⚡ Split</span>
+                  {paymentMode === 'SPLIT' && <Check className="w-3.5 h-3.5 text-white" />}
                 </button>
               </div>
             </div>
 
-            {/* FULL_UPI helper banner */}
+            {/* FULL_UPI QR action */}
             {paymentMode === 'FULL_UPI' && (
-              <div className="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/80 flex items-center justify-between text-xs animate-in fade-in">
-                <div className="text-[11px] text-blue-900 font-medium">
-                  <span>Dynamic QR / Pay Link:</span>
-                </div>
+              <div className="bg-[#EFF6FF] p-2.5 rounded-md border border-[#DBEAFE] flex items-center justify-between text-xs shadow-2xs">
+                <span className="text-[11px] text-[#1E40AF] font-medium">Dynamic QR Link:</span>
                 <button
                   type="button"
                   onClick={() => setIsRazorpayModalOpen(true)}
-                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px] rounded-lg shadow-2xs transition flex items-center gap-1"
+                  className="h-7 px-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-[10px] rounded-md transition flex items-center gap-1 shadow-2xs"
                 >
                   <QrCode className="w-3 h-3" />
-                  <span>Show Dynamic QR</span>
+                  <span>Show QR</span>
                 </button>
               </div>
             )}
 
-            {/* Split / Custom Input Details if Selected */}
+            {/* Split / Custom Input */}
             {paymentMode === 'SPLIT' && (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5 text-xs animate-in fade-in">
+              <div className="bg-[#F8F9FA] p-3 rounded-md border border-[#E2E8F0] space-y-2 text-xs shadow-2xs">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-medium text-slate-600 mb-0.5">{language === 'hi' ? 'नकद भुगतान (₹)' : 'Cash Paid (₹)'}</label>
+                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">Cash Paid (₹)</label>
                     <input
                       type="text"
                       value={cashAmount}
                       onChange={(e) => setCashAmount(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-mono font-semibold text-slate-900"
+                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A]"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium text-slate-600 mb-0.5">{language === 'hi' ? 'UPI भुगतान (₹)' : 'UPI Paid (₹)'}</label>
+                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">UPI Paid (₹)</label>
                     <input
                       type="text"
                       value={upiAmount}
                       onChange={(e) => setUpiAmount(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-mono font-semibold text-slate-900"
+                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A]"
                     />
                   </div>
                 </div>
@@ -843,49 +878,49 @@ export default function QuickBillPosPage() {
                     type="text"
                     value={upiRef}
                     onChange={(e) => setUpiRef(e.target.value)}
-                    placeholder={language === 'hi' ? 'वैकल्पिक UPI रेफरेंस नंबर...' : 'Optional UPI UTR / Ref Number...'}
-                    className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-[11px] text-slate-700"
+                    placeholder="Optional UPI Ref / UTR..."
+                    className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 text-[11px] text-[#334155]"
                   />
                 </div>
               </div>
             )}
 
             {/* Financial Totals Breakdown */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
-              <div className="flex justify-between text-slate-500">
+            <div className="space-y-1.5 pt-2 border-t border-[#F1F5F9] text-xs">
+              <div className="flex justify-between text-[#64748B]">
                 <span>{t('pos.subtotal', 'Taxable Value')}:</span>
-                <span className="font-mono-numeric font-semibold text-slate-800">
+                <span className="font-mono tabular-nums font-semibold text-[#334155]">
                   {formatPaiseToRupees(taxSummary.taxableValue)}
                 </span>
               </div>
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between text-[#64748B]">
                 <span>{t('pos.total_tax', 'GST (CGST + SGST)')}:</span>
-                <span className="font-mono-numeric font-semibold text-slate-800">
+                <span className="font-mono tabular-nums font-semibold text-[#334155]">
                   {formatPaiseToRupees(taxSummary.totalTax)}
                 </span>
               </div>
               {taxSummary.roundOff !== 0n && (
-                <div className="flex justify-between text-slate-500">
-                  <span>{language === 'hi' ? 'राउंड ऑफ:' : 'Round Off:'}</span>
-                  <span className="font-mono-numeric font-semibold text-slate-700">
+                <div className="flex justify-between text-[#64748B]">
+                  <span>Round Off:</span>
+                  <span className="font-mono tabular-nums font-semibold text-[#64748B]">
                     {formatPaiseToRupees(taxSummary.roundOff)}
                   </span>
                 </div>
               )}
 
               {/* GRAND TOTAL */}
-              <div className="border-t border-slate-200 pt-2 flex justify-between items-baseline">
-                <span className="font-bold text-slate-900 text-sm">{t('pos.grand_total', 'Grand Total')}:</span>
-                <span className="text-2xl font-bold text-slate-900 font-mono-numeric tracking-tight">
+              <div className="border-t border-[#E2E8F0] pt-2 flex justify-between items-baseline">
+                <span className="font-bold text-[#0F172A] text-xs">{t('pos.grand_total', 'Grand Total')}:</span>
+                <span className="text-xl font-bold text-[#0F172A] font-mono tabular-nums tracking-tight">
                   {formatPaiseToRupees(taxSummary.grandTotal)}
                 </span>
               </div>
 
               {/* Paid vs Due Pill */}
-              <div className="pt-1.5 flex justify-between text-xs font-mono font-medium">
-                <span className="text-emerald-700">{language === 'hi' ? 'जमा राशि:' : 'Paid Now:'} {formatPaiseToRupees(totalPaidNowPaise)}</span>
+              <div className="pt-1.5 flex justify-between text-[11px] font-mono tabular-nums font-semibold">
+                <span className="text-[#166534]">Paid: {formatPaiseToRupees(totalPaidNowPaise)}</span>
                 {balanceOnCreditPaise > 0n && (
-                  <span className="text-amber-700">{language === 'hi' ? 'खाता उधार:' : 'On Khata:'} {formatPaiseToRupees(balanceOnCreditPaise)}</span>
+                  <span className="text-[#92400E]">Khata: {formatPaiseToRupees(balanceOnCreditPaise)}</span>
                 )}
               </div>
             </div>
@@ -896,29 +931,38 @@ export default function QuickBillPosPage() {
                 type="button"
                 onClick={handleIssueInvoice}
                 disabled={isSubmittingBill}
-                className="w-full py-3 bg-[#C81E1E] hover:bg-[#991B1B] disabled:opacity-60 text-white font-semibold text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2"
+                className="w-full h-10 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-60 text-white font-bold text-xs rounded-md shadow-2xs transition flex items-center justify-center gap-2"
               >
-                <CheckCircle2 className="w-5 h-5" />
-                <span>{isSubmittingBill ? (language === 'hi' ? 'बिल बन रहा है...' : 'Issuing Bill...') : (language === 'hi' ? 'बिल बनाएं व बिक्री दर्ज करें' : 'Issue Bill & Record Sale')}</span>
+                {isSubmittingBill ? (
+                  <>
+                    <ModernLoader size="xs" />
+                    <span>{language === 'hi' ? 'बिल जारी हो रहा है...' : 'Issuing Bill & Recording...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{language === 'hi' ? 'बिल जारी करें और बिक्री दर्ज करें' : 'Issue Bill & Record Sale'}</span>
+                  </>
+                )}
               </button>
 
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={openCurrentBillPreview}
-                  className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium rounded-xl text-xs border border-slate-200 transition flex items-center justify-center gap-1.5"
+                  className="h-8 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium rounded-md text-[11px] border border-[#CBD5E1] transition flex items-center justify-center gap-1 shadow-2xs"
                 >
-                  <Eye className="w-3.5 h-3.5 text-slate-700" />
-                  <span>{language === 'hi' ? 'बिल देखें' : 'Preview Bill'}</span>
+                  <Eye className="w-3 h-3 text-[#64748B]" />
+                  <span>Preview</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={openCurrentBillPreview}
-                  className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium rounded-xl text-xs border border-slate-200 transition flex items-center justify-center gap-1.5"
+                  className="h-8 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium rounded-md text-[11px] border border-[#CBD5E1] transition flex items-center justify-center gap-1 shadow-2xs"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>{language === 'hi' ? 'प्रिंट A4 / PDF' : 'Print A4 / PDF'}</span>
+                  <Printer className="w-3 h-3 text-[#64748B]" />
+                  <span>Print A4</span>
                 </button>
               </div>
             </div>
@@ -930,49 +974,47 @@ export default function QuickBillPosPage() {
       {/* 3. SUCCESS / BILL CONFIRMATION MODAL */}
       {isSuccessModal && issuedInvoiceData && (
         <ClientPortal>
-          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-in zoom-in-95 duration-150 relative">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
+          <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
+            <div className="bg-white border border-[#CBD5E1] rounded-lg max-w-md w-full p-6 space-y-4 shadow-xl relative">
+              <div className="flex items-start justify-between gap-2 border-b border-[#E2E8F0] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-[#16A34A]" />
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Sale Bill Issued & Recorded!</h3>
-                    <div className="text-xs font-mono font-bold text-emerald-700">{issuedInvoiceData.invoiceNumber}</div>
+                    <h3 className="text-sm font-bold text-[#0F172A]">Sale Bill Issued & Recorded</h3>
+                    <div className="text-xs font-mono font-semibold text-[#166534]">{issuedInvoiceData.invoiceNumber}</div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsSuccessModal(false)}
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition"
-                  title="Close (Dismiss)"
+                  className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A]"
+                  title="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+              <div className="bg-[#F8F9FA] p-3.5 rounded-md border border-[#E2E8F0] space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Customer:</span>
-                  <span className="font-bold text-slate-900">{issuedInvoiceData.customer?.shopName || 'Walk-in Customer'}</span>
+                  <span className="text-[#64748B]">Customer:</span>
+                  <span className="font-semibold text-[#0F172A]">{issuedInvoiceData.customer?.shopName || 'Walk-in Customer'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Grand Total:</span>
-                  <span className="font-mono font-bold text-slate-900">
-                    {formatPaiseToRupees(issuedInvoiceData.taxSummary.grandTotal)}
+                  <span className="text-[#64748B]">Grand Total:</span>
+                  <span className="font-mono tabular-nums font-bold text-[#0F172A]">
+                    {formatPaiseToRupees(issuedInvoiceData?.taxSummary?.grandTotal || issuedInvoiceData?.grandTotalPaise || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Paid at Counter:</span>
-                  <span className="font-mono font-bold text-emerald-700">
+                  <span className="text-[#64748B]">Paid at Counter:</span>
+                  <span className="font-mono tabular-nums font-bold text-[#166534]">
                     {formatPaiseToRupees(issuedInvoiceData.paidNowPaise)}
                   </span>
                 </div>
                 {issuedInvoiceData.creditBalancePaise > 0n && (
-                  <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                    <span className="text-slate-500 font-medium">Added to Khata Due:</span>
-                    <span className="font-mono font-bold text-amber-700">
+                  <div className="flex justify-between border-t border-[#E2E8F0] pt-1.5">
+                    <span className="text-[#64748B]">Added to Khata Due:</span>
+                    <span className="font-mono tabular-nums font-bold text-[#92400E]">
                       {formatPaiseToRupees(issuedInvoiceData.creditBalancePaise)}
                     </span>
                   </div>
@@ -983,25 +1025,24 @@ export default function QuickBillPosPage() {
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   onClick={openCurrentBillPreview}
-                  className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                  className="h-8.5 bg-[#0F172A] hover:bg-[#1E293B] text-white font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
                 >
-                  <Eye className="w-4 h-4" />
-                  <span>View & Print PDF</span>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View / Print PDF</span>
                 </button>
                 <button
                   onClick={openCurrentBillPreview}
-                  className="py-2.5 px-3 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                  className="h-8.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
                 >
-                  <MessageCircle className="w-4 h-4" />
+                  <MessageCircle className="w-3.5 h-3.5" />
                   <span>WhatsApp Bill</span>
                 </button>
-                {/* Only show online payment link if there is an unpaid balance on credit */}
                 {issuedInvoiceData.creditBalancePaise > 0n && (
                   <button
                     onClick={() => setIsRazorpayModalOpen(true)}
-                    className="py-2.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 border border-blue-200 transition col-span-2"
+                    className="h-8.5 bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 border border-[#BFDBFE] transition col-span-2 shadow-2xs"
                   >
-                    <Zap className="w-3.5 h-3.5 text-blue-600" />
+                    <Zap className="w-3 h-3 text-[#2563EB]" />
                     <span>Send Razorpay Payment Link (WhatsApp)</span>
                   </button>
                 )}
@@ -1009,7 +1050,7 @@ export default function QuickBillPosPage() {
 
               <button
                 onClick={startNextBill}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition"
+                className="w-full h-8.5 bg-[#C81E1E] hover:bg-[#A81818] text-white font-semibold rounded-md text-xs transition shadow-2xs"
               >
                 Start Next Bill (F2)
               </button>
@@ -1034,7 +1075,19 @@ export default function QuickBillPosPage() {
           customerName={selectedCustomer?.shopName || selectedCustomer?.name || 'Walk-in Customer'}
           customerPhone={selectedCustomer?.phone || ''}
           invoiceNumber={issuedInvoiceData?.invoiceNumber}
-          defaultAmountRupees={(Number(issuedInvoiceData ? issuedInvoiceData.taxSummary.grandTotal : taxSummary.grandTotal) / 100).toFixed(2)}
+          defaultAmountRupees={(Number(issuedInvoiceData?.taxSummary?.grandTotal || issuedInvoiceData?.grandTotalPaise || taxSummary?.grandTotal || 0) / 100).toFixed(2)}
+        />
+      )}
+
+      {/* Edit Customer Modal */}
+      {isEditCustomerOpen && selectedCustomer.id && (
+        <EditCustomerModal
+          isOpen={isEditCustomerOpen}
+          onClose={() => setIsEditCustomerOpen(false)}
+          customer={selectedCustomer}
+          onSuccess={() => {
+            refreshCustomers();
+          }}
         />
       )}
     </div>

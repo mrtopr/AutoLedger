@@ -145,50 +145,62 @@ export default function InvoicesPage() {
   });
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      {/* Page Title & New Bill Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#DC2626]" />
-            <span>{t('invs.title', 'Invoices & Billing History')}</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            {t('invs.subtitle', 'GST compliant tax invoices, single-page A4 print, and WhatsApp sharing.')}
-          </p>
+    <div className="space-y-4 max-w-7xl mx-auto pb-12">
+      {/* Page Title */}
+      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 sm:px-4 sm:py-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-8 h-8 rounded-md bg-[#FEF2F2] text-[#C81E1E] flex items-center justify-center font-bold border border-[#FEE2E2] shrink-0 shadow-2xs">
+            <FileText className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-sm sm:text-base font-bold text-[#0F172A] tracking-tight">
+                {t('invs.title', 'Invoices & Billing History')}
+              </h1>
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]">
+                {filteredInvoices.length} Invoices
+              </span>
+            </div>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              {t('invs.subtitle', 'GST compliant tax invoices, single-page A4 print, and WhatsApp sharing.')}
+            </p>
+          </div>
         </div>
 
-        <Link
-          href="/pos"
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold rounded-xl shadow-xs transition self-start sm:self-auto"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>{t('app.new_bill', 'New Bill')}</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchInvoices}
+            disabled={loading}
+            className="h-8 px-3 bg-white hover:bg-[#F8F9FA] text-[#475569] hover:text-[#0F172A] rounded-md border border-[#CBD5E1] text-xs font-medium transition flex items-center gap-1.5 shadow-2xs"
+            title="Refresh Invoices"
+          >
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#E4E7EC] shadow-2xs">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-lg border border-[#E2E8F0] shadow-2xs">
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={language === 'hi' ? 'बिल नंबर या ग्राहक खोजें...' : 'Search by invoice # or customer...'}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-[#E4E7EC] rounded-lg focus:border-blue-600 focus:outline-none"
+            className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#F8F9FA] border border-[#CBD5E1] rounded-md focus:bg-white focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] text-[#0F172A] placeholder-[#94A3B8] outline-hidden transition"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-1 bg-[#F1F5F9] p-0.5 rounded-md border border-[#E2E8F0] text-xs">
           {['ALL', 'PAID', 'KHATA'].map(mode => (
             <button
               key={mode}
               onClick={() => setFilterMode(mode)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              className={`h-7 px-3 rounded text-[11px] font-medium transition ${
                 filterMode === mode
-                  ? 'bg-[#1570EF] text-white shadow-xs'
-                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-[#E4E7EC]'
+                  ? 'bg-white text-[#0F172A] shadow-2xs font-semibold'
+                  : 'text-[#64748B] hover:text-[#0F172A]'
               }`}
             >
               {mode === 'ALL' 
@@ -202,43 +214,32 @@ export default function InvoicesPage() {
       </div>
 
       {/* Invoices Table */}
-      <div className="bg-white border border-[#E4E7EC] rounded-xl overflow-hidden shadow-2xs">
-        <div className="px-5 py-3.5 border-b border-[#E4E7EC] bg-slate-50/50 flex items-center justify-between">
-          <h2 className="text-xs font-bold text-[#172033] uppercase tracking-wider">
-            {language === 'hi' ? `जारी किए गए बिल (${filteredInvoices.length})` : `All Issued Bills (${filteredInvoices.length})`}
-          </h2>
-        </div>
-
+      <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-[#E4E7EC] bg-[#F7F8FA] text-[#667085] font-semibold">
-                <th className="py-2.5 px-4">{t('invs.invoice_no', 'Invoice #')}</th>
-                <th className="py-2.5 px-3">{t('invs.customer', 'Customer / Shop')}</th>
-                <th className="py-2.5 px-3 text-right">{t('invs.total_amount', 'Grand Total')}</th>
-                <th className="py-2.5 px-3 text-center">{t('invs.status', 'Payment')}</th>
-                <th className="py-2.5 px-3 text-right">{t('invs.date', 'Date & Time')}</th>
-                <th className="py-2.5 px-4 text-center">{t('inv.actions', 'Actions')}</th>
+              <tr className="border-b border-[#E2E8F0] bg-[#F8F9FA] text-[#64748B] text-[10px] font-semibold uppercase">
+                <th className="py-3 px-4">{t('invs.invoice_no', 'Invoice #')}</th>
+                <th className="py-3 px-4">{t('invs.customer', 'Customer / Shop')}</th>
+                <th className="py-3 px-4 text-right">{t('invs.total_amount', 'Grand Total')}</th>
+                <th className="py-3 px-4 text-center">{t('invs.status', 'Payment')}</th>
+                <th className="py-3 px-4 text-right">{t('invs.date', 'Date & Time')}</th>
+                <th className="py-3 px-4 text-right">{t('inv.actions', 'Actions')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#F2F4F7]">
+            <tbody className="divide-y divide-[#F1F5F9] text-[#334155]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[#667085]">
+                  <td colSpan={6} className="py-12 text-center text-[#94A3B8]">
                     {t('common.loading', 'Loading invoices...')}
                   </td>
                 </tr>
               ) : filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-10 text-center text-[#667085] space-y-2">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                      <Receipt className="w-5 h-5" />
-                    </div>
-                    <div className="font-semibold text-slate-800">
+                  <td colSpan={6} className="py-12 text-center text-[#94A3B8] space-y-2">
+                    <Receipt className="w-8 h-8 text-[#CBD5E1] mx-auto" />
+                    <div className="font-medium text-[#334155] text-xs">
                       {language === 'hi' ? 'अभी तक कोई बिल दर्ज नहीं हुआ' : 'No invoices recorded yet'}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {language === 'hi' ? 'नया बिल बनाने के लिए "नया बिल" पर क्लिक करें।' : 'Press F2 or click "New Bill" to generate your first tax invoice.'}
                     </div>
                   </td>
                 </tr>
@@ -246,63 +247,64 @@ export default function InvoicesPage() {
                 filteredInvoices.map((inv) => {
                   const isPaid = BigInt(inv.creditBalancePaise || 0) === 0n;
                   const formattedDate = inv.createdAt 
-                    ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                    ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                     : (language === 'hi' ? 'आज' : 'Today');
 
                   return (
-                    <tr key={inv.id} className="hover:bg-slate-50/80 transition group">
-                      <td className="py-3 px-4 font-mono font-bold text-[#1570EF]">
+                    <tr key={inv.id} className="hover:bg-[#F8F9FA] transition-colors group">
+                      <td className="py-3 px-4 font-mono font-semibold text-[#0F172A]">
                         <button
                           onClick={() => openPreview(inv)}
-                          className="hover:underline flex items-center gap-1.5"
+                          className="hover:underline flex items-center gap-1.5 text-[#0F172A]"
                         >
-                          <Eye className="w-3.5 h-3.5 text-[#1570EF] group-hover:scale-110 transition" />
+                          <Eye className="w-3.5 h-3.5 text-[#64748B]" />
                           <span>{inv.invoiceNumber || inv.number}</span>
                         </button>
                       </td>
-                      <td className="py-3 px-3">
-                        <div className="font-semibold text-[#172033]">
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-[#0F172A]">
                           {inv.customerShop || inv.customerName || inv.customer}
                         </div>
                         {inv.customerPhone && (
-                          <div className="text-[10px] text-[#667085] font-mono">
+                          <div className="text-[10px] text-[#64748B] font-mono">
                             {inv.customerPhone}
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-3 text-right font-mono-numeric font-bold text-[#172033]">
+                      <td className="py-3 px-4 text-right font-mono tabular-nums font-semibold text-[#0F172A]">
                         {formatPaiseToRupees(BigInt(inv.grandTotalPaise || inv.amountPaise || 0))}
                       </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
                           isPaid 
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            ? 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]' 
+                            : 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]'
                         }`}>
-                          {isPaid ? (language === 'hi' ? 'भुगतान पूर्ण' : 'PAID') : (language === 'hi' ? 'बकाया खाता' : 'KHATA DUE')}
+                          <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-[#16A34A]' : 'bg-[#D97706]'}`} />
+                          {isPaid ? 'PAID' : 'KHATA DUE'}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-right font-mono text-[#667085]">
+                      <td className="py-3 px-4 text-right font-mono text-[#64748B] text-[11px]">
                         {formattedDate}
                       </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* View / Print Button */}
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openPreview(inv)}
-                            className="p-1.5 bg-blue-50 hover:bg-blue-100 text-[#1570EF] rounded-lg border border-blue-200 transition"
-                            title={language === 'hi' ? 'बिल देखें व प्रिंट करें' : 'Preview and Print Invoice'}
+                            className="h-7 px-2.5 bg-white hover:bg-[#F1F5F9] text-[#334155] rounded-lg border border-[#CBD5E1] transition flex items-center gap-1.5 text-[10px] shadow-2xs font-medium"
+                            title="Preview and Print Invoice"
                           >
-                            <Printer className="w-3.5 h-3.5" />
+                            <Printer className="w-3 h-3 text-[#64748B]" />
+                            <span>Print</span>
                           </button>
 
-                          {/* WhatsApp Share Button */}
                           <button
                             onClick={() => openPreview(inv)}
-                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition"
-                            title={language === 'hi' ? 'व्हाट्सएप पर भेजें' : 'Share on WhatsApp'}
+                            className="h-7 px-2.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white rounded-lg transition flex items-center gap-1.5 text-[10px] font-semibold shadow-2xs"
+                            title="Share on WhatsApp"
                           >
-                            <MessageCircle className="w-3.5 h-3.5" />
+                            <MessageCircle className="w-3 h-3" />
+                            <span>WhatsApp</span>
                           </button>
                         </div>
                       </td>

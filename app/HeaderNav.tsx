@@ -153,7 +153,7 @@ export default function HeaderNav() {
 
               <button
                 onClick={() => logout()}
-                className="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                className="p-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
                 title="Log Out"
               >
                 <LogOut className="w-4 h-4" />

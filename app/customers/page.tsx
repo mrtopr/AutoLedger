@@ -17,11 +17,16 @@ import {
   Store,
   User,
   FileText,
-  Zap
+  Zap,
+  Receipt,
+  ArrowUpRight,
+  CreditCard,
+  Edit3
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
 import RazorpayModal from '@/app/components/RazorpayModal';
 import ClientPortal from '@/app/components/ClientPortal';
+import EditCustomerModal from '@/app/components/EditCustomerModal';
 
 interface CustomerItem {
   id: string;
@@ -44,6 +49,9 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+
+  // Edit Customer Modal
+  const [editingCustomer, setEditingCustomer] = useState<CustomerItem | null>(null);
 
   // Add Customer Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -149,329 +157,403 @@ export default function CustomersPage() {
     }
   };
 
+  // Aggregated Telemetry
+  const totalOutstandingPaise = customers.reduce((acc, c) => acc + BigInt(c.balancePaise || 0), 0n);
+  const totalOverduePaise = customers.reduce((acc, c) => acc + BigInt(c.overduePaise || 0), 0n);
+  const redCount = customers.filter(c => c.status === 'RED').length;
+  const greenCount = customers.filter(c => c.status === 'GREEN').length;
+
   return (
-    <div className="space-y-6">
-      {/* Page Title & Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <Users className="w-6 h-6 text-slate-800" />
-            {t('khata.title', 'Customer Credit Khata Directory')}
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {t('khata.subtitle', 'Real-time live ledger balances, payment terms, credit limit controls, and aging tracking.')}
-          </p>
+    <div className="space-y-4 max-w-7xl mx-auto pb-12">
+      {/* Top Action Header */}
+      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 sm:px-4 sm:py-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-8 h-8 rounded-md bg-[#FEF2F2] text-[#C81E1E] flex items-center justify-center font-bold border border-[#FEE2E2] shrink-0 shadow-2xs">
+            <Users className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0F172A]">
+                {t('khata.title', 'Customer & Garage Khata Ledger')}
+              </h1>
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]">
+                {customers.length} Accounts
+              </span>
+            </div>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              {t('khata.subtitle', 'Real-time double-entry credit ledger, payment terms, aging analysis, and settlement dispatch.')}
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center gap-1.5"
+            className="h-8 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md transition inline-flex items-center gap-1.5 shadow-2xs"
           >
-            <Plus className="w-4 h-4" />
-            <span>{t('khata.add_customer', '+ Add New Customer')}</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>{t('khata.add_customer', 'Register Khata')}</span>
           </button>
-          <Link
-            href="/pos"
-            className="px-4 py-2.5 bg-[#C81E1E] hover:bg-[#991B1B] text-white text-xs font-semibold rounded-lg shadow-sm transition"
-          >
-            {t('app.new_bill', 'New Bill')} (N)
-          </Link>
         </div>
       </div>
 
-      {/* Filter and Search Strip */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      {/* 4-Stat Metric Strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
+          <span className="text-[11px] font-medium text-[#64748B] uppercase tracking-wider block">Total Outstanding Khata</span>
+          <div className="text-lg font-bold font-mono text-[#0F172A] mt-1 tabular-nums">
+            {formatPaiseToRupees(totalOutstandingPaise)}
+          </div>
+          <span className="text-[11px] text-[#64748B] block mt-0.5">Total active garage debtor balance</span>
+        </div>
+
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
+          <span className="text-[11px] font-medium text-[#DC2626] uppercase tracking-wider block">Overdue Receivables</span>
+          <div className="text-lg font-bold font-mono text-[#DC2626] mt-1 tabular-nums">
+            {formatPaiseToRupees(totalOverduePaise)}
+          </div>
+          <span className="text-[11px] text-[#64748B] block mt-0.5">{redCount} accounts in overdue status</span>
+        </div>
+
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
+          <span className="text-[11px] font-medium text-[#16A34A] uppercase tracking-wider block">Healthy Accounts (Green)</span>
+          <div className="text-lg font-bold font-mono text-[#16A34A] mt-1 tabular-nums">
+            {greenCount}
+          </div>
+          <span className="text-[11px] text-[#64748B] block mt-0.5">Within credit limit & terms</span>
+        </div>
+
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
+          <span className="text-[11px] font-medium text-[#64748B] uppercase tracking-wider block">Total Garage Debtors</span>
+          <div className="text-lg font-bold font-mono text-[#0F172A] mt-1 tabular-nums">
+            {customers.length}
+          </div>
+          <span className="text-[11px] text-[#64748B] block mt-0.5">B2B workshops & counter accounts</span>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('khata.search_customer', 'Search by shop name, owner, or phone...')}
-            className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-slate-800 transition"
+            placeholder={t('khata.search_customer', 'Search garage name, proprietor, or phone...')}
+            className="w-full h-8 pl-9 pr-3 text-xs bg-[#F8F9FA] border border-[#E2E8F0] rounded-md text-[#0F172A] placeholder-[#94A3B8] focus:bg-white focus:border-[#C81E1E] focus:outline-hidden transition"
           />
         </div>
 
-        {/* Status Pills */}
+        {/* Status Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-          {['ALL', 'GREEN', 'YELLOW', 'RED'].map((st) => (
+          {[
+            { key: 'ALL', label: 'All Accounts' },
+            { key: 'GREEN', label: 'Green (Normal)' },
+            { key: 'YELLOW', label: 'Yellow (Warning)' },
+            { key: 'RED', label: 'Red (Overdue/Blocked)' },
+          ].map((st) => (
             <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0 ${
-                filterStatus === st 
-                  ? 'bg-slate-900 text-white shadow-sm' 
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+              key={st.key}
+              onClick={() => setFilterStatus(st.key)}
+              className={`h-7 px-2.5 text-[11px] font-medium rounded-md transition shrink-0 ${
+                filterStatus === st.key 
+                  ? 'bg-[#0F172A] text-white shadow-xs' 
+                  : 'bg-[#F8F9FA] text-[#475569] hover:bg-[#F1F5F9] border border-[#E2E8F0]'
               }`}
             >
-              {st === 'ALL' ? (language === 'hi' ? 'सभी खाते (All)' : 'All Accounts') : st}
+              {st.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Customer Ledger Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {customers.length === 0 ? (
-          <div className="col-span-full py-16 text-center text-slate-400 bg-white border border-slate-200 rounded-xl">
-            {loading ? 'Loading live khata accounts...' : 'No customers found. Click "+ Add New Customer" to register one.'}
-          </div>
-        ) : (
-          customers.map((cust) => {
-            const balPaise = BigInt(cust.balancePaise || 0);
-            const limPaise = BigInt(cust.creditLimitPaise || 1);
-            const utilizationPct = Number((balPaise * 100n) / (limPaise || 1n));
-            const overdue = BigInt(cust.overduePaise || 0);
+      {/* High-Density Customer Registry Table */}
+      <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#F8F9FA] border-b border-[#E2E8F0] text-[10px] font-semibold text-[#64748B] uppercase tracking-wider">
+                <th className="py-3 px-4">Garage / Business Name</th>
+                <th className="py-3 px-4">Proprietor & Phone</th>
+                <th className="py-3 px-4">GSTIN / Type</th>
+                <th className="py-3 px-4 text-right">Credit Limit (₹)</th>
+                <th className="py-3 px-4 text-right">Outstanding (₹)</th>
+                <th className="py-3 px-4 text-right">Overdue (₹)</th>
+                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E2E8F0] text-xs">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-[#64748B]">
+                    Loading live khata debtor accounts...
+                  </td>
+                </tr>
+              ) : customers.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-[#94A3B8]">
+                    No customer accounts match criteria. Click "Register Khata" to add one.
+                  </td>
+                </tr>
+              ) : (
+                customers.map((cust) => {
+                  const balPaise = BigInt(cust.balancePaise || 0);
+                  const limPaise = BigInt(cust.creditLimitPaise || 1);
+                  const overdue = BigInt(cust.overduePaise || 0);
+                  const utilizationPct = Number((balPaise * 100n) / (limPaise || 1n));
 
-            return (
-              <div
-                key={cust.id}
-                className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow transition"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold border ${
-                        cust.status === 'GREEN' 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                          : cust.status === 'YELLOW' 
-                          ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                          : 'bg-rose-50 text-rose-700 border-rose-200'
-                      }`}>
-                        {cust.status} STATUS
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-mono text-slate-500 font-medium">
-                      Terms: {cust.termsDays} days
-                    </span>
-                  </div>
+                  return (
+                    <tr key={cust.id} className="hover:bg-[#F8F9FA] transition">
+                      <td className="py-3 px-4">
+                        <Link 
+                          href={`/customers/${cust.id}`}
+                          className="font-semibold text-[#0F172A] hover:text-[#C81E1E] transition flex items-center gap-1 group"
+                        >
+                          <span>{cust.shopName}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5 text-[#94A3B8] opacity-0 group-hover:opacity-100 transition" />
+                        </Link>
+                        <div className="text-[11px] text-[#64748B] truncate max-w-[220px]">{cust.address || 'Address not listed'}</div>
+                      </td>
 
-                  <Link
-                    href={`/customers/${cust.id}`}
-                    className="font-bold text-base text-slate-900 hover:text-blue-600 transition block mt-3"
-                  >
-                    {cust.shopName}
-                  </Link>
-                  <div className="text-xs text-slate-600 mt-0.5 font-medium">{cust.name}</div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-2 font-mono">
-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{cust.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">{cust.address}</span>
-                  </div>
-                </div>
+                      <td className="py-3 px-4 font-mono text-[11px]">
+                        <div className="text-[#0F172A] font-sans font-medium text-xs">{cust.name}</div>
+                        <div className="text-[#64748B] flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          <span>{cust.phone}</span>
+                        </div>
+                      </td>
 
-                {/* Balance Box */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-xs text-slate-600 font-medium">Outstanding Balance:</span>
-                    <span className="font-mono-numeric font-bold text-base text-slate-900">
-                      {formatPaiseToRupees(balPaise)}
-                    </span>
-                  </div>
+                      <td className="py-3 px-4">
+                        <div className="font-mono text-[11px] text-[#475569]">{cust.gstin || 'URP'}</div>
+                        <span className="text-[10px] text-[#64748B] uppercase">{cust.customerType || 'GARAGE'}</span>
+                      </td>
 
-                  {overdue > 0n && (
-                    <div className="flex justify-between items-center text-xs text-rose-600 font-mono font-semibold">
-                      <span>Overdue Dues:</span>
-                      <span>{formatPaiseToRupees(overdue)}</span>
-                    </div>
-                  )}
+                      <td className="py-3 px-4 text-right font-mono text-xs text-[#64748B] tabular-nums">
+                        <div>{formatPaiseToRupees(limPaise)}</div>
+                        <span className="text-[10px] text-[#94A3B8]">{cust.termsDays}d terms</span>
+                      </td>
 
-                  {/* Utilization bar */}
-                  <div>
-                    <div className="flex justify-between text-[10px] text-slate-500 font-mono mb-1">
-                      <span>Limit: {formatPaiseToRupees(limPaise)}</span>
-                      <span className="font-semibold">{utilizationPct}% Used</span>
-                    </div>
-                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          cust.status === 'GREEN' ? 'bg-emerald-500' : cust.status === 'YELLOW' ? 'bg-amber-500' : 'bg-rose-500'
-                        }`}
-                        style={{ width: `${Math.min(100, utilizationPct)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                      <td className="py-3 px-4 text-right font-mono font-semibold text-[#0F172A] tabular-nums">
+                        <div>{formatPaiseToRupees(balPaise)}</div>
+                        <span className={`text-[10px] ${utilizationPct > 90 ? 'text-[#DC2626]' : 'text-[#64748B]'}`}>
+                          {utilizationPct}% limit used
+                        </span>
+                      </td>
 
-                {/* Bottom Actions */}
-                <div className="flex items-center gap-2 pt-1">
-                  <Link
-                    href={`/customers/${cust.id}`}
-                    className="flex-1 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-lg text-center border border-slate-300 shadow-sm transition"
-                  >
-                    View Khata Ledger
-                  </Link>
-                  {balPaise > 0n && (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentModalCustomer(cust)}
-                      className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg shadow-2xs font-semibold text-xs transition flex items-center gap-1"
-                      title="Send Razorpay Payment Link / WhatsApp QR"
-                    >
-                      <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Pay Link</span>
-                    </button>
-                  )}
-                  <Link
-                    href="/pos"
-                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition"
-                    title="Bill This Customer"
-                  >
-                    Bill
-                  </Link>
-                </div>
-              </div>
-            );
-          })
-        )}
+                      <td className="py-3 px-4 text-right font-mono text-xs tabular-nums">
+                        {overdue > 0n ? (
+                          <span className="font-bold text-[#DC2626] bg-[#FEF2F2] px-2 py-0.5 rounded-full border border-[#FCA5A5]">
+                            {formatPaiseToRupees(overdue)}
+                          </span>
+                        ) : (
+                          <span className="text-[#94A3B8]">-</span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${
+                          cust.status === 'GREEN' 
+                            ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
+                            : cust.status === 'YELLOW' 
+                            ? 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]' 
+                            : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            cust.status === 'GREEN' ? 'bg-[#16A34A]' : cust.status === 'YELLOW' ? 'bg-[#D97706]' : 'bg-[#DC2626]'
+                          }`} />
+                          {cust.status}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingCustomer(cust)}
+                            className="h-7 px-2 bg-white hover:bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1] rounded-lg text-[11px] font-medium transition inline-flex items-center gap-1"
+                            title="Edit Customer Details"
+                          >
+                            <Edit3 className="w-3 h-3 text-[#64748B]" />
+                            <span>Edit</span>
+                          </button>
+                          <Link
+                            href={`/customers/${cust.id}`}
+                            className="h-7 px-2.5 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1] rounded-lg text-[11px] font-medium transition inline-flex items-center"
+                          >
+                            Ledger
+                          </Link>
+                          {balPaise > 0n && (
+                            <button
+                              type="button"
+                              onClick={() => setPaymentModalCustomer(cust)}
+                              className="h-7 px-2.5 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] rounded-lg text-[11px] font-semibold transition inline-flex items-center gap-1"
+                              title="Generate Instant UPI / Razorpay Payment Link"
+                            >
+                              <Zap className="w-3 h-3 text-[#16A34A]" />
+                              <span>Pay Link</span>
+                            </button>
+                          )}
+                          <Link
+                            href={`/pos?customerId=${cust.id}`}
+                            className="h-7 px-3 bg-[#C81E1E] hover:bg-[#A81818] text-white rounded-lg text-[11px] font-semibold transition inline-flex items-center"
+                          >
+                            Bill
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* ----------------- ADD CUSTOMER MODAL ----------------- */}
+      {/* ----------------- REGISTER CUSTOMER MODAL ----------------- */}
       {isAddModalOpen && (
         <ClientPortal>
-          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl my-8">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-600" />
-                Register Customer / Garage Khata
-              </h3>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {formError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
-                {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateCustomer} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Garage / Shop Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newCustomer.shopName}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, shopName: e.target.value })}
-                    placeholder="e.g. Ramesh Auto Works"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Contact Person Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newCustomer.name}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                    placeholder="e.g. Ramesh Jadhav"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:bg-white focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Phone / Mobile Number *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={newCustomer.phone}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                    placeholder="9822100001"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 font-mono font-bold focus:bg-white focus:border-blue-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    GSTIN (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newCustomer.gstin}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, gstin: e.target.value })}
-                    placeholder="27AALPJ1122K1Z9"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 font-mono uppercase focus:bg-white focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  Garage / Shop Address
-                </label>
-                <input
-                  type="text"
-                  value={newCustomer.address}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
-                  placeholder="e.g. Rasta Peth, Near Apollo Talkies, Pune"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:bg-white focus:border-blue-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Credit Limit (₹)
-                  </label>
-                  <input
-                    type="text"
-                    value={newCustomer.creditLimitRupees}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, creditLimitRupees: e.target.value })}
-                    placeholder="50000"
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 font-mono-numeric focus:border-blue-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Payment Terms (Days)
-                  </label>
-                  <input
-                    type="number"
-                    value={newCustomer.paymentTermsDays}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, paymentTermsDays: e.target.value })}
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
+          <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl my-8">
+              <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+                <h3 className="text-sm font-bold text-[#0F172A] flex items-center gap-2">
+                  <Users className="w-4 h-4 text-[#C81E1E]" />
+                  Register Customer / Workshop Khata
+                </h3>
                 <button
-                  type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs border border-slate-300"
+                  className="p-1 rounded-lg text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow-sm transition disabled:opacity-50"
-                >
-                  {submitting ? 'Creating Customer...' : 'Save & Create Khata'}
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-            </form>
+
+              {formError && (
+                <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-xl text-xs text-[#B91C1C]">
+                  {formError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateCustomer} className="space-y-3.5 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[#475569] font-medium mb-1">
+                      Workshop / Shop Name <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newCustomer.shopName}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, shopName: e.target.value })}
+                      placeholder="e.g. Ramesh Auto Works"
+                      className="w-full h-8.5 px-3 bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl text-xs text-[#0F172A] focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#475569] font-medium mb-1">
+                      Contact Person / Owner
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.name}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                      placeholder="e.g. Ramesh Jadhav"
+                      className="w-full h-8.5 px-3 bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl text-xs text-[#0F172A] focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[#475569] font-medium mb-1">
+                      Mobile Number <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      value={newCustomer.phone}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                      placeholder="9822100001"
+                      className="w-full h-8.5 px-3 bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl text-xs font-mono text-[#0F172A] focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#475569] font-medium mb-1">
+                      GSTIN (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.gstin}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, gstin: e.target.value.toUpperCase() })}
+                      placeholder="27AALPJ1122K1Z9"
+                      className="w-full h-8.5 px-3 bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl text-xs font-mono text-[#0F172A] uppercase focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[#475569] font-medium mb-1">
+                    Shop / Workshop Address
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomer.address}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
+                    placeholder="e.g. Near Bus Stand, Main Road, Rajauli"
+                    className="w-full h-8.5 px-3 bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl text-xs text-[#0F172A] focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#F8F9FA] p-3.5 rounded-xl border border-[#E2E8F0]">
+                  <div>
+                    <label className="block text-[#475569] font-medium mb-1">
+                      Credit Limit (₹)
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.creditLimitRupees}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, creditLimitRupees: e.target.value })}
+                      placeholder="50000"
+                      className="w-full h-8.5 px-3 bg-white border border-[#CBD5E1] rounded-xl text-xs font-bold font-mono text-[#0F172A] focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#475569] font-medium mb-1">
+                      Payment Terms (Days)
+                    </label>
+                    <input
+                      type="number"
+                      value={newCustomer.paymentTermsDays}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, paymentTermsDays: e.target.value })}
+                      className="w-full h-8.5 px-3 bg-white border border-[#CBD5E1] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 pt-3 border-t border-[#E2E8F0]">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="flex-1 h-8.5 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#475569] font-medium rounded-xl border border-[#CBD5E1] text-xs transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 h-8.5 bg-[#C81E1E] hover:bg-[#A81818] text-white font-semibold rounded-xl text-xs shadow-xs transition disabled:opacity-50"
+                  >
+                    {submitting ? 'Creating Khata...' : 'Save & Open Khata'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
         </ClientPortal>
       )}
 
@@ -486,6 +568,19 @@ export default function CustomersPage() {
           defaultAmountRupees={(Number(BigInt(paymentModalCustomer.balancePaise || 0)) / 100).toFixed(2)}
           onPaymentSuccess={() => {
             setPaymentModalCustomer(null);
+            fetchCustomers();
+          }}
+        />
+      )}
+
+      {/* ----------------- EDIT CUSTOMER MODAL ----------------- */}
+      {editingCustomer && (
+        <EditCustomerModal
+          isOpen={Boolean(editingCustomer)}
+          onClose={() => setEditingCustomer(null)}
+          customer={editingCustomer}
+          onSuccess={() => {
+            setEditingCustomer(null);
             fetchCustomers();
           }}
         />

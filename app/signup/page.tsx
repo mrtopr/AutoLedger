@@ -133,7 +133,7 @@ export default function SignupPage() {
                     value={formData.businessName}
                     onChange={handleChange}
                     placeholder="e.g. Royal Honda Auto Spares"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                   />
                 </div>
               </div>
@@ -151,7 +151,7 @@ export default function SignupPage() {
                     value={formData.ownerName}
                     onChange={handleChange}
                     placeholder="e.g. Ramesh Kumar"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                   />
                 </div>
               </div>
@@ -172,7 +172,7 @@ export default function SignupPage() {
                     value={formData.phone}
                     onChange={handleChange}
                     placeholder="e.g. 9822012345"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium font-mono"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium font-mono"
                   />
                 </div>
               </div>
@@ -189,7 +189,7 @@ export default function SignupPage() {
                     value={formData.email}
                     onChange={handleChange}
                     placeholder="contact@dealership.com"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                   />
                 </div>
               </div>
@@ -209,7 +209,7 @@ export default function SignupPage() {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="••••••••"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                 />
               </div>
             </div>
@@ -228,7 +228,7 @@ export default function SignupPage() {
                     value={formData.gstin}
                     onChange={handleChange}
                     placeholder="21ABCDE1234F1Z5"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium font-mono uppercase"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium font-mono uppercase"
                   />
                 </div>
               </div>
@@ -241,7 +241,7 @@ export default function SignupPage() {
                   name="stateCode"
                   value={formData.stateCode}
                   onChange={handleChange}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium"
                 >
                   <option value="21">21 - Odisha</option>
                   <option value="27">27 - Maharashtra</option>
@@ -269,7 +269,7 @@ export default function SignupPage() {
                   value={formData.address}
                   onChange={handleChange}
                   placeholder="e.g. NH-16, Cuttack Road, Bhubaneswar"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                 />
               </div>
             </div>

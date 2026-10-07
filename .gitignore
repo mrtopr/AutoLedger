@@ -34,3 +34,12 @@ next-env.d.ts
 .DS_Store
 *.pem
 Thumbs.db
+
+# Agent & Dev Tooling artifacts
+.agents/
+.codex/
+.impeccable/
+.gemini/
+.planning/
+skills-lock.json
+

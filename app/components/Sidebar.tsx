@@ -17,18 +17,18 @@ import {
   BarChart3, 
   UserCheck, 
   Settings, 
-  LogOut
+  LogOut,
+  FileSpreadsheet
 } from 'lucide-react';
-import { HondaWingIcon } from './HondaLogo';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, tenant, logout } = useAuth();
   const { t } = useLanguage();
 
-  const showroomName = tenant?.name || 'Dealership';
-  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Workshop';
-  const userName = user?.name || user?.phone || 'User';
+  const showroomName = tenant?.name || 'AutoLedger Dealership';
+  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Workshop & Service Bay';
+  const userName = user?.name || user?.phone || 'Operator';
   const userRole = user?.role || 'STAFF';
 
   const navGroups = [
@@ -43,55 +43,57 @@ export default function Sidebar() {
       titleKey: 'nav.operations',
       fallbackTitle: 'OPERATIONS',
       items: [
-        { labelKey: 'app.new_bill', fallbackLabel: 'New Bill', href: '/pos', icon: Receipt, shortcut: 'N' },
+        { labelKey: 'app.new_bill', fallbackLabel: 'POS Billing', href: '/pos', icon: Receipt, shortcut: 'N' },
         { labelKey: 'nav.invoices', fallbackLabel: 'Invoices', href: '/invoices', icon: FileText },
-        { labelKey: 'nav.customers_khata', fallbackLabel: 'Customers & Khata', href: '/customers', icon: Users, shortcut: 'C' },
-        { labelKey: 'nav.inventory', fallbackLabel: 'Inventory', href: '/inventory', icon: Boxes, shortcut: 'I' },
-        { labelKey: 'nav.products', fallbackLabel: 'Products', href: '/products', icon: Package },
+        { labelKey: 'nav.customers_khata', fallbackLabel: 'Khata Directory', href: '/customers', icon: Users, shortcut: 'C' },
+        { labelKey: 'nav.inventory', fallbackLabel: 'Inventory & Stock', href: '/inventory', icon: Boxes, shortcut: 'I' },
       ],
     },
     {
       titleKey: 'nav.finance',
-      fallbackTitle: 'FINANCE',
+      fallbackTitle: 'FINANCE & AUDIT',
       items: [
-        { labelKey: 'nav.finance', fallbackLabel: 'Finance', href: '/finance', icon: Landmark },
-        { labelKey: 'nav.reports', fallbackLabel: 'Reports', href: '/reports', icon: BarChart3 },
+        { labelKey: 'nav.settlement', fallbackLabel: 'Day-End Settlement', href: '/settlement', icon: Landmark },
+        { labelKey: 'nav.reports', fallbackLabel: 'Reports & Analytics', href: '/reports', icon: BarChart3 },
+        { labelKey: 'nav.tally', fallbackLabel: 'Tally XML Export', href: '/tally', icon: FileSpreadsheet },
       ],
     },
     {
       titleKey: 'nav.management',
-      fallbackTitle: 'MANAGEMENT',
+      fallbackTitle: 'ADMINISTRATION',
       items: [
-        { labelKey: 'nav.staff', fallbackLabel: 'Staff', href: '/staff', icon: UserCheck },
+        { labelKey: 'nav.staff', fallbackLabel: 'Staff & Roles', href: '/staff', icon: UserCheck },
         { labelKey: 'nav.settings', fallbackLabel: 'Settings', href: '/settings', icon: Settings },
       ],
     },
   ];
 
   return (
-    <aside className="hidden lg:flex flex-col w-[240px] bg-[#090D16] text-slate-300 border-r border-slate-800/80 fixed inset-y-0 left-0 z-40 select-none">
+    <aside className="hidden lg:flex flex-col w-[240px] bg-white text-slate-700 border-r border-[#E2E8F0] fixed inset-y-0 left-0 z-40 select-none">
       {/* Brand Header */}
-      <div className="h-16 px-4 flex items-center border-b border-slate-800/70 bg-[#060910]">
-        <div className="flex items-center gap-3 w-full">
-          <div className="w-11 h-11 rounded-xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-center shrink-0 shadow-md overflow-hidden p-0.5">
-            <img src="/logo.png" alt="AutoLedger Emblem" className="w-full h-full object-contain" />
+      <div className="h-14 px-4 flex items-center justify-between border-b border-[#E2E8F0] bg-white">
+        <Link href="/" className="flex items-center gap-2.5 min-w-0 group">
+          <img 
+            src="/logo.png" 
+            alt="AutoLedger" 
+            className="h-8 w-auto max-w-[125px] object-contain object-left transition-transform group-hover:scale-[1.02]" 
+          />
+          <div className="flex flex-col justify-center min-w-0 border-l border-slate-200 pl-2.5">
+            <span className="px-1.5 py-0.5 rounded bg-red-50 text-[#C81E1E] text-[9px] font-bold tracking-wider font-mono border border-red-100 uppercase w-fit leading-none">
+              DMS
+            </span>
+            <span className="text-[10px] text-[#64748B] font-medium truncate mt-1 max-w-[75px]" title={showroomLocation}>
+              {showroomLocation}
+            </span>
           </div>
-          <div className="truncate flex-1">
-            <div className="flex items-center gap-1.5 leading-none">
-              <span className="text-white font-extrabold text-sm tracking-wide">AUTOLEDGER</span>
-            </div>
-            <div className="text-[11px] text-slate-400 truncate mt-1 font-normal">
-              Honda · {showroomLocation}
-            </div>
-          </div>
-        </div>
+        </Link>
       </div>
 
-      {/* Navigation Groupings */}
-      <div className="flex-1 overflow-y-auto px-2.5 py-4 space-y-4 scrollbar-thin">
+      {/* Navigation Groups */}
+      <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-3.5">
         {navGroups.map((group) => (
           <div key={group.fallbackTitle} className="space-y-1">
-            <div className="px-2.5 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+            <div className="px-2 text-[10px] font-bold tracking-wider text-[#94A3B8] uppercase">
               {t(group.titleKey, group.fallbackTitle)}
             </div>
             <div className="space-y-0.5">
@@ -106,21 +108,23 @@ export default function Sidebar() {
                   <Link
                     key={item.fallbackLabel}
                     href={item.href}
-                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors group ${
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group ${
                       isActive
-                        ? 'bg-[#1E293B] text-white font-semibold border-l-2 border-[#C81E1E]'
-                        : 'text-slate-400 hover:bg-[#131B2E] hover:text-slate-200 font-medium'
+                        ? 'bg-red-50 text-[#C81E1E] font-semibold border border-red-200/80'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 truncate">
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#C81E1E]' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                    <div className="flex items-center gap-2 truncate min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${
+                        isActive ? 'text-[#C81E1E]' : 'text-slate-400 group-hover:text-slate-600'
+                      }`} />
                       <span className="truncate">{label}</span>
                     </div>
 
                     {item.shortcut && !isActive && (
-                      <span className="text-[10px] font-mono text-slate-600 group-hover:text-slate-400">
+                      <kbd className="text-[10px] font-mono text-slate-400 group-hover:text-slate-600 px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200 shrink-0 ml-1">
                         {item.shortcut}
-                      </span>
+                      </kbd>
                     )}
                   </Link>
                 );
@@ -130,38 +134,30 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* Bottom Area: System Status, Language Switcher & User Card */}
-      <div className="p-3 border-t border-slate-800/70 bg-[#060910] space-y-2">
-        {/* Language Switcher in Sidebar */}
+      {/* Bottom Area */}
+      <div className="p-3 border-t border-[#E2E8F0] bg-slate-50/50 space-y-2">
+        {/* Language Switcher */}
         <LanguageToggle variant="sidebar" />
 
-        {/* System Online Status */}
-        <div className="px-2.5 py-1.5 rounded-md bg-[#0C1E14] border border-emerald-900/60 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[11px] font-semibold text-emerald-300">{t('app.system_online', 'System Online')}</span>
+        {/* Dual-Engine System Status */}
+        <div className="px-2.5 py-1.5 rounded-lg bg-white border border-[#E2E8F0] flex items-center justify-between text-[11px] shadow-2xs">
+          <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20" />
+            <span>Dual-Engine Cloud</span>
           </div>
-          <span className="text-[10px] text-emerald-500/80">{showroomLocation}</span>
+          <span className="text-[10px] text-slate-400 font-mono">Sync Active</span>
         </div>
 
-        {/* User Card */}
-        <div className="flex items-center justify-between gap-2 p-1.5 rounded-md hover:bg-[#131B2E] transition">
-          <div className="flex items-center gap-2 truncate">
-            <div className="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px] shrink-0 border border-slate-700">
-              {userName.charAt(0).toUpperCase()}
-            </div>
-            <div className="truncate">
-              <div className="text-xs font-medium text-slate-200 truncate">{userName}</div>
-              <div className="text-[10px] text-slate-500 capitalize truncate">
-                {userRole.toLowerCase()}
-              </div>
-            </div>
+        {/* Operator Profile */}
+        <div className="flex items-center justify-between pt-1">
+          <div className="truncate text-xs">
+            <div className="font-semibold text-slate-900 truncate">{userName}</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider">{userRole}</div>
           </div>
-
           <button
-            onClick={() => logout()}
-            title={t('app.sign_out', 'Log Out')}
-            className="p-1 hover:bg-[#1E293B] text-slate-500 hover:text-rose-400 rounded transition"
+            onClick={logout}
+            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+            title="Logout"
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>

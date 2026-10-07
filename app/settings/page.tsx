@@ -24,7 +24,6 @@ import {
   UploadCloud,
   Database,
   HardDrive,
-  ShieldAlert,
   CheckCircle2,
   Lock,
   Key,
@@ -32,7 +31,12 @@ import {
   ExternalLink,
   Globe,
   Shield,
-  Zap
+  Zap,
+  Landmark,
+  Hash,
+  ChevronDown,
+  Layers,
+  FileCode
 } from 'lucide-react';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
 
@@ -210,7 +214,6 @@ export default function SettingsPage() {
       if (settings.razorpayKeySecret) setRazorpayKeySecret(settings.razorpayKeySecret);
       if (settings.razorpayWebhookSecret) setRazorpayWebhookSecret(settings.razorpayWebhookSecret);
     } else {
-      // Fallback defaults for Shree Vishwakarma Honda
       setName('Shree Vishwakarma Honda');
       setLegalName('Shree Honda');
       setStateCode('10 - Bihar');
@@ -332,44 +335,49 @@ export default function SettingsPage() {
   };
 
   return (
-    <form onSubmit={handleSave} className="space-y-6 max-w-5xl mx-auto pb-16">
-      
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2.5">
-            <Store className="w-6 h-6 text-[#DC2626]" />
-            <span>{t('set.title', 'Dealership & System Settings')}</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            {t('set.subtitle', 'Edit dealership branding, official GST details, bank settlement, and single-page invoice templates.')}
-          </p>
+    <form onSubmit={handleSave} className="space-y-4 max-w-5xl mx-auto pb-16">
+      {/* Top Header */}
+      <div className="bg-white border border-[#E2E8F0] rounded-none p-3.5 sm:px-4 sm:py-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-8 h-8 rounded-none bg-[#FEF2F2] text-[#C81E1E] flex items-center justify-center font-bold border border-[#FEE2E2] shrink-0 shadow-2xs">
+            <Store className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-sm sm:text-base font-bold text-[#0F172A] tracking-tight">
+                {t('set.title', 'Dealership Configuration & System Settings')}
+              </h1>
+            </div>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              {t('set.subtitle', 'Configure dealership master identity, GSTIN registration, bank accounts, and print invoice templates.')}
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsPreviewOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 font-medium text-xs rounded-lg border border-slate-300 shadow-2xs transition"
+            className="h-8 px-3.5 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#334155] font-medium text-xs rounded-none border border-[#CBD5E1] transition inline-flex items-center gap-1.5 shadow-2xs"
           >
-            <Eye className="w-4 h-4 text-slate-700" />
-            <span>{language === 'hi' ? 'बिल प्रीव्यू देखें' : 'Preview Live Invoice'}</span>
+            <Eye className="w-3.5 h-3.5 text-[#64748B]" />
+            <span>Preview Invoice</span>
           </button>
 
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-semibold text-xs rounded-lg shadow-sm transition"
+            className="h-8 px-4 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-60 text-white font-semibold text-xs rounded-none shadow-2xs transition inline-flex items-center gap-1.5"
           >
             {isSaving ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>{language === 'hi' ? 'सुरक्षित हो रहा है...' : 'Saving Changes...'}</span>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Saving...</span>
               </>
             ) : (
               <>
-                <Save className="w-4 h-4" />
-                <span>{t('set.save_settings', 'Save All Changes')}</span>
+                <Save className="w-3.5 h-3.5" />
+                <span>{t('set.save_settings', 'Save Changes')}</span>
               </>
             )}
           </button>
@@ -378,42 +386,40 @@ export default function SettingsPage() {
 
       {/* Notifications */}
       {saveSuccess && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-emerald-800 text-xs font-semibold animate-in fade-in">
-          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Dealership profile & invoice format saved successfully! All POS bills and PDFs now use your updated details.</span>
+        <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded-none flex items-center gap-2 text-[#15803D] text-xs font-medium">
+          <Check className="w-4 h-4 text-[#16A34A] shrink-0" />
+          <span>Settings saved successfully. All POS counter bills and invoices are now using your updated parameters.</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-red-800 text-xs font-semibold animate-in fade-in">
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+        <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-none flex items-center gap-2 text-[#B91C1C] text-xs font-medium">
+          <AlertCircle className="w-4 h-4 text-[#DC2626] shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {/* 0. LANGUAGE & REGIONAL PREFERENCES */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-3.5 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#DC2626]" />
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <Sparkles className="w-4 h-4 text-[#C81E1E]" />
+            <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
               {language === 'hi' ? 'भाषा एवं क्षेत्रीय सेटिंग्स' : 'Language & Regional Preferences'}
             </h2>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">
-            {language === 'hi' ? 'तुरंत भाषा बदलें' : 'Instant live switch'}
+          <span className="text-[11px] text-[#64748B]">
+            Instant UI switch
           </span>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
-          <div className="space-y-1">
-            <div className="text-xs font-bold text-slate-900">
-              {language === 'hi' ? 'एप्लिकेशन भाषा (App Display Language)' : 'Application Display Language'}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-none bg-[#F8F9FA] border border-[#E2E8F0]">
+          <div>
+            <div className="text-xs font-semibold text-[#0F172A]">
+              {language === 'hi' ? 'एप्लिकेशन भाषा (Display Language)' : 'Application Display Language'}
             </div>
-            <p className="text-[11px] text-slate-500">
-              {language === 'hi' 
-                ? 'सभी मेनू, बिलिंग काउंटर, स्टॉक, खाता बही और रिपोर्ट्स के लिए भाषा चुनें।' 
-                : 'Switch between English and Hindi across the entire ERP, dashboard, billing, and reports.'}
+            <p className="text-[11px] text-[#64748B] mt-0.5">
+              Toggle between English and Hindi across the entire ERP, dashboard, billing, and reports.
             </p>
           </div>
 
@@ -421,10 +427,10 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => setLanguage('en')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl border transition ${
+              className={`h-8 px-3.5 text-xs font-medium rounded-none border transition ${
                 language === 'en'
-                  ? 'bg-white text-blue-700 border-blue-400 shadow-xs ring-2 ring-blue-500/10'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                  ? 'bg-white text-[#0F172A] border-[#0F172A] font-semibold shadow-2xs'
+                  : 'bg-white text-[#64748B] border-[#CBD5E1] hover:bg-[#F1F5F9]'
               }`}
             >
               English
@@ -432,10 +438,10 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => setLanguage('hi')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl border transition ${
+              className={`h-8 px-3.5 text-xs font-medium rounded-none border transition ${
                 language === 'hi'
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs ring-2 ring-slate-900/20'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                  ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold shadow-2xs'
+                  : 'bg-white text-[#64748B] border-[#CBD5E1] hover:bg-[#F1F5F9]'
               }`}
             >
               हिन्दी (Hindi)
@@ -445,132 +451,178 @@ export default function SettingsPage() {
       </div>
 
       {/* 1. DEALERSHIP & TRADE PROFILE */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-slate-700" />
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Dealership & Legal Entity
+            <Building2 className="w-4 h-4 text-[#C81E1E]" />
+            <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
+              Dealership & Legal Entity Details
             </h2>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">Prints on top header of every invoice</span>
+          <span className="text-[11px] text-[#64748B]">Prints on invoice header</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Showroom / Trade Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Royal Auto Spares & Wholesalers"
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-bold text-slate-900 focus:bg-slate-50 focus:border-blue-600 transition"
-            />
-            <span className="text-[10px] text-slate-400 mt-1 block">Displayed boldly as company header on invoices & topbar</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Showroom / Trade Name
+              </label>
+              <span className="text-[10px] font-mono text-[#DC2626] font-semibold">REQUIRED</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Store className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Royal Auto Spares & Wholesalers"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-semibold text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Legal Business Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={legalName}
-              onChange={(e) => setLegalName(e.target.value)}
-              placeholder="e.g. AutoLedger Spares Pvt Ltd"
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-semibold text-slate-800 focus:bg-slate-50 focus:border-blue-600 transition"
-            />
-            <span className="text-[10px] text-slate-400 mt-1 block">Registered GST entity legal name</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Legal Business Entity Name
+              </label>
+              <span className="text-[10px] font-mono text-[#DC2626] font-semibold">REQUIRED</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                required
+                value={legalName}
+                onChange={(e) => setLegalName(e.target.value)}
+                placeholder="e.g. AutoLedger Spares Pvt Ltd"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-medium text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              GSTIN (15 Digits) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              maxLength={15}
-              value={gstin}
-              onChange={(e) => setGstin(e.target.value.toUpperCase())}
-              placeholder="27ABCDE1234F1Z5"
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-mono font-bold text-slate-900 uppercase focus:bg-slate-50 focus:border-blue-600 transition"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                GSTIN (15-Digit Identifier)
+              </label>
+              <span className="text-[10px] font-mono text-[#DC2626] font-semibold">REQUIRED</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                required
+                maxLength={15}
+                value={gstin}
+                onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                placeholder="27ABCDE1234F1Z5"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono font-bold text-[#0F172A] uppercase placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs tracking-wider"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              State & GST State Code <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={stateCode}
-              onChange={(e) => {
-                const newState = e.target.value;
-                setStateCode(newState);
-                const prefix = newState.slice(0, 2);
-                if (prefix && gstin && /^\d{2}/.test(gstin)) {
-                  setGstin(prefix + gstin.slice(2));
-                }
-              }}
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-semibold text-slate-800 focus:bg-slate-50 focus:border-blue-600 transition"
-            >
-              {INDIAN_STATES.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                State & GST State Code
+              </label>
+              <span className="text-[10px] font-mono text-[#DC2626] font-semibold">REQUIRED</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <select
+                value={stateCode}
+                onChange={(e) => {
+                  const newState = e.target.value;
+                  setStateCode(newState);
+                  const prefix = newState.slice(0, 2);
+                  if (prefix && gstin && /^\d{2}/.test(gstin)) {
+                    setGstin(prefix + gstin.slice(2));
+                  }
+                }}
+                className="w-full h-9 pl-9 pr-8 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-medium text-[#0F172A] appearance-none cursor-pointer transition-all outline-hidden shadow-2xs"
+              >
+                {INDIAN_STATES.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 w-4 h-4 text-[#94A3B8] pointer-events-none" />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Contact Phone / WhatsApp <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Contact Phone / WhatsApp
+              </label>
+              <span className="text-[10px] font-mono text-[#DC2626] font-semibold">REQUIRED</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Phone className="w-4 h-4" />
+              </div>
               <input
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+91 98221 00001"
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono font-medium text-slate-900 focus:bg-slate-50 focus:border-blue-600 transition"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono font-medium text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Billing Email Address
-            </label>
-            <div className="relative">
-              <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Billing Email Address
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">OPTIONAL</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Mail className="w-4 h-4" />
+              </div>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="billing@royalauto.com"
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-medium text-slate-900 focus:bg-slate-50 focus:border-blue-600 transition"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-medium text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-slate-700 font-bold mb-1">
-              Market / Showroom Full Address <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Showroom / Workshop Address
+              </label>
+              <span className="text-[10px] font-mono text-[#DC2626] font-semibold">REQUIRED</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <MapPin className="w-4 h-4" />
+              </div>
               <input
                 type="text"
                 required
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Shop No. 12-15, Nana Peth Auto Market, Pune, Maharashtra - 411002"
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-medium text-slate-900 focus:bg-slate-50 focus:border-blue-600 transition"
+                placeholder="Shop No. 12-15, Main Auto Market, Pune, Maharashtra - 411002"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-medium text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
           </div>
@@ -578,178 +630,216 @@ export default function SettingsPage() {
       </div>
 
       {/* 2. DIRECT BANK SETTLEMENT & UPI QR */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-blue-600" />
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Bank Settlement & UPI Details
+            <CreditCard className="w-4 h-4 text-[#2563EB]" />
+            <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
+              Bank Settlement & Counter UPI
             </h2>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">Printed on invoice bottom for customer payments</span>
+          <span className="text-[11px] text-[#64748B]">Printed on invoice footer</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Bank Name
-            </label>
-            <input
-              type="text"
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              placeholder="e.g. HDFC Bank / State Bank of India"
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-semibold text-slate-800 focus:bg-slate-50 focus:border-blue-600 transition"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Bank Name
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">OPTIONAL</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Landmark className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                placeholder="e.g. HDFC Bank / State Bank of India"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-medium text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Bank Account Number
-            </label>
-            <input
-              type="text"
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
-              placeholder="e.g. 50200012345678"
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-mono font-bold text-slate-900 focus:bg-slate-50 focus:border-blue-600 transition"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Bank Account Number
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">OPTIONAL</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Hash className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                placeholder="e.g. 50200012345678"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono font-bold text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              IFSC Code
-            </label>
-            <input
-              type="text"
-              value={ifscCode}
-              onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-              placeholder="e.g. HDFC0001234"
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-mono font-bold text-slate-900 uppercase focus:bg-slate-50 focus:border-blue-600 transition"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                IFSC Code
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">OPTIONAL</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                value={ifscCode}
+                onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                placeholder="e.g. HDFC0001234"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono font-bold text-[#0F172A] uppercase placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              UPI ID / VPA
-            </label>
-            <div className="relative">
-              <QrCode className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                UPI VPA / ID
+              </label>
+              <span className="text-[10px] font-mono text-[#2563EB] font-semibold">DYNAMIC QR</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#2563EB] transition-colors pointer-events-none">
+                <QrCode className="w-4 h-4" />
+              </div>
               <input
                 type="text"
                 value={upiId}
                 onChange={(e) => setUpiId(e.target.value)}
                 placeholder="e.g. royalauto@okhdfcbank"
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono font-bold text-blue-700 focus:bg-slate-50 focus:border-blue-600 transition"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/15 rounded-md text-xs font-mono font-bold text-[#2563EB] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2.5 RAZORPAY PAYMENT GATEWAY & KHATA SETTLEMENTS */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
-              <Zap className="w-4 h-4 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <span>Razorpay Gateway & Online Khata Settlements</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
-                  razorpayKeyId.startsWith('rzp_live') 
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                    : 'bg-amber-50 text-amber-700 border-amber-200'
-                }`}>
-                  {razorpayKeyId.startsWith('rzp_live') ? '● Live Production Gateway' : '● Free Sandbox / Test Mode'}
-                </span>
-              </h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Generate dynamic UPI QR codes and instant SMS/WhatsApp payment links. Payments auto-credit customer ledger accounts.
-              </p>
-            </div>
+      {/* 3. RAZORPAY GATEWAY */}
+      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E2E8F0] pb-2.5">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-[#16A34A]" />
+            <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider flex items-center gap-2">
+              <span>Razorpay Payment Gateway API</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${
+                razorpayKeyId.startsWith('rzp_live') 
+                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
+                  : 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]'
+              }`}>
+                {razorpayKeyId.startsWith('rzp_live') ? 'LIVE PRODUCTION' : 'TEST SANDBOX'}
+              </span>
+            </h2>
           </div>
           <a
             href="https://dashboard.razorpay.com/app/keys"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 font-semibold transition"
+            className="inline-flex items-center gap-1 text-[11px] text-[#2563EB] hover:underline font-medium"
           >
-            <span>Get Free Razorpay Keys</span>
+            <span>Razorpay Dashboard</span>
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Razorpay Key ID
-            </label>
-            <div className="relative">
-              <Key className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Razorpay Key ID
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">PUBLIC KEY</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Key className="w-4 h-4" />
+              </div>
               <input
                 type="text"
                 value={razorpayKeyId}
                 onChange={(e) => setRazorpayKeyId(e.target.value.trim())}
                 placeholder="rzp_test_... or rzp_live_..."
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono text-slate-800 font-medium focus:bg-slate-50 focus:border-blue-600 transition"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
-            <span className="text-[10px] text-slate-400 mt-1 block">Starts with <code className="text-slate-600 font-mono">rzp_test_</code> (Sandbox) or <code className="text-slate-600 font-mono">rzp_live_</code></span>
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-slate-700 font-bold">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
                 Razorpay Key Secret
               </label>
               <button
                 type="button"
                 onClick={() => setShowSecret(!showSecret)}
-                className="text-[10px] text-blue-600 font-semibold hover:underline"
+                className="text-[10px] text-[#2563EB] hover:text-[#1D4ED8] font-semibold transition cursor-pointer"
               >
-                {showSecret ? 'Hide' : 'Reveal'}
+                {showSecret ? 'Hide Secret' : 'Reveal Secret'}
               </button>
             </div>
-            <div className="relative">
-              <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Lock className="w-4 h-4" />
+              </div>
               <input
                 type={showSecret ? 'text' : 'password'}
                 value={razorpayKeySecret}
                 onChange={(e) => setRazorpayKeySecret(e.target.value.trim())}
                 placeholder="••••••••••••••••••••••••"
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono text-slate-800 font-medium focus:bg-slate-50 focus:border-blue-600 transition"
+                className="w-full h-9 pl-9 pr-10 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
+              <button
+                type="button"
+                onClick={() => setShowSecret(!showSecret)}
+                className="absolute right-3 text-[#94A3B8] hover:text-[#0F172A] transition cursor-pointer"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
             </div>
-            <span className="text-[10px] text-slate-400 mt-1 block">Used to securely authorize payment links and check status</span>
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-slate-700 font-bold mb-1">
-              Webhook Secret (Automated Double-Entry Reconciler)
-            </label>
-            <div className="relative">
-              <Shield className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Webhook Secret (Instant Reconciler)
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">FOR INSTANT WEBHOOKS</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Shield className="w-4 h-4" />
+              </div>
               <input
                 type="text"
                 value={razorpayWebhookSecret}
                 onChange={(e) => setRazorpayWebhookSecret(e.target.value.trim())}
                 placeholder="e.g. autoledger_webhook_secret_2026"
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-mono text-slate-800 font-medium focus:bg-slate-50 focus:border-blue-600 transition"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
-            <span className="text-[10px] text-slate-400 mt-1 block">Protects against tampering. Verifies SHA256 signature on payment events.</span>
           </div>
         </div>
 
-        {/* Webhook Endpoint Display & 1-Click Copy */}
-        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+        {/* Webhook Endpoint Display */}
+        <div className="p-3.5 rounded-md bg-[#F8FAFC] border border-[#E2E8F0] text-xs space-y-2">
           <div className="flex items-center justify-between">
-            <div className="font-bold text-slate-800 flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-blue-600" />
-              <span>Razorpay Webhook Callback URL</span>
-            </div>
+            <span className="font-semibold text-[#0F172A] flex items-center gap-1.5 text-[11px]">
+              <Globe className="w-3.5 h-3.5 text-[#2563EB]" />
+              Razorpay Webhook Callback URL
+            </span>
             <button
               type="button"
               onClick={() => {
@@ -760,227 +850,158 @@ export default function SettingsPage() {
                 setCopiedWebhook(true);
                 setTimeout(() => setCopiedWebhook(false), 3000);
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold rounded-md border border-slate-300 transition"
+              className="h-7 px-3 bg-white hover:bg-[#F1F5F9] text-[#334155] text-[11px] font-semibold rounded-md border border-[#CBD5E1] shadow-2xs transition inline-flex items-center gap-1.5 cursor-pointer"
             >
-              {copiedWebhook ? (
-                <>
-                  <Check className="w-3 h-3 text-emerald-600" />
-                  <span className="text-emerald-700">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3 text-slate-600" />
-                  <span>Copy Webhook URL</span>
-                </>
-              )}
+              {copiedWebhook ? <Check className="w-3.5 h-3.5 text-[#16A34A]" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedWebhook ? 'Copied' : 'Copy URL'}</span>
             </button>
           </div>
-          <p className="text-[11px] text-slate-600 font-mono bg-white p-2 rounded border border-slate-200 break-all select-all">
+          <p className="text-[11px] text-[#475569] font-mono bg-white p-2.5 rounded-md border border-[#CBD5E1] break-all select-all shadow-2xs">
             {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/webhooks/razorpay` : 'https://x-autoledger.vercel.app/api/v1/webhooks/razorpay'}
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px] text-slate-600">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>payment.captured auto-settles Khata</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span>payment.failed logs audit & retries</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>payment.dispute marks RED flag</span>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* 3. INVOICE SERIES, TAX & PRINTING FORMAT */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      {/* 4. INVOICE SERIES & TERMS */}
+      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-emerald-600" />
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <FileText className="w-4 h-4 text-[#C81E1E]" />
+            <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
               Invoice Series & Terms & Conditions
             </h2>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">Controls bill number sequence & legal notices</span>
+          <span className="text-[11px] text-[#64748B]">Sequence numbering</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Invoice Prefix Sequence
-            </label>
-            <input
-              type="text"
-              value={invoicePrefix}
-              onChange={(e) => setInvoicePrefix(e.target.value)}
-              placeholder="e.g. INV/2026-27/ or ROYAL-"
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 font-mono font-bold text-slate-900 focus:bg-slate-50 focus:border-blue-600 transition"
-            />
-            <span className="text-[10px] text-slate-400 mt-1 block">New invoices generate as {invoicePrefix}0001, etc.</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Invoice Prefix Sequence
+              </label>
+              <span className="text-[10px] font-mono text-[#DC2626] font-semibold">REQUIRED</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <FileCode className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                value={invoicePrefix}
+                onChange={(e) => setInvoicePrefix(e.target.value)}
+                placeholder="e.g. INV/2026-27/ or ROYAL-"
+                className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono font-bold text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1">
-              Default GST Rate for Spare Parts
-            </label>
-            <div className="relative">
-              <Percent className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Default GST Rate for Spares
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">FALLBACK</span>
+            </div>
+            <div className="relative flex items-center group">
+              <div className="absolute left-3 text-[#94A3B8] group-focus-within:text-[#C81E1E] transition-colors pointer-events-none">
+                <Percent className="w-4 h-4" />
+              </div>
               <select
                 value={defaultGstRate}
                 onChange={(e) => setDefaultGstRate(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg py-2.5 pl-9 pr-2.5 font-bold text-slate-800 focus:bg-slate-50 focus:border-blue-600 transition"
+                className="w-full h-9 pl-9 pr-8 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-medium text-[#0F172A] appearance-none cursor-pointer transition-all outline-hidden shadow-2xs"
               >
                 <option value="18">18% (Standard 2-Wheeler Spares & Lubricants)</option>
                 <option value="28">28% (Automotive Assemblies & High-End Parts)</option>
                 <option value="12">12% (Agricultural & Select Parts)</option>
                 <option value="5">5% (Essential Products)</option>
               </select>
+              <ChevronDown className="absolute right-3 w-4 h-4 text-[#94A3B8] pointer-events-none" />
             </div>
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-slate-700 font-bold mb-1">
-              Invoice Terms & Conditions (Legal Footnote)
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                Invoice Terms & Conditions (Footer Footnote)
+              </label>
+              <span className="text-[10px] font-mono text-[#64748B]">POLICY</span>
+            </div>
             <textarea
               rows={3}
               value={terms}
               onChange={(e) => setTerms(e.target.value)}
               placeholder="Enter dealer terms, warranty clauses, and return policy..."
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-slate-800 text-xs font-normal focus:bg-slate-50 focus:border-blue-600 transition"
+              className="w-full p-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs text-[#0F172A] placeholder:text-[#94A3B8] transition-all outline-hidden shadow-2xs leading-relaxed"
             />
-            <span className="text-[10px] text-slate-400 mt-1 block">Printed on the bottom-left of every 1-page A4 GST Tax Invoice</span>
           </div>
         </div>
       </div>
 
-      {/* 5. Database Backup & Disaster Recovery Card */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-2xs">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                Database Backup & Disaster Recovery
-                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Crash Protection
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Take an offline snapshot of all inventory, customers, khata ledgers, and invoices or feed an existing backup to restore.
-              </p>
-            </div>
+      {/* 5. DATABASE BACKUP & DISASTER RECOVERY */}
+      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
+          <div className="flex items-center gap-2">
+            <Database className="w-4 h-4 text-[#2563EB]" />
+            <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
+              Database Backup & Disaster Recovery
+            </h2>
           </div>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0] font-semibold">
+            OFFLINE READY
+          </span>
         </div>
 
-        {/* Toast for backup actions */}
         {backupToast && (
-          <div className={`mb-4 p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
-            backupToast.type === 'success' 
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-              : 'bg-rose-50 text-rose-800 border-rose-200'
+          <div className={`p-3 rounded-md border text-xs font-medium flex items-center gap-1.5 ${
+            backupToast.type === 'success' ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
           }`}>
-            {backupToast.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+            {backupToast.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
             <span>{backupToast.message}</span>
           </div>
         )}
 
-        {/* Restore Result Summary */}
-        {restoreSummary && (
-          <div className="mb-4 p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-900">
-            <div className="font-semibold text-blue-950 mb-1">Restoration Summary:</div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-medium text-slate-700 mt-2">
-              <div className="bg-white p-2 rounded-lg border border-blue-100">
-                <span className="text-slate-400 block text-[10px]">Products Synced</span>
-                <span className="font-bold text-slate-900 font-mono">{restoreSummary.products}</span>
-              </div>
-              <div className="bg-white p-2 rounded-lg border border-blue-100">
-                <span className="text-slate-400 block text-[10px]">Customers Synced</span>
-                <span className="font-bold text-slate-900 font-mono">{restoreSummary.customers}</span>
-              </div>
-              <div className="bg-white p-2 rounded-lg border border-blue-100">
-                <span className="text-slate-400 block text-[10px]">Tenants Synced</span>
-                <span className="font-bold text-slate-900 font-mono">{restoreSummary.tenants}</span>
-              </div>
-              <div className="bg-white p-2 rounded-lg border border-blue-100">
-                <span className="text-slate-400 block text-[10px]">Status</span>
-                <span className="font-bold text-emerald-700">100% Online</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Card 1: Take / Download Backup */}
-          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Download */}
+          <div className="border border-[#E2E8F0] rounded-md p-4 bg-[#F8FAFC] hover:bg-[#F1F5F9]/50 transition-colors flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs mb-1">
-                <HardDrive className="w-4 h-4 text-slate-700" />
-                <span>{language === 'hi' ? 'विकल्प 1: पूरा डेटा बैकअप डाउनलोड करें' : 'Option 1: Take Complete Data Backup'}</span>
+              <div className="text-xs font-semibold text-[#0F172A] mb-1 flex items-center gap-1.5">
+                <HardDrive className="w-4 h-4 text-[#475569]" />
+                <span>Download Database Snapshot</span>
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                {language === 'hi' 
-                  ? 'आपके सभी प्रोडक्ट्स, स्टॉक, ग्राहक खाता, बिल व भुगतान का सुरक्षित .json बैकअप डाउनलोड करता है।' 
-                  : 'Exports your entire database & records (Products, Stock Logs, Customer Khatas, Invoices, Payment history) into a portable .json file.'}
+              <p className="text-[11px] text-[#64748B] leading-relaxed">
+                Exports all products, customers, khata balances, and invoices into a portable .json file.
               </p>
             </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400">{language === 'hi' ? 'सुरक्षित ऑफलाइन कॉपी' : 'Safe offline copy'}</span>
+            <div className="mt-4 pt-3 border-t border-[#E2E8F0] flex justify-end">
               <button
                 type="button"
                 onClick={handleDownloadBackup}
                 disabled={isExportingBackup}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-medium rounded-lg shadow-2xs transition"
+                className="h-8.5 px-4 bg-[#0F172A] hover:bg-[#1E293B] disabled:opacity-60 text-white text-xs font-semibold rounded-md shadow-2xs transition inline-flex items-center gap-1.5 cursor-pointer"
               >
-                {isExportingBackup ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>{language === 'hi' ? 'बैकअप बन रहा है...' : 'Exporting Snapshot...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-3.5 h-3.5" />
-                    <span>{t('set.download_backup', 'Download Full Backup (.json)')}</span>
-                  </>
-                )}
+                <Download className="w-3.5 h-3.5" />
+                <span>{isExportingBackup ? 'Exporting...' : 'Export Backup (.json)'}</span>
               </button>
             </div>
           </div>
 
-          {/* Card 2: Feed / Restore Backup */}
-          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
+          {/* Restore */}
+          <div className="border border-[#E2E8F0] rounded-md p-4 bg-[#F8FAFC] hover:bg-[#F1F5F9]/50 transition-colors flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs mb-1">
-                <UploadCloud className="w-4 h-4 text-emerald-600" />
-                <span>{language === 'hi' ? 'विकल्प 2: बैकअप फाइल से डेटा रीस्टोर करें' : 'Option 2: Feed & Restore from Backup'}</span>
+              <div className="text-xs font-semibold text-[#0F172A] mb-1 flex items-center gap-1.5">
+                <UploadCloud className="w-3.5 h-3.5 text-[#16A34A]" />
+                <span>Restore from Backup File</span>
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                {language === 'hi'
-                  ? 'सिस्टम क्रैश या बदलने की स्थिति में पहले से मौजूद बैकअप JSON फाइल अपलोड करके डेटा वापस लाएं।'
-                  : 'In case of device crash, system change, or database corruption, upload a previous backup file to restore and sync all records back into database.'}
+              <p className="text-[11px] text-[#64748B] leading-relaxed">
+                Upload an existing backup .json file to resynchronize all tables and data records.
               </p>
             </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400">{language === 'hi' ? 'तत्काल सिंक' : 'Instant DB sync'}</span>
-              <label className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-lg shadow-2xs transition cursor-pointer">
-                {isRestoringBackup ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>{language === 'hi' ? 'डेटा रीस्टोर हो रहा है...' : 'Restoring & Syncing DB...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <UploadCloud className="w-3.5 h-3.5" />
-                    <span>{t('set.restore_backup', 'Feed Backup File')}</span>
-                  </>
-                )}
+            <div className="mt-4 pt-3 border-t border-[#E2E8F0] flex justify-end">
+              <label className="h-8.5 px-4 bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-semibold rounded-md shadow-2xs transition inline-flex items-center gap-1.5 cursor-pointer">
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>{isRestoringBackup ? 'Restoring...' : 'Feed Backup File'}</span>
                 <input
                   type="file"
                   accept=".json,application/json"
@@ -991,42 +1012,6 @@ export default function SettingsPage() {
               </label>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Bottom Sticky Action Bar */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>{language === 'hi' ? 'सभी बदलाव तत्काल लागू होंगे।' : 'Changes apply instantly to all new bills, invoices, PDFs, and WhatsApp shares.'}</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsPreviewOpen(true)}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-xs rounded-lg transition"
-          >
-            {language === 'hi' ? 'बिल प्रीव्यू देखें' : 'Preview Invoice'}
-          </button>
-
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-6 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-semibold text-xs rounded-lg shadow-sm transition"
-          >
-            {isSaving ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>{language === 'hi' ? 'सुरक्षित हो रहा है...' : 'Saving...'}</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>{t('set.save_settings', 'Save All Settings')}</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 

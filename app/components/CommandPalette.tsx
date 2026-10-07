@@ -566,7 +566,7 @@ export default function CommandPalette() {
                                 e.stopPropagation();
                                 handleOpenInvoicePreview(inv);
                               }}
-                              className="p-1.5 bg-white group-hover:bg-blue-600 text-slate-500 group-hover:text-white rounded-lg border border-slate-200 group-hover:border-blue-600 shadow-2xs transition"
+                              className="p-1.5 bg-white group-hover:bg-blue-600 text-blue-600 group-hover:text-white rounded-lg border border-slate-200 group-hover:border-blue-600 shadow-xs transition"
                               title="Preview & Print"
                             >
                               <Eye className="w-3.5 h-3.5" />

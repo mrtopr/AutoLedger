@@ -54,7 +54,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] text-[#0F172A] flex flex-col font-sans antialiased">
+    <div className="min-h-screen bg-[#F8F9FA] text-[#0F172A] flex flex-col font-sans antialiased">
       {/* Top Transition Progress Bar */}
       <Suspense fallback={null}>
         <ProgressBar />
@@ -68,11 +68,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area (Offset for 240px Sidebar on Desktop) */}
       <div className="lg:pl-[240px] flex flex-col min-h-screen">
-        {/* Slim Topbar (64px) */}
+        {/* Compact Topbar (48px) */}
         <Topbar onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)} />
 
         {/* Dashboard Content Container */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-7 max-w-7xl w-full mx-auto pb-20 lg:pb-8">
+        <main className="flex-1 p-4 sm:p-5 max-w-7xl w-full mx-auto pb-16 lg:pb-8">
           {children}
         </main>
       </div>
