@@ -23,31 +23,49 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 /**
  * Fast check to verify if PostgreSQL (Neon / local / remote) is available.
- * Caches result for 2 minutes to prevent repeated ping overhead.
+ * Gracefully handles serverless cold starts & auto-wake.
  */
 export async function isPostgresAvailable(): Promise<boolean> {
   const now = Date.now();
   if (
-    globalForPrisma._dbAvailable !== undefined && 
+    globalForPrisma._dbAvailable === true && 
     globalForPrisma._lastDbCheck && 
-    now - globalForPrisma._lastDbCheck < 120000 // Cache for 2 minutes
+    now - globalForPrisma._lastDbCheck < 60000 // Cache positive checks for 1 minute
   ) {
-    return globalForPrisma._dbAvailable;
+    return true;
+  }
+
+  // If previous check failed, retry after 5 seconds instead of locking out
+  if (
+    globalForPrisma._dbAvailable === false &&
+    globalForPrisma._lastDbCheck &&
+    now - globalForPrisma._lastDbCheck < 5000
+  ) {
+    return false;
   }
 
   try {
     const checkQuery = prisma.$queryRaw`SELECT 1`;
     const timeout = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('DB Timeout')), 3000)
+      setTimeout(() => reject(new Error('DB Timeout')), 2500)
     );
     await Promise.race([checkQuery, timeout]);
     globalForPrisma._dbAvailable = true;
     globalForPrisma._lastDbCheck = Date.now();
     return true;
-  } catch (err) {
-    globalForPrisma._dbAvailable = false;
-    globalForPrisma._lastDbCheck = Date.now();
-    return false;
+  } catch (err: any) {
+    // If closed due to idle scale-to-zero, trigger a silent reconnect
+    try {
+      await prisma.$connect();
+      await prisma.$queryRaw`SELECT 1`;
+      globalForPrisma._dbAvailable = true;
+      globalForPrisma._lastDbCheck = Date.now();
+      return true;
+    } catch {
+      globalForPrisma._dbAvailable = false;
+      globalForPrisma._lastDbCheck = Date.now();
+      return false;
+    }
   }
 }
 

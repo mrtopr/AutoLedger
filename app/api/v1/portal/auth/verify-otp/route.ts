@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
-import { activeOtpStore } from '../send-otp/route';
+import { activeOtpStore } from '@/server/lib/otpStore';
 
 export async function POST(req: NextRequest) {
   try {

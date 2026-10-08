@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
-
-// In-memory OTP storage for rapid verification
-// In production, backed by Redis or SMS Gateway (Twilio/Fast2SMS)
-export const activeOtpStore = new Map<string, { otp: string; expiresAt: number; customerId: string; tenantId: string }>();
+import { activeOtpStore } from '@/server/lib/otpStore';
 
 export async function POST(req: NextRequest) {
   try {
