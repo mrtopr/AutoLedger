@@ -12,10 +12,12 @@ import {
   Trash2, 
   Check, 
   AlertCircle,
-  Package
+  Package,
+  FileSpreadsheet
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
 import ClientPortal from '@/app/components/ClientPortal';
+import BulkImportModal from '@/app/components/BulkImportModal';
 
 interface ProductItem {
   id: string;
@@ -55,6 +57,7 @@ export default function InventoryPage() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LOW' | 'HEALTHY' | 'OUT'>('ALL');
 
   // Modals & State
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -324,14 +327,14 @@ export default function InventoryPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-sm sm:text-base font-bold text-[#0F172A] tracking-tight">
-                {language === 'hi' ? 'इन्वेंट्री एवं पार्ट्स स्टॉक' : 'Inventory & Stock Management'}
+                Inventory & Stock Management
               </h1>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]">
                 {products.length} SKUs · {totalUnits} Units
               </span>
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Physical stock monitoring, bin levels, cost basis valuation, and fast-moving spare parts replenishment.
+              Physical stock monitoring, bin levels, cost basis valuation, and fast-moving inventory replenishment.
             </p>
           </div>
         </div>
@@ -341,11 +344,23 @@ export default function InventoryPage() {
             onClick={loadProducts}
             disabled={loading}
             className="h-8 px-3 bg-white hover:bg-[#F8F9FA] text-[#475569] hover:text-[#0F172A] rounded-md border border-[#CBD5E1] text-xs font-medium transition flex items-center gap-1.5 shadow-2xs"
-            title={language === 'hi' ? 'ताज़ा करें' : 'Refresh Inventory'}
+            title="Refresh Inventory"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#C81E1E]' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
+          
+          {/* Bulk Excel / CSV Import Button */}
+          <button
+            onClick={() => setIsBulkImportOpen(true)}
+            data-tour="import-excel-btn"
+            className="h-8 inline-flex items-center gap-1.5 px-3 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0] text-xs font-semibold rounded-md shadow-2xs transition"
+            title="Import inventory as a whole using Excel or CSV sheet"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[#16A34A]" />
+            <span>Import Excel / CSV</span>
+          </button>
+
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="h-8 inline-flex items-center gap-1.5 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md shadow-2xs transition"
@@ -359,19 +374,19 @@ export default function InventoryPage() {
       {/* 2. Key Metrics Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">{language === 'hi' ? 'कुल स्टॉक मूल्यांकन' : 'Wholesale Valuation'}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Wholesale Valuation</div>
           <div className="text-xl font-bold font-mono tabular-nums text-[#0F172A]">
             {formatPaiseToRupees(totalValuation)}
           </div>
-          <div className="text-[11px] text-[#64748B]">{language === 'hi' ? 'लागत मूल्य:' : 'Cost Basis:'} {formatPaiseToRupees(totalCostValuation)}</div>
+          <div className="text-[11px] text-[#64748B]">Cost Basis: {formatPaiseToRupees(totalCostValuation)}</div>
         </div>
 
         <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">{language === 'hi' ? 'कुल पार्ट्स (SKUs)' : 'Total SKUs Listed'}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Total SKUs Listed</div>
           <div className="text-xl font-bold font-mono tabular-nums text-[#0F172A]">
-            {products.length} <span className="text-xs text-[#64748B] font-normal">{language === 'hi' ? 'पार्ट्स' : 'Parts'}</span>
+            {products.length} <span className="text-xs text-[#64748B] font-normal">Products</span>
           </div>
-          <div className="text-[11px] text-[#64748B]">{totalUnits} {language === 'hi' ? 'यूनिट्स उपलब्ध' : 'units on warehouse shelves'}</div>
+          <div className="text-[11px] text-[#64748B]">{totalUnits} units on warehouse shelves</div>
         </div>
 
         <div 
@@ -391,9 +406,9 @@ export default function InventoryPage() {
             )}
           </div>
           <div className="text-xl font-bold font-mono tabular-nums text-[#92400E] mt-1">
-            {lowStockCount} <span className="text-xs text-[#64748B] font-normal">{language === 'hi' ? 'पार्ट्स' : 'Parts'}</span>
+            {lowStockCount} <span className="text-xs text-[#64748B] font-normal">Products</span>
           </div>
-          <div className="text-[11px] text-[#D97706] mt-0.5">{language === 'hi' ? 'न्यूनतम सीमा से कम स्टॉक' : 'Below minimum reorder threshold'}</div>
+          <div className="text-[11px] text-[#D97706] mt-0.5">Below minimum reorder threshold</div>
         </div>
       </div>
 
@@ -406,7 +421,7 @@ export default function InventoryPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('inv.search_placeholder', 'Search SKU, part name, brand...')}
+            placeholder={t('inv.search_placeholder', 'Search SKU, product name, brand...')}
             className="w-full pl-9 pr-8 py-1.5 text-xs bg-[#F8F9FA] border border-[#CBD5E1] rounded-md focus:bg-white focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] text-[#0F172A] placeholder-[#94A3B8] outline-hidden transition"
           />
           {search && (
@@ -426,7 +441,7 @@ export default function InventoryPage() {
           >
             {DEPARTMENTS.map((d) => (
               <option key={d} value={d}>
-                {d === 'All Departments' && language === 'hi' ? 'सभी श्रेणियां (All Departments)' : d}
+                {d}
               </option>
             ))}
           </select>
@@ -1056,6 +1071,16 @@ export default function InventoryPage() {
           </div>
         </ClientPortal>
       )}
+
+      {/* MODAL: BULK EXCEL / CSV IMPORT */}
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        onSuccess={(count) => {
+          showToast('success', `Bulk imported ${count} items into inventory!`);
+          loadProducts();
+        }}
+      />
     </div>
   );
 }

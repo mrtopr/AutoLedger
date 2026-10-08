@@ -13,7 +13,7 @@ let mainWindow = null;
 let serverProcess = null;
 
 const PORT = process.env.PORT || 3000;
-const PRODUCTION_URL = 'https://x-autoledger.vercel.app';
+const PRODUCTION_URL = 'https://tradeledger.app';
 const APP_URL = process.env.NODE_ENV === 'development'
   ? (process.env.APP_URL || `http://localhost:${PORT}`)
   : PRODUCTION_URL;
@@ -58,7 +58,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: 'AutoLedger Dealership & Workshop ERP',
+    title: 'TradeLedger ERP — Universal B2B Wholesale & Khata Platform',
     icon: path.join(__dirname, '..', 'public', 'logo.png'),
     backgroundColor: '#0F172A',
     webPreferences: {

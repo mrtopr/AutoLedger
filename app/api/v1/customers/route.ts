@@ -127,7 +127,11 @@ export async function POST(req: NextRequest) {
       gstin,
       creditLimitPaise = 5000000n,
       paymentTermsDays = 15,
-      customerType = 'GARAGE',
+      customerType = 'RETAILER',
+      openingBalancePaise = '0',
+      openingBalanceType = 'DUE', // 'DUE' (Dr / Udhar) or 'ADVANCE' (Cr)
+      openingBalanceDate,
+      openingBalanceNarration,
     } = body;
 
     if (!shopName || !phone) {
@@ -137,8 +141,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
+    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-apex-1';
     let createdCust: any = null;
+    const initialBalPaise = BigInt(openingBalancePaise || 0);
+    const isDueBal = openingBalanceType === 'DUE';
+    const netBalPaise = isDueBal ? initialBalPaise : -initialBalPaise;
+    const defaultNarration = openingBalanceNarration || (isDueBal ? 'Opening Balance (Previous Udhar)' : 'Opening Balance (Advance Deposit)');
+    const entryDate = openingBalanceDate ? new Date(openingBalanceDate) : new Date();
 
     // 1. Try Prisma if available
     const hasDb = await isPostgresAvailable();
@@ -159,11 +168,27 @@ export async function POST(req: NextRequest) {
             isActive: true,
           }
         });
+
+        if (initialBalPaise > 0n) {
+          await prisma.ledgerEntry.create({
+            data: {
+              tenantId: targetTenantId,
+              customerId: customer.id,
+              entryType: 'ADJUSTMENT' as any,
+              debit: isDueBal ? initialBalPaise : 0n,
+              credit: isDueBal ? 0n : initialBalPaise,
+              entryDate: entryDate,
+              narration: defaultNarration,
+            }
+          });
+        }
+
         createdCust = {
           id: customer.id,
           name: customer.name,
           shopName: customer.shopName,
           phone: customer.phone,
+          balancePaise: netBalPaise.toString(),
           creditLimitPaise: customer.creditLimit.toString(),
         };
       } catch (dbErr) {
@@ -179,13 +204,28 @@ export async function POST(req: NextRequest) {
       phone,
       address: address || 'Pune, Maharashtra',
       gstin: gstin || null,
-      customerType: customerType || 'GARAGE',
-      balancePaise: '0',
+      customerType: customerType || 'RETAILER',
+      balancePaise: netBalPaise.toString(),
       creditLimitPaise: String(creditLimitPaise || 5000000),
       status: 'GREEN',
       termsDays: parseInt(paymentTermsDays, 10) || 15,
       overduePaise: '0',
     });
+
+    if (initialBalPaise > 0n) {
+      localStore.addLedgerEntry({
+        tenantId: targetTenantId,
+        customerId: localCust.id,
+        date: entryDate.toISOString().split('T')[0],
+        type: isDueBal ? 'OPENING_DUE' : 'OPENING_ADVANCE',
+        refNo: 'OPENING-BAL',
+        narration: defaultNarration,
+        debitPaise: isDueBal ? initialBalPaise.toString() : '0',
+        creditPaise: isDueBal ? '0' : initialBalPaise.toString(),
+      });
+      // Ensure local balance is set correctly
+      localCust.balancePaise = netBalPaise.toString();
+    }
 
     return NextResponse.json({
       success: true,

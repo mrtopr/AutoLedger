@@ -316,7 +316,7 @@ export default function CustomerPortalPage() {
       <div className="min-h-screen bg-[#0F172A] flex flex-col items-center justify-center p-4 text-white">
         <div className="relative mb-6">
           <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-700/60 flex items-center justify-center p-3 shadow-2xl animate-pulse">
-            <img src="/logo.png" alt="AutoLedger" className="w-full h-full object-contain" />
+            <img src="/logo.png" alt="TradeLedger" className="w-full h-full object-contain" />
           </div>
           <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -324,7 +324,7 @@ export default function CustomerPortalPage() {
           </span>
         </div>
         <div className="text-center space-y-1.5">
-          <div className="text-sm font-bold tracking-wide text-slate-200">AutoLedger Khata Portal</div>
+          <div className="text-sm font-bold tracking-wide text-slate-200">TradeLedger Khata Portal</div>
           <div className="flex items-center justify-center gap-2 text-slate-400 text-xs font-mono">
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#C81E1E]" />
             <span>Synchronizing live double-entry khata...</span>
@@ -410,11 +410,11 @@ export default function CustomerPortalPage() {
 
   // Quick WhatsApp share link
   const waShareText = encodeURIComponent(
-    `*AutoLedger Khata Passbook Update*\n` +
-    `Workshop: ${customer.shopName}\n` +
-    `Proprietor: ${customer.name}\n` +
-    `Current Status: ${isAdvance ? 'Advance Credit (जमा): ' + formatPaiseToRupees(absBalance) + ' Cr' : isDue ? 'Khata Due (बाकी): ' + formatPaiseToRupees(absBalance) + ' Dr' : 'Settled Balance: NIL'}\n` +
-    `Dealership: ${dealership?.name || 'Honda Dealership'}\n` +
+    `*TradeLedger B2B Statement Update*\n` +
+    `Client / Business: ${customer.shopName}\n` +
+    `Contact: ${customer.name}\n` +
+    `Current Status: ${isAdvance ? 'Advance Credit: ' + formatPaiseToRupees(absBalance) + ' Cr' : isDue ? 'Khata Due: ' + formatPaiseToRupees(absBalance) + ' Dr' : 'Settled Balance: NIL'}\n` +
+    `Supplier: ${dealership?.name || 'Apex Trade & Wholesale'}\n` +
     `Date: ${new Date().toLocaleDateString('en-IN')}`
   );
   const waShareUrl = `https://wa.me/?text=${waShareText}`;
@@ -431,7 +431,7 @@ export default function CustomerPortalPage() {
           {/* Left: Brand & Portal Badge */}
           <div className="flex items-center gap-3 shrink-0">
             <Link href="/portal" className="flex items-center gap-2.5 group">
-              <img src="/logo.png" alt="AutoLedger" className="h-7 w-auto object-contain transition-transform group-hover:scale-105" />
+              <img src="/logo.png" alt="TradeLedger" className="h-7 w-auto object-contain transition-transform group-hover:scale-105" />
               <span className="inline-flex px-2 py-0.5 rounded-md bg-red-50 text-[#C81E1E] text-[11px] font-bold tracking-wide font-mono border border-red-100 uppercase">
                 Khata Portal
               </span>
@@ -682,7 +682,7 @@ export default function CustomerPortalPage() {
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wider font-extrabold text-slate-300 flex items-center gap-1.5">
                   <Wallet className="w-4 h-4 text-slate-400" />
-                  <span>{isAdvance ? 'Advance Credit (जमा राशि)' : isDue ? 'Khata Outstanding (बाकी)' : 'Settled Balance (चुकता)'}</span>
+                  <span>{isAdvance ? 'Advance Credit Balance' : isDue ? 'Khata Outstanding Balance' : 'Settled Balance'}</span>
                 </span>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black border tracking-wider shadow-xs ${
                   isAdvance 
@@ -701,13 +701,13 @@ export default function CustomerPortalPage() {
                   isAdvance ? 'text-emerald-400' : isDue ? 'text-white' : 'text-slate-100'
                 }`}>
                   <span>{formatPaiseToRupees(absBalance)}</span>
-                  {isAdvance && <span className="text-sm font-black text-emerald-400 font-sans tracking-normal bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">Cr (जमा)</span>}
-                  {isDue && <span className="text-sm font-black text-red-400 font-sans tracking-normal bg-red-500/20 px-2 py-0.5 rounded border border-red-500/30">Dr (बाकी)</span>}
+                  {isAdvance && <span className="text-sm font-black text-emerald-400 font-sans tracking-normal bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">Cr (Advance)</span>}
+                  {isDue && <span className="text-sm font-black text-red-400 font-sans tracking-normal bg-red-500/20 px-2 py-0.5 rounded border border-red-500/30">Dr (Due)</span>}
                   {isSettled && <span className="text-xs font-bold text-slate-400 font-sans">NIL</span>}
                 </div>
                 <p className="text-[11px] text-slate-400 font-mono mt-1.5 leading-relaxed">
                   {isAdvance 
-                    ? 'Your advance balance is safe and will automatically deduct from future spare parts orders.'
+                    ? 'Your advance balance is safe and will automatically deduct from future orders.'
                     : isDue 
                     ? `Outstanding khata balance under ${customer.termsDays || 15}-day payment cycle.`
                     : 'All previous purchases and payments are 100% balanced.'}
@@ -730,7 +730,7 @@ export default function CustomerPortalPage() {
                   }`}
                 >
                   <Zap className="w-4 h-4 fill-current" />
-                  <span>{isDue ? 'Pay Outstanding' : 'Add Advance (जमा)'}</span>
+                  <span>{isDue ? 'Pay Outstanding' : 'Add Advance Credit'}</span>
                 </button>
 
                 <button
@@ -909,7 +909,7 @@ export default function CustomerPortalPage() {
                         ledgerTypeFilter === 'PAYMENT' ? 'bg-emerald-700 text-white' : 'text-emerald-700 hover:bg-emerald-50'
                       }`}
                     >
-                      Payments (जमा)
+                      Payments (Credit)
                     </button>
                     <button
                       onClick={() => setLedgerTypeFilter('INVOICE')}

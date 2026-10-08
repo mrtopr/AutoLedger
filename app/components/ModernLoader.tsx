@@ -25,9 +25,7 @@ export default function ModernLoader({
   showProgress = false,
   variant = 'wheel',
 }: ModernLoaderProps) {
-  const { language } = useLanguage();
-
-  const defaultTitle = language === 'hi' ? 'लोड हो रहा है...' : 'Loading...';
+  const defaultTitle = 'Loading...';
 
   const dimensions = {
     xs: { box: 'w-4 h-4', svg: 18, text: 'text-[10px]', gap: 'gap-1' },

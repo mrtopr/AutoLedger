@@ -105,7 +105,9 @@ export async function GET(req: NextRequest) {
               ovd += inv.grandTotal;
             }
           }
-          totalOutstanding += bal;
+          if (bal > 0n) {
+            totalOutstanding += bal;
+          }
           totalOverdue += ovd;
         }
 
@@ -206,8 +208,11 @@ export async function GET(req: NextRequest) {
       const localCusts = localStore.getCustomers(targetTenantId);
       const localProducts = localStore.getProducts(targetTenantId);
 
-      // Outstanding from local customers
-      totalOutstanding = localCusts.reduce((sum, c) => sum + BigInt(c.balancePaise || 0), 0n);
+      // Outstanding from local customers (only positive receivables)
+      totalOutstanding = localCusts.reduce((sum, c) => {
+        const b = BigInt(c.balancePaise || 0);
+        return sum + (b > 0n ? b : 0n);
+      }, 0n);
       totalOverdue = localCusts.reduce((sum, c) => sum + BigInt(c.overduePaise || 0), 0n);
 
       for (const pr of localProducts) {

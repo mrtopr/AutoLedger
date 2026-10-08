@@ -266,6 +266,96 @@ class LocalStore {
   // Product methods
   getProducts(tenantId?: string): LocalProduct[] {
     if (tenantId) {
+      const filtered = this.data.products.filter((p) => p.tenantId === tenantId);
+      if (filtered.length > 0) return filtered;
+
+      // Seed starter catalog products if tenant is empty
+      const defaultProducts = [
+        {
+          name: 'Motul 4T Plus 10W-30 Engine Oil (900ml)',
+          partNumber: 'OIL-MOT-10W30',
+          brand: 'Motul',
+          category: 'Lubricants & Fluids',
+          hsnCode: '2710',
+          gstRateBp: 1800,
+          unit: 'can',
+          purchasePricePaise: '26500',
+          salePricePaise: '36000',
+          mrpPaise: '42000',
+          stockQty: 48,
+          reorderLevel: 10,
+          models: ['Honda Activa', 'Hero Splendor', 'Bajaj Pulsar', 'Universal'],
+          tenantId,
+        },
+        {
+          name: 'Front Brake Shoe Set (Asbestos Free)',
+          partNumber: 'BRK-SH-FR01',
+          brand: 'KBX / Bosch',
+          category: 'Brakes & Friction',
+          hsnCode: '8714',
+          gstRateBp: 1800,
+          unit: 'set',
+          purchasePricePaise: '14500',
+          salePricePaise: '24000',
+          mrpPaise: '29000',
+          stockQty: 32,
+          reorderLevel: 8,
+          models: ['Hero Splendor Plus', 'HF Deluxe', 'Passion Pro'],
+          tenantId,
+        },
+        {
+          name: 'NGK Spark Plug CPR8EA-9',
+          partNumber: 'SPK-NGK-CPR8',
+          brand: 'NGK',
+          category: 'Electrical & Ignition',
+          hsnCode: '8511',
+          gstRateBp: 1800,
+          unit: 'pcs',
+          purchasePricePaise: '7500',
+          salePricePaise: '13500',
+          mrpPaise: '16000',
+          stockQty: 85,
+          reorderLevel: 15,
+          models: ['Honda Activa 3G/4G/5G/6G', 'Honda Shine'],
+          tenantId,
+        },
+        {
+          name: 'Heavy Duty Rolon Chain Sprocket Kit',
+          partNumber: 'CHN-RLN-041',
+          brand: 'Rolon',
+          category: 'Transmission & Drive',
+          hsnCode: '8714',
+          gstRateBp: 1800,
+          unit: 'kit',
+          purchasePricePaise: '62000',
+          salePricePaise: '89000',
+          mrpPaise: '105000',
+          stockQty: 18,
+          reorderLevel: 5,
+          models: ['Bajaj Pulsar 150/180', 'Discover 125'],
+          tenantId,
+        },
+        {
+          name: 'High Flow Air Filter Element',
+          partNumber: 'FLT-AIR-ACT6',
+          brand: 'Purolator',
+          category: 'Filters & Intake',
+          hsnCode: '8421',
+          gstRateBp: 1800,
+          unit: 'pcs',
+          purchasePricePaise: '9500',
+          salePricePaise: '18000',
+          mrpPaise: '22000',
+          stockQty: 40,
+          reorderLevel: 10,
+          models: ['Honda Activa 6G', 'Dio BS6'],
+          tenantId,
+        }
+      ];
+
+      for (const p of defaultProducts) {
+        this.createProduct(p);
+      }
       return this.data.products.filter((p) => p.tenantId === tenantId);
     }
     return this.data.products;
@@ -341,6 +431,58 @@ class LocalStore {
   // Customer methods
   getCustomers(tenantId?: string): LocalCustomer[] {
     if (tenantId) {
+      const filtered = this.data.customers.filter((c) => c.tenantId === tenantId);
+      if (filtered.length > 0) return filtered;
+
+      // Seed starter B2B customers for this tenant
+      const defaultCustomers = [
+        {
+          name: 'Ramesh Sharma',
+          shopName: 'Sharma General Trade & Supplies',
+          phone: '9822100001',
+          address: 'Shop 4, Main Commercial Market, Pune',
+          gstin: '27AABCS1429B1Z1',
+          customerType: 'RETAILER',
+          balancePaise: '1450000',
+          creditLimitPaise: '5000000',
+          status: 'GREEN',
+          termsDays: 15,
+          overduePaise: '0',
+          tenantId,
+        },
+        {
+          name: 'Sunil Verma',
+          shopName: 'Verma Wholesale Enterprises',
+          phone: '9822100002',
+          address: 'Plot 12, Industrial Area, Mumbai',
+          gstin: '27AABCV8912C1Z2',
+          customerType: 'DISTRIBUTOR',
+          balancePaise: '3200000',
+          creditLimitPaise: '7500000',
+          status: 'GREEN',
+          termsDays: 20,
+          overduePaise: '0',
+          tenantId,
+        },
+        {
+          name: 'Imran Khan',
+          shopName: 'Star Retail Store & Distribution',
+          phone: '9822100003',
+          address: 'Station Road, Near Trade Hub',
+          gstin: null,
+          customerType: 'RETAILER',
+          balancePaise: '850000',
+          creditLimitPaise: '3000000',
+          status: 'YELLOW',
+          termsDays: 10,
+          overduePaise: '250000',
+          tenantId,
+        }
+      ];
+
+      for (const c of defaultCustomers) {
+        this.createCustomer(c);
+      }
       return this.data.customers.filter((c) => c.tenantId === tenantId);
     }
     return this.data.customers;

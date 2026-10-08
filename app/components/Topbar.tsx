@@ -42,9 +42,9 @@ export default function Topbar({ onToggleMobileMenu }: { onToggleMobileMenu?: ()
           <Menu className="w-5 h-5" />
         </button>
         <Link href="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="AutoLedger" className="h-7 w-auto object-contain" />
+          <img src="/logo.png" alt="TradeLedger" className="h-7 w-auto object-contain" />
           <span className="px-1.5 py-0.5 rounded bg-red-50 text-[#C81E1E] text-[9px] font-bold tracking-wider font-mono border border-red-100 uppercase leading-none">
-            DMS
+            ERP
           </span>
         </Link>
       </div>
@@ -54,6 +54,7 @@ export default function Topbar({ onToggleMobileMenu }: { onToggleMobileMenu?: ()
         <button
           onClick={openSearch}
           type="button"
+          data-tour="search-bar"
           className="w-full flex items-center justify-between bg-[#F8F9FA] hover:bg-slate-100 border border-[#CBD5E1] rounded-md px-3 py-1.5 text-xs text-slate-400 transition text-left group shadow-2xs"
         >
           <div className="flex items-center gap-2">
@@ -75,6 +76,7 @@ export default function Topbar({ onToggleMobileMenu }: { onToggleMobileMenu?: ()
         {/* Primary CTA: + New Bill */}
         <Link
           href="/pos"
+          data-tour="new-bill-btn"
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md shadow-2xs transition"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -94,7 +96,7 @@ export default function Topbar({ onToggleMobileMenu }: { onToggleMobileMenu?: ()
         <div className="h-4 w-[1px] bg-slate-200 hidden sm:block" />
 
         {/* User Profile Dropdown */}
-        <div className="relative">
+        <div className="relative" data-tour="user-menu">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
             className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1 rounded-md hover:bg-slate-100 border border-transparent hover:border-[#E2E8F0] transition"

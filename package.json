@@ -1,8 +1,8 @@
 {
-  "name": "autoledger-erp",
+  "name": "tradeledger-erp",
   "version": "1.0.0",
-  "description": "AutoLedger Motorbike Dealership & Workshop ERP",
-  "author": "AutoLedger",
+  "description": "TradeLedger Universal B2B Wholesale, Billing & Khata ERP",
+  "author": "TradeLedger",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -24,8 +24,8 @@
     "db:studio": "prisma studio"
   },
   "build": {
-    "appId": "com.autoledger.erp",
-    "productName": "AutoLedger ERP",
+    "appId": "com.tradeledger.erp",
+    "productName": "TradeLedger ERP",
     "npmRebuild": false,
     "directories": {
       "output": "dist"

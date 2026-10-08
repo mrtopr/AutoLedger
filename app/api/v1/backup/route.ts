@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     let snapshot: any = {
       version: '1.0.0',
       exportedAt: new Date().toISOString(),
-      platform: 'AutoLedger Dealership & Workshop ERP',
+      platform: 'TradeLedger Universal B2B Wholesale & Khata ERP',
       tenantId: targetTenantId,
       data: {
         tenants: [],

@@ -8,6 +8,7 @@ import Topbar from './components/Topbar';
 import MobileNav from './components/MobileNav';
 import ProgressBar from './components/ProgressBar';
 import CommandPalette from './components/CommandPalette';
+import OnboardingTour from './components/OnboardingTour';
 import { Loader2 } from 'lucide-react';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -39,7 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-[#090D16] flex flex-col items-center justify-center text-white">
         <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center p-2 mb-4">
-          <img src="/logo.png" alt="AutoLedger" className="w-full h-full object-contain animate-pulse" />
+          <img src="/logo.png" alt="TradeLedger" className="w-full h-full object-contain animate-pulse" />
         </div>
         <div className="flex items-center gap-2 text-slate-400 text-xs font-medium">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-red-500" />
@@ -62,6 +63,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Global Command Palette (Ctrl+K / Cmd+K) */}
       <CommandPalette />
+
+      {/* Interactive First-Time Onboarding Tour */}
+      <OnboardingTour />
 
       {/* Fixed Desktop Sidebar */}
       <Sidebar />

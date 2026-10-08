@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
 
     let customer: any = null;
-    let tenantName = 'AutoLedger Dealership';
+    let tenantName = 'Apex Trade & Wholesale';
 
     // 1. Try Prisma if available
     const hasDb = await isPostgresAvailable();
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     if (!customer) {
       return NextResponse.json(
         { 
-          error: `No customer account found for +91 ${cleanPhone}. Please ask your dealership/workshop owner to add your phone to their Khata registry.` 
+          error: `No customer account found for +91 ${cleanPhone}. Please ask your merchant or supplier to register your mobile number into their customer accounts directory.` 
         },
         { status: 404 }
       );

@@ -5,8 +5,8 @@ import { LanguageProvider } from "./context/LanguageContext";
 import AppShell from "./AppShell";
 
 export const metadata: Metadata = {
-  title: "Honda Dealership & Workshop ERP | AutoLedger",
-  description: "Enterprise management system for Honda showroom, workshop billing, parts catalog and khata ledger",
+  title: "TradeLedger ERP | Universal B2B Wholesale, Billing & Khata Ledger",
+  description: "Enterprise management system for wholesale distributors, retailers, inventory POS billing, catalog and khata ledger",
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",

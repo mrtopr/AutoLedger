@@ -25,7 +25,11 @@ import {
   Check,
   Zap,
   X,
-  Edit3
+  Edit3,
+  AlertCircle,
+  Store,
+  Phone,
+  Users
 } from 'lucide-react';
 import { calculateInvoiceTax, formatPaiseToRupees, parseRupeesToPaise, LineItemInput } from '@/server/lib/tax';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
@@ -34,6 +38,7 @@ import ClientPortal from '@/app/components/ClientPortal';
 import ModernLoader from '@/app/components/ModernLoader';
 import PageSkeleton from '@/app/components/PageSkeleton';
 import EditCustomerModal from '@/app/components/EditCustomerModal';
+import AddCustomerModal from '@/app/components/AddCustomerModal';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 
@@ -82,8 +87,14 @@ export default function QuickBillPosPage() {
   // Data states
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [catalog, setCatalog] = useState<CatalogOption[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('WALK_IN');
   const [loadingInitial, setLoadingInitial] = useState(true);
+
+  // Walk-in / Non-regular customer quick details
+  const [walkInName, setWalkInName] = useState<string>('');
+  const [walkInPhone, setWalkInPhone] = useState<string>('');
+  const [walkInVehicle, setWalkInVehicle] = useState<string>('');
+  const [showWalkInDetails, setShowWalkInDetails] = useState<boolean>(true);
 
   // Quick Catalog Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +123,7 @@ export default function QuickBillPosPage() {
 
   // Invoice / Success / Customer Modal states
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState<boolean>(false);
+  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState<boolean>(false);
   const [isSubmittingBill, setIsSubmittingBill] = useState<boolean>(false);
   const [isSuccessModal, setIsSuccessModal] = useState<boolean>(false);
   const [issuedInvoiceData, setIssuedInvoiceData] = useState<any>(null);
@@ -121,17 +133,28 @@ export default function QuickBillPosPage() {
 
   const placeOfSupply = tenant?.stateCode ? tenant.stateCode.split('-')[0].trim() : '27';
 
-  const refreshCustomers = async () => {
+  const refreshCustomers = async (selectCustomerId?: string) => {
     try {
       const res = await fetch('/api/v1/customers');
       if (res.ok) {
         const custData = await res.json();
         if (custData.customers) {
           setCustomers(custData.customers);
+          if (selectCustomerId) {
+            setSelectedCustomerId(selectCustomerId);
+          }
         }
       }
     } catch (e) {
       console.error('Error refreshing customers:', e);
+    }
+  };
+
+  const handleCustomerSelectChange = (val: string) => {
+    if (val === 'ADD_NEW_CUSTOMER') {
+      setIsAddCustomerOpen(true);
+    } else {
+      setSelectedCustomerId(val);
     }
   };
 
@@ -197,18 +220,43 @@ export default function QuickBillPosPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const isWalkIn = selectedCustomerId === 'WALK_IN' || !selectedCustomerId;
+
+  // Auto-switch away from Khata if customer is Walk-in
+  useEffect(() => {
+    if (isWalkIn && paymentMode === 'FULL_KHATA') {
+      setPaymentMode('FULL_CASH');
+    }
+  }, [isWalkIn, paymentMode]);
+
   const selectedCustomer = useMemo(() => {
-    return customers.find(c => c.id === selectedCustomerId) || (customers[0] || {
+    if (isWalkIn) {
+      return {
+        id: '',
+        name: walkInName.trim() || 'Walk-in Retail Customer',
+        shopName: walkInName.trim() ? `${walkInName.trim()} (Walk-in)` : '⚡ Walk-in Customer (Counter Cash)',
+        phone: walkInPhone.trim(),
+        balancePaise: '0',
+        creditLimitPaise: '0', // Walk-in customers have ZERO credit limit
+        status: 'WALK_IN',
+        termsDays: 0,
+        address: walkInVehicle.trim() ? `Ref: ${walkInVehicle.trim()}` : 'Counter Retail Cash Sale',
+        gstin: null,
+      };
+    }
+    return customers.find(c => c.id === selectedCustomerId) || {
       id: '',
-      name: 'Counter Walk-in Customer',
-      shopName: 'Cash Retail Counter',
+      name: 'Walk-in Retail Customer',
+      shopName: '⚡ Walk-in Customer (Counter Cash)',
       phone: '',
       balancePaise: '0',
-      creditLimitPaise: '5000000',
-      status: 'GREEN',
+      creditLimitPaise: '0',
+      status: 'WALK_IN',
       termsDays: 0,
-    });
-  }, [customers, selectedCustomerId]);
+      address: 'Counter Retail Cash Sale',
+      gstin: null,
+    };
+  }, [customers, selectedCustomerId, isWalkIn, walkInName, walkInPhone, walkInVehicle]);
 
   // Filter Catalog by search
   const searchResults = useMemo(() => {
@@ -395,6 +443,9 @@ export default function QuickBillPosPage() {
     setCashAmount('0.00');
     setUpiAmount('0.00');
     setUpiRef('');
+    setWalkInName('');
+    setWalkInPhone('');
+    setWalkInVehicle('');
     setPaymentMode('FULL_CASH');
   };
 
@@ -464,112 +515,299 @@ export default function QuickBillPosPage() {
       upiRef: upiRef || '',
       creditBalancePaise: balanceOnCreditPaise.toString(),
       tenant: {
-        name: tenant?.name || 'Royal Auto Spares & Wholesalers',
-        legalName: tenant?.legalName || 'AutoLedger Spares Pvt Ltd',
-        address: tenant?.address || 'Shop No. 12-15, Nana Peth Auto Market, Pune, Maharashtra - 411002',
+        name: tenant?.name || 'Apex Trade & Wholesale',
+        legalName: tenant?.legalName || 'Apex Trade & Wholesale Pvt Ltd',
+        address: tenant?.address || 'Shop No. 12-15, Main Commercial Trade Market - 411002',
         gstin: tenant?.gstin || '27ABCDE1234F1Z5',
         phone: tenant?.phone || '+91 9822100001',
-        email: tenant?.email || 'billing@royalauto.com',
+        email: tenant?.email || 'billing@tradeledger.app',
         stateCode: tenant?.stateCode || '27 - Maharashtra',
         bankName: tenant?.bankDetails?.bankName || 'HDFC Bank',
         accountNumber: tenant?.bankDetails?.accountNumber || '50200012345678',
         ifscCode: tenant?.bankDetails?.ifscCode || 'HDFC0001234',
-        upiId: tenant?.upiId || 'royalauto@okhdfcbank',
+        upiId: tenant?.upiId || 'tradeledger@okhdfcbank',
       },
     };
 
     setCurrentPreviewData(previewInvoice);
+    setIsSuccessModal(false);
     setIsPreviewModalOpen(true);
+  };
+
+  const handlePrintFromSuccessModal = () => {
+    openCurrentBillPreview();
+    setTimeout(() => {
+      window.print();
+    }, 350);
+  };
+
+  const handleWhatsAppFromSuccessModal = () => {
+    const custPhone = issuedInvoiceData?.customer?.phone || selectedCustomer?.phone || '';
+    const cleanPhone = custPhone.replace(/[^0-9]/g, '');
+    const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const invNo = issuedInvoiceData?.invoiceNumber || 'INV';
+    const total = formatPaiseToRupees(issuedInvoiceData?.taxSummary?.grandTotal || issuedInvoiceData?.grandTotalPaise || 0);
+    const paid = formatPaiseToRupees(issuedInvoiceData?.paidNowPaise || 0);
+    const balance = formatPaiseToRupees(issuedInvoiceData?.creditBalancePaise || 0);
+
+    const message = `*TAX INVOICE - ${tenant?.name || 'TradeLedger'}*\n` +
+      `--------------------------------\n` +
+      `*Invoice No:* ${invNo}\n` +
+      `*Customer:* ${issuedInvoiceData?.customer?.shopName || selectedCustomer?.shopName || 'Customer'}\n` +
+      `*Grand Total:* ${total}\n` +
+      `*Paid Amount:* ${paid}\n` +
+      (issuedInvoiceData?.creditBalancePaise > 0n ? `*Balance Due:* ${balance}\n` : '') +
+      `--------------------------------\n` +
+      `Thank you for your business!`;
+
+    const encoded = encodeURIComponent(message);
+    const url = targetPhone 
+      ? `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encoded}` 
+      : `https://api.whatsapp.com/send?text=${encoded}`;
+    
+    window.open(url, '_blank');
   };
 
   if (loadingInitial) {
     return (
       <PageSkeleton 
-        title={language === 'hi' ? 'काउंटर पीओएस लोड हो रहा है...' : 'Initializing POS Billing...'} 
-        subtitle={language === 'hi' ? 'इन्वेंट्री कैटलॉग और ग्राहक डेटा लोड हो रहा है...' : 'Fetching parts catalog, real-time rates, and customer accounts...'} 
+        title="Initializing POS Billing..." 
+        subtitle="Fetching product catalog, real-time rates, and customer accounts..." 
       />
     );
   }
 
   return (
     <div className="space-y-3.5 max-w-7xl mx-auto pb-12">
-      {/* 1. TOP HEADER: BILL INFO & CUSTOMER SELECTION */}
-      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 sm:px-4 sm:py-3 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
-        {/* Left: Bill Meta */}
+      {/* 1. TOP HEADER RIBBON: TITLE & BILLING MODE SWITCHER */}
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 sm:px-4 sm:py-3 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Left: Bill Info */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-[#FEF2F2] text-[#C81E1E] flex items-center justify-center font-bold border border-[#FEE2E2] shrink-0 shadow-2xs">
-            <Receipt className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-lg bg-[#FEF2F2] text-[#C81E1E] flex items-center justify-center font-bold border border-[#FEE2E2] shrink-0 shadow-2xs">
+            <Receipt className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm sm:text-base font-bold text-[#0F172A] tracking-tight">
-                {language === 'hi' ? 'काउंटर बिक्री बिलिंग' : 'Fast Counter POS Billing'}
+                Fast Counter POS Billing
               </h1>
               <span className="text-[10px] font-mono font-semibold bg-[#F1F5F9] text-[#475569] px-2 py-0.5 rounded border border-[#E2E8F0]">
                 {tenant?.settings?.invoicePrefix || 'INV/2026-27/'}DRAFT
               </span>
             </div>
             <div className="text-[11px] text-[#64748B]">
-              Real-time GST calculations · Instant inventory allocation · Double-entry khata
+              Real-time GST calculations · Instant inventory allocation · Double-entry Ledger
             </div>
           </div>
         </div>
 
-        {/* Right: Customer & Khata Pill */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[240px] sm:min-w-[280px]">
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="w-full bg-[#F8F9FA] border border-[#CBD5E1] rounded-md py-1.5 px-3 text-xs font-medium text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
-            >
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.shopName} ({c.name}) · {c.phone}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Edit Customer Button */}
-          {selectedCustomer.id && (
+        {/* Right: Mode Switcher & Quick Navigation */}
+        <div className="flex items-center gap-2">
+          {/* Segmented Mode Control */}
+          <div className="bg-[#F1F5F9] p-0.5 rounded-lg flex items-center border border-[#E2E8F0]">
             <button
               type="button"
-              onClick={() => setIsEditCustomerOpen(true)}
-              className="h-8 px-2.5 flex items-center gap-1 bg-white hover:bg-[#F8F9FA] text-[#334155] text-xs font-medium rounded-md border border-[#CBD5E1] transition shadow-2xs"
-              title="Edit Selected Customer Details"
+              onClick={() => setSelectedCustomerId('WALK_IN')}
+              className={`h-7.5 px-3 rounded-md text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                isWalkIn
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <Edit3 className="w-3.5 h-3.5 text-[#64748B]" />
-              <span className="hidden sm:inline">Edit</span>
+              <Zap className={`w-3.5 h-3.5 ${isWalkIn ? 'fill-slate-950' : 'text-amber-500'}`} />
+              <span>Retail Walk-in</span>
             </button>
-          )}
 
-          {/* Current Khata Balance Pill */}
-          {selectedCustomer.id && (
-            <div className="px-2.5 py-1 bg-[#FFFBEB] border border-[#FEF3C7] rounded-md flex items-center gap-1.5 text-xs font-semibold text-[#92400E] font-mono tabular-nums shadow-2xs">
-              <BookOpen className="w-3 h-3 text-[#D97706]" />
-              <span>Due: {formatPaiseToRupees(Number(selectedCustomer.balancePaise) || 0)}</span>
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={() => {
+                if (isWalkIn && customers.length > 0) {
+                  setSelectedCustomerId(customers[0].id);
+                } else if (customers.length === 0) {
+                  setIsAddCustomerOpen(true);
+                }
+              }}
+              className={`h-7.5 px-3 rounded-md text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                !isWalkIn
+                  ? 'bg-white text-slate-900 font-bold shadow-xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 text-slate-500" />
+              <span>Account Client</span>
+            </button>
+          </div>
 
           <Link
             href="/invoices"
-            className="h-8 inline-flex items-center gap-1.5 px-3 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium text-xs rounded-md border border-[#CBD5E1] transition shadow-2xs"
+            className="h-8 inline-flex items-center gap-1.5 px-3 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium text-xs rounded-lg border border-[#CBD5E1] transition shadow-2xs"
             title="Search Past Bills & Invoices"
           >
             <FileText className="w-3.5 h-3.5 text-[#64748B]" />
-            <span>Past Invoices</span>
-          </Link>
-
-          <Link
-            href="/customers"
-            className="h-8 w-8 flex items-center justify-center bg-white hover:bg-[#F8F9FA] text-[#334155] rounded-md border border-[#CBD5E1] transition shadow-2xs"
-            title={t('khata.add_customer', 'Add New Customer / Garage')}
-          >
-            <UserPlus className="w-3.5 h-3.5 text-[#64748B]" />
+            <span className="hidden sm:inline">Past Invoices</span>
           </Link>
         </div>
       </div>
+
+      {/* 2. CUSTOMER CONTEXT CARD */}
+      {isWalkIn ? (
+        /* Walk-in Retail Card */
+        <div className="bg-gradient-to-r from-amber-50/80 to-amber-50/40 border border-amber-200/90 rounded-xl p-3.5 shadow-2xs space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-2">
+            <div className="flex items-center gap-2 text-xs text-amber-950 font-bold">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <span>Retail Walk-in Customer</span>
+              <span className="text-amber-700 font-normal text-[11px]">— Instant Counter Cash / UPI Billing</span>
+            </div>
+            <span className="px-2 py-0.5 bg-amber-100/80 text-amber-900 border border-amber-300/80 rounded text-[10px] font-mono font-bold w-fit">
+              ZERO CREDIT SALE · CASH ONLY
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <div>
+              <label className="block text-[10px] font-semibold text-amber-900 mb-0.5">Buyer Name (Optional)</label>
+              <input
+                type="text"
+                value={walkInName}
+                onChange={(e) => setWalkInName(e.target.value)}
+                placeholder="e.g. Ramesh Kumar"
+                className="w-full h-8 px-2.5 bg-white border border-amber-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-amber-900 mb-0.5">Mobile Number (For Receipt/SMS)</label>
+              <input
+                type="tel"
+                value={walkInPhone}
+                onChange={(e) => setWalkInPhone(e.target.value)}
+                placeholder="e.g. 9812345678"
+                className="w-full h-8 px-2.5 bg-white border border-amber-300 rounded-lg font-mono text-slate-900 placeholder:text-slate-400 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-amber-900 mb-0.5">Reference / Notes (Optional)</label>
+              <input
+                type="text"
+                value={walkInVehicle}
+                onChange={(e) => setWalkInVehicle(e.target.value)}
+                placeholder="e.g. Counter Cash / PO-102"
+                className="w-full h-8 px-2.5 bg-white border border-amber-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs"
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Registered Account Customer Card */
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-2xs space-y-3">
+          {/* Top Row: Dropdown selector & Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px] max-w-lg">
+                <select
+                  value={selectedCustomerId}
+                  onChange={(e) => handleCustomerSelectChange(e.target.value)}
+                  className="w-full bg-[#F8F9FA] hover:bg-white border border-[#CBD5E1] rounded-lg py-1.5 px-3 text-xs font-bold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden shadow-2xs cursor-pointer transition truncate"
+                >
+                  {customers.length > 0 ? (
+                    <optgroup label="Registered Business Clients & Retailers">
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.shopName} ({c.name}) · {c.phone}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : (
+                    <option value="ADD_NEW_CUSTOMER" className="text-blue-600 font-medium bg-blue-50">
+                      + No registered accounts yet (Click to add)
+                    </option>
+                  )}
+                  <option value="ADD_NEW_CUSTOMER" className="text-blue-700 font-bold bg-blue-50">
+                    + Add New Customer / Client...
+                  </option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAddCustomerOpen(true)}
+                className="h-8 px-3 flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-[#C81E1E] text-xs font-bold rounded-lg border border-red-200 transition shadow-2xs cursor-pointer shrink-0"
+                title="Add New Customer Account"
+              >
+                <UserPlus className="w-3.5 h-3.5 text-[#C81E1E]" />
+                <span>+ Add Client</span>
+              </button>
+
+              {selectedCustomer.id && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditCustomerOpen(true)}
+                  className="h-8 px-2.5 flex items-center gap-1 bg-white hover:bg-[#F8F9FA] text-[#334155] text-xs font-medium rounded-lg border border-[#CBD5E1] transition shadow-2xs cursor-pointer shrink-0"
+                  title="Edit Selected Customer Details"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-[#64748B]" />
+                  <span className="hidden sm:inline">Edit</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Row: Selected Customer Live Metrics */}
+          {selectedCustomer.id && (
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 truncate max-w-[200px] sm:max-w-xs" title={selectedCustomer.shopName || selectedCustomer.name}>
+                  <Store className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <span className="truncate">{selectedCustomer.shopName || selectedCustomer.name}</span>
+                </div>
+                {selectedCustomer.phone && (
+                  <span className="text-slate-500 font-mono text-[11px] flex items-center gap-1 shrink-0">
+                    <Phone className="w-3 h-3 text-slate-400" />
+                    {selectedCustomer.phone}
+                  </span>
+                )}
+                {selectedCustomer.address && (
+                  <span className="text-slate-400 text-[11px] hidden md:inline truncate max-w-[180px]" title={selectedCustomer.address}>
+                    · {selectedCustomer.address}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 font-mono text-[11px]">
+                {/* Due / Advance Balance Badge */}
+                {Number(selectedCustomer.balancePaise || 0) > 0 ? (
+                  <div className="px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold bg-amber-50 text-amber-900 border-amber-200">
+                    <BookOpen className="w-3 h-3 text-amber-600" />
+                    <span>Outstanding: {formatPaiseToRupees(Number(selectedCustomer.balancePaise))}</span>
+                  </div>
+                ) : Number(selectedCustomer.balancePaise || 0) < 0 ? (
+                  <div className="px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold bg-emerald-50 text-emerald-800 border-emerald-200">
+                    <Wallet className="w-3 h-3 text-emerald-600" />
+                    <span>Advance Credit: {formatPaiseToRupees(Math.abs(Number(selectedCustomer.balancePaise)))}</span>
+                  </div>
+                ) : (
+                  <div className="px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold bg-slate-50 text-slate-700 border-slate-200">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>Balance: ₹0.00 (All Clear)</span>
+                  </div>
+                )}
+
+                {/* Credit Limit */}
+                <div className="px-2.5 py-1 bg-slate-50 text-slate-700 border border-slate-200 rounded-md">
+                  <span>Limit: {formatPaiseToRupees(Number(selectedCustomer.creditLimitPaise) || 5000000)}</span>
+                </div>
+
+                {/* Terms */}
+                <div className="px-2 py-1 bg-slate-50 text-slate-600 border border-slate-200 rounded-md">
+                  <span>{selectedCustomer.termsDays || 15} Days Terms</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. MAIN 2-COLUMN WORKSPACE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
@@ -809,14 +1047,23 @@ export default function QuickBillPosPage() {
 
                 <button
                   type="button"
-                  onClick={() => setPaymentMode('FULL_KHATA')}
+                  onClick={() => {
+                    if (isWalkIn) {
+                      alert('Walk-in retail customers do not have a credit account. Please select Cash or UPI, or register them as a business client.');
+                      return;
+                    }
+                    setPaymentMode('FULL_KHATA');
+                  }}
                   className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
-                    paymentMode === 'FULL_KHATA' 
+                    isWalkIn 
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60' 
+                      : paymentMode === 'FULL_KHATA' 
                       ? 'bg-[#D97706] text-white border-[#D97706] font-semibold' 
                       : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
                   }`}
+                  title={isWalkIn ? 'Credit is disabled for Walk-in Retail customers (Cash/UPI only)' : 'Full payment on Credit Ledger'}
                 >
-                  <span>📖 Khata</span>
+                  <span>{isWalkIn ? '🚫 No Credit' : '📖 Credit Ledger'}</span>
                   {paymentMode === 'FULL_KHATA' && <Check className="w-3.5 h-3.5 text-white" />}
                 </button>
 
@@ -982,12 +1229,12 @@ export default function QuickBillPosPage() {
                 {isSubmittingBill ? (
                   <>
                     <ModernLoader size="xs" />
-                    <span>{language === 'hi' ? 'बिल जारी हो रहा है...' : 'Issuing Bill & Recording...'}</span>
+                    <span>Issuing Bill & Recording...</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>{language === 'hi' ? 'बिल जारी करें और बिक्री दर्ज करें' : 'Issue Bill & Record Sale'}</span>
+                    <span>Issue Bill & Record Sale</span>
                   </>
                 )}
               </button>
@@ -1020,86 +1267,108 @@ export default function QuickBillPosPage() {
       {/* 3. SUCCESS / BILL CONFIRMATION MODAL */}
       {isSuccessModal && issuedInvoiceData && (
         <ClientPortal>
-          <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
-            <div className="bg-white border border-[#CBD5E1] rounded-lg max-w-md w-full p-6 space-y-4 shadow-xl relative">
-              <div className="flex items-start justify-between gap-2 border-b border-[#E2E8F0] pb-3">
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-5 h-5 text-[#16A34A]" />
+          <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150 print:hidden">
+            <div className="bg-white border border-[#CBD5E1] rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-150 print:hidden">
+              
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] text-[#16A34A] flex items-center justify-center font-bold shadow-2xs shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[#0F172A]">Sale Bill Issued & Recorded</h3>
-                    <div className="text-xs font-mono font-semibold text-[#166534]">{issuedInvoiceData.invoiceNumber}</div>
+                    <h3 className="text-sm font-bold text-[#0F172A] leading-tight">Sale Bill Issued Successfully</h3>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[11px] font-mono font-bold text-[#1D4ED8] bg-[#EFF6FF] border border-[#BFDBFE] px-2 py-0.5 rounded">
+                        {issuedInvoiceData.invoiceNumber}
+                      </span>
+                      <span className="text-[10px] text-[#64748B]">· Recorded</span>
+                    </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsSuccessModal(false)}
-                  className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A]"
+                  className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition"
                   title="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="bg-[#F8F9FA] p-3.5 rounded-md border border-[#E2E8F0] space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-[#64748B]">Customer:</span>
-                  <span className="font-semibold text-[#0F172A]">{issuedInvoiceData.customer?.shopName || 'Walk-in Customer'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#64748B]">Grand Total:</span>
-                  <span className="font-mono tabular-nums font-bold text-[#0F172A]">
-                    {formatPaiseToRupees(issuedInvoiceData?.taxSummary?.grandTotal || issuedInvoiceData?.grandTotalPaise || 0)}
+              {/* Receipt Summary Card */}
+              <div className="bg-[#F8F9FA] p-4 rounded-xl border border-[#E2E8F0] space-y-3">
+                <div className="flex items-center justify-between text-xs pb-2.5 border-b border-[#E2E8F0]">
+                  <span className="text-[#64748B] font-medium">Customer Account</span>
+                  <span className="font-bold text-[#0F172A] truncate max-w-[200px]">
+                    {issuedInvoiceData.customer?.shopName || issuedInvoiceData.customer?.name || 'Walk-in Retail Counter'}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-[#64748B]">Paid at Counter:</span>
-                  <span className="font-mono tabular-nums font-bold text-[#166534]">
-                    {formatPaiseToRupees(issuedInvoiceData.paidNowPaise)}
-                  </span>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-white rounded-lg border border-[#E2E8F0]">
+                    <div className="text-[10px] uppercase font-bold text-[#64748B]">Grand Total</div>
+                    <div className="text-base font-bold font-mono text-[#0F172A] mt-0.5 tabular-nums">
+                      {formatPaiseToRupees(issuedInvoiceData?.taxSummary?.grandTotal || issuedInvoiceData?.grandTotalPaise || 0)}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-white rounded-lg border border-[#E2E8F0]">
+                    <div className="text-[10px] uppercase font-bold text-[#15803D]">Paid at Counter</div>
+                    <div className="text-base font-bold font-mono text-[#16A34A] mt-0.5 tabular-nums">
+                      {formatPaiseToRupees(issuedInvoiceData.paidNowPaise)}
+                    </div>
+                  </div>
                 </div>
+
                 {issuedInvoiceData.creditBalancePaise > 0n && (
-                  <div className="flex justify-between border-t border-[#E2E8F0] pt-1.5">
-                    <span className="text-[#64748B]">Added to Khata Due:</span>
-                    <span className="font-mono tabular-nums font-bold text-[#92400E]">
+                  <div className="flex items-center justify-between p-2.5 bg-[#FFFBEB] border border-[#FEF3C7] rounded-lg text-xs">
+                    <span className="text-[#92400E] font-medium">Added to Balance Due:</span>
+                    <span className="font-mono tabular-nums font-bold text-[#B45309]">
                       {formatPaiseToRupees(issuedInvoiceData.creditBalancePaise)}
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* Actions */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  onClick={openCurrentBillPreview}
-                  className="h-8.5 bg-[#0F172A] hover:bg-[#1E293B] text-white font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>View / Print PDF</span>
-                </button>
-                <button
-                  onClick={openCurrentBillPreview}
-                  className="h-8.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  <span>WhatsApp Bill</span>
-                </button>
+              {/* Action Buttons Grid */}
+              <div className="space-y-2 pt-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handlePrintFromSuccessModal}
+                    className="h-9 bg-[#0F172A] hover:bg-[#1E293B] text-white font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print / PDF</span>
+                  </button>
+                  <button
+                    onClick={handleWhatsAppFromSuccessModal}
+                    className="h-9 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>WhatsApp Bill</span>
+                  </button>
+                </div>
+
                 {issuedInvoiceData.creditBalancePaise > 0n && (
                   <button
                     onClick={() => setIsRazorpayModalOpen(true)}
-                    className="h-8.5 bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 border border-[#BFDBFE] transition col-span-2 shadow-2xs"
+                    className="w-full h-8.5 bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 border border-[#BFDBFE] transition shadow-2xs"
                   >
-                    <Zap className="w-3 h-3 text-[#2563EB]" />
-                    <span>Send Razorpay Payment Link (WhatsApp)</span>
+                    <Zap className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <span>Send UPI Payment Link (WhatsApp)</span>
                   </button>
                 )}
+
+                <button
+                  onClick={startNextBill}
+                  className="w-full h-9 bg-[#C81E1E] hover:bg-[#A81818] text-white font-bold rounded-lg text-xs transition flex items-center justify-center gap-2 shadow-2xs"
+                >
+                  <span>Start Next Bill</span>
+                  <kbd className="text-[10px] font-mono text-white/80 bg-red-900/50 px-1.5 py-0.5 rounded">F2</kbd>
+                </button>
               </div>
 
-              <button
-                onClick={startNextBill}
-                className="w-full h-8.5 bg-[#C81E1E] hover:bg-[#A81818] text-white font-semibold rounded-md text-xs transition shadow-2xs"
-              >
-                Start Next Bill (F2)
-              </button>
             </div>
           </div>
         </ClientPortal>
@@ -1133,6 +1402,17 @@ export default function QuickBillPosPage() {
           customer={selectedCustomer}
           onSuccess={() => {
             refreshCustomers();
+          }}
+        />
+      )}
+
+      {/* Add Customer Modal */}
+      {isAddCustomerOpen && (
+        <AddCustomerModal
+          isOpen={isAddCustomerOpen}
+          onClose={() => setIsAddCustomerOpen(false)}
+          onSuccess={(newCust) => {
+            refreshCustomers(newCust.id);
           }}
         />
       )}

@@ -183,13 +183,13 @@ export async function POST(req: NextRequest) {
       `*Order Ref:* ${invoiceNumber}\n` +
       `*Workshop:* ${customer.shopName} (${customer.name})\n` +
       `*Phone:* +91 ${customer.phone}\n` +
-      `*Dealership:* ${tenant?.name || 'Honda Dealership'}\n\n` +
+      `*Supplier:* ${tenant?.name || 'Apex Trade & Wholesale'}\n\n` +
       `*Items Requested:*\n${itemListSummary}\n\n` +
       `*Total Order Value:* ₹${totalRupees}\n` +
       `*Payment Terms:* Khata Credit Requisition\n` +
       `*Notes:* ${notes || 'Ready for packing & dispatch'}\n` +
       `--------------------------------\n` +
-      `_Generated via AutoLedger Customer Portal_`
+      `_Generated via TradeLedger Client Portal_`
     );
 
     return NextResponse.json({

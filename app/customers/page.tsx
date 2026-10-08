@@ -21,12 +21,16 @@ import {
   Receipt,
   ArrowUpRight,
   CreditCard,
-  Edit3
+  Edit3,
+  Trash2,
+  MoreVertical,
+  BookOpen
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
 import RazorpayModal from '@/app/components/RazorpayModal';
 import ClientPortal from '@/app/components/ClientPortal';
 import EditCustomerModal from '@/app/components/EditCustomerModal';
+import BulkOpeningBalanceModal from '@/app/components/BulkOpeningBalanceModal';
 
 interface CustomerItem {
   id: string;
@@ -44,7 +48,7 @@ interface CustomerItem {
 }
 
 export default function CustomersPage() {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,6 +56,9 @@ export default function CustomersPage() {
 
   // Edit Customer Modal
   const [editingCustomer, setEditingCustomer] = useState<CustomerItem | null>(null);
+
+  // Bulk Opening Balance Modal
+  const [isBulkOpeningModalOpen, setIsBulkOpeningModalOpen] = useState(false);
 
   // Add Customer Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -61,6 +68,20 @@ export default function CustomersPage() {
   // Razorpay Payment Link Modal
   const [paymentModalCustomer, setPaymentModalCustomer] = useState<CustomerItem | null>(null);
 
+  // Row Action Menu Dropdown State
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.customer-action-menu')) {
+        setActiveMenuId(null);
+      }
+    };
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
+
   const [newCustomer, setNewCustomer] = useState({
     shopName: '',
     name: '',
@@ -69,7 +90,10 @@ export default function CustomersPage() {
     gstin: '',
     creditLimitRupees: '50000',
     paymentTermsDays: '15',
-    customerType: 'GARAGE',
+    customerType: 'RETAILER',
+    openingBalanceRupees: '',
+    openingBalanceType: 'DUE' as 'DUE' | 'ADVANCE',
+    openingBalanceNarration: 'Previous register ledger migration',
   });
 
   const fetchCustomers = async () => {
@@ -90,6 +114,25 @@ export default function CustomersPage() {
       console.error('Error fetching customers:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete customer "${name}"? This will remove their record from the active directory.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/v1/customers/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        fetchCustomers();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to delete customer');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error deleting customer');
     }
   };
 
@@ -116,6 +159,7 @@ export default function CustomersPage() {
     try {
       setSubmitting(true);
       const limitPaise = parseRupeesToPaise(newCustomer.creditLimitRupees || '0');
+      const openingPaise = parseRupeesToPaise(newCustomer.openingBalanceRupees || '0');
 
       const res = await fetch('/api/v1/customers', {
         method: 'POST',
@@ -129,6 +173,9 @@ export default function CustomersPage() {
           creditLimitPaise: limitPaise.toString(),
           paymentTermsDays: parseInt(newCustomer.paymentTermsDays, 10) || 15,
           customerType: newCustomer.customerType,
+          openingBalancePaise: openingPaise.toString(),
+          openingBalanceType: newCustomer.openingBalanceType,
+          openingBalanceNarration: newCustomer.openingBalanceNarration || undefined,
         }),
       });
 
@@ -147,7 +194,10 @@ export default function CustomersPage() {
         gstin: '',
         creditLimitRupees: '50000',
         paymentTermsDays: '15',
-        customerType: 'GARAGE',
+        customerType: 'RETAILER',
+        openingBalanceRupees: '',
+        openingBalanceType: 'DUE',
+        openingBalanceNarration: 'Previous register ledger migration',
       });
       fetchCustomers();
     } catch (err: any) {
@@ -181,69 +231,123 @@ export default function CustomersPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0F172A]">
-                {t('khata.title', 'Customer & Garage Khata Ledger')}
+                Customer Accounts & Credit Directory
               </h1>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]">
                 {customers.length} Accounts
               </span>
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
-              {t('khata.subtitle', 'Real-time double-entry credit ledger, payment terms, aging analysis, and settlement dispatch.')}
+              Real-time double-entry credit ledger, payment terms, aging analysis, and settlement dispatch.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            onClick={() => setIsBulkOpeningModalOpen(true)}
+            className="h-8 px-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            title="Input all past due / advance balances for multiple customers at once"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Batch Opening Balances</span>
+          </button>
+
+          <button
             onClick={() => setIsAddModalOpen(true)}
             className="h-8 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>{t('khata.add_customer', 'Register Khata')}</span>
+            <span>Add Customer</span>
           </button>
         </div>
       </div>
 
       {/* 4-Stat Metric Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-[#64748B] uppercase tracking-wider block">
-            {totalReceivablesPaise > 0n ? 'Total Outstanding (Baaki)' : totalAdvancesPaise > 0n ? 'Advance Deposited (Jama)' : 'Total Outstanding Khata'}
-          </span>
-          <div className={`text-lg font-bold font-mono mt-1 tabular-nums ${totalReceivablesPaise > 0n ? 'text-[#0F172A]' : totalAdvancesPaise > 0n ? 'text-[#15803D]' : 'text-[#0F172A]'}`}>
-            {totalReceivablesPaise > 0n ? formatPaiseToRupees(totalReceivablesPaise) : totalAdvancesPaise > 0n ? formatPaiseToRupees(totalAdvancesPaise) : '₹0.00'}
+        {/* Card 1: Total Receivables */}
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wider">
+              {totalReceivablesPaise > 0n ? 'Total Receivables' : totalAdvancesPaise > 0n ? 'Advance Received' : 'Total Outstanding'}
+            </span>
+            <div className="w-7 h-7 rounded-md bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center border border-[#DBEAFE]">
+              <CreditCard className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <span className="text-[11px] text-[#64748B] block mt-0.5">
-            {totalReceivablesPaise > 0n 
-              ? `Total active receivables ${totalAdvancesPaise > 0n ? `(₹${(Number(totalAdvancesPaise)/100).toFixed(2)} advance)` : ''}`
-              : totalAdvancesPaise > 0n
-              ? 'Total advance credit deposited'
-              : 'All customer accounts settled'}
-          </span>
+          <div>
+            <div className={`text-xl font-bold font-mono tabular-nums ${totalReceivablesPaise > 0n ? 'text-[#0F172A]' : totalAdvancesPaise > 0n ? 'text-[#15803D]' : 'text-[#0F172A]'}`}>
+              {totalReceivablesPaise > 0n ? formatPaiseToRupees(totalReceivablesPaise) : totalAdvancesPaise > 0n ? formatPaiseToRupees(totalAdvancesPaise) : '₹0.00'}
+            </div>
+            <div className="text-[11px] text-[#64748B] mt-0.5 truncate">
+              {totalReceivablesPaise > 0n 
+                ? `Active receivables ${totalAdvancesPaise > 0n ? `(${formatPaiseToRupees(totalAdvancesPaise)} advance)` : ''}`
+                : totalAdvancesPaise > 0n
+                ? 'Advance credit deposited'
+                : 'All accounts settled'}
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-[#DC2626] uppercase tracking-wider block">Overdue Receivables</span>
-          <div className="text-lg font-bold font-mono text-[#DC2626] mt-1 tabular-nums">
-            {formatPaiseToRupees(totalOverduePaise)}
+        {/* Card 2: Overdue Receivables */}
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[#DC2626] uppercase tracking-wider">
+              Overdue Receivables
+            </span>
+            <div className="w-7 h-7 rounded-md bg-[#FEF2F2] text-[#DC2626] flex items-center justify-center border border-[#FEE2E2]">
+              <AlertTriangle className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <span className="text-[11px] text-[#64748B] block mt-0.5">{redCount} accounts in overdue status</span>
+          <div>
+            <div className="text-xl font-bold font-mono text-[#DC2626] tabular-nums">
+              {formatPaiseToRupees(totalOverduePaise)}
+            </div>
+            <div className="text-[11px] text-[#64748B] mt-0.5">
+              {redCount} accounts in overdue status
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-[#16A34A] uppercase tracking-wider block">Healthy Accounts (Green)</span>
-          <div className="text-lg font-bold font-mono text-[#16A34A] mt-1 tabular-nums">
-            {greenCount}
+        {/* Card 3: Healthy Accounts */}
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[#16A34A] uppercase tracking-wider">
+              Healthy Accounts
+            </span>
+            <div className="w-7 h-7 rounded-md bg-[#F0FDF4] text-[#16A34A] flex items-center justify-center border border-[#DCFCE7]">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <span className="text-[11px] text-[#64748B] block mt-0.5">Within credit limit & terms</span>
+          <div>
+            <div className="text-xl font-bold font-mono text-[#16A34A] tabular-nums">
+              {greenCount}
+            </div>
+            <div className="text-[11px] text-[#64748B] mt-0.5">
+              Within credit limit & terms
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-[#64748B] uppercase tracking-wider block">Total Garage Debtors</span>
-          <div className="text-lg font-bold font-mono text-[#0F172A] mt-1 tabular-nums">
-            {customers.length}
+        {/* Card 4: Total B2B Accounts */}
+        <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wider">
+              Total B2B Accounts
+            </span>
+            <div className="w-7 h-7 rounded-md bg-[#F1F5F9] text-[#475569] flex items-center justify-center border border-[#E2E8F0]">
+              <Users className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <span className="text-[11px] text-[#64748B] block mt-0.5">B2B workshops & counter accounts</span>
+          <div>
+            <div className="text-xl font-bold font-mono text-[#0F172A] tabular-nums">
+              {customers.length}
+            </div>
+            <div className="text-[11px] text-[#64748B] mt-0.5">
+              Registered business clients
+            </div>
+          </div>
         </div>
       </div>
 
@@ -255,7 +359,7 @@ export default function CustomersPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('khata.search_customer', 'Search garage name, proprietor, or phone...')}
+            placeholder="Search business name, contact person, or phone..."
             className="w-full h-8 pl-9 pr-3 text-xs bg-[#F8F9FA] border border-[#E2E8F0] rounded-md text-[#0F172A] placeholder-[#94A3B8] focus:bg-white focus:border-[#C81E1E] focus:outline-hidden transition"
           />
         </div>
@@ -289,8 +393,8 @@ export default function CustomersPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#F8F9FA] border-b border-[#E2E8F0] text-[10px] font-semibold text-[#64748B] uppercase tracking-wider">
-                <th className="py-3 px-4">Garage / Business Name</th>
-                <th className="py-3 px-4">Proprietor & Phone</th>
+                <th className="py-3 px-4">Business / Shop Name</th>
+                <th className="py-3 px-4">Contact & Phone</th>
                 <th className="py-3 px-4">GSTIN / Type</th>
                 <th className="py-3 px-4 text-right">Credit Limit (₹)</th>
                 <th className="py-3 px-4 text-right">Outstanding (₹)</th>
@@ -345,7 +449,9 @@ export default function CustomersPage() {
 
                       <td className="py-3 px-4">
                         <div className="font-mono text-[11px] text-[#475569]">{cust.gstin || 'URP'}</div>
-                        <span className="text-[10px] text-[#64748B] uppercase">{cust.customerType || 'GARAGE'}</span>
+                        <span className="text-[10px] text-[#64748B] uppercase">
+                          {cust.customerType === 'GARAGE' ? 'WORKSHOP' : (cust.customerType || 'RETAILER')}
+                        </span>
                       </td>
 
                       <td className="py-3 px-4 text-right font-mono text-xs text-[#64748B] tabular-nums">
@@ -362,8 +468,8 @@ export default function CustomersPage() {
                             <span className="ml-1 text-[9px] font-bold text-[#DC2626] bg-[#FEF2F2] px-1 py-0.2 rounded border border-[#FECACA]">Dr</span>
                           ) : null}
                         </div>
-                        <span className={`text-[10px] ${isCustAdvance ? 'text-[#16A34A] font-medium' : utilizationPct > 90 ? 'text-[#DC2626] font-semibold' : 'text-[#64748B]'}`}>
-                          {isCustAdvance ? 'Advance Credit (0% used)' : `${utilizationPct}% limit used`}
+                        <span className={`text-[10px] ${isCustAdvance ? 'text-[#16A34A] font-semibold' : utilizationPct > 90 ? 'text-[#DC2626] font-semibold' : 'text-[#64748B]'}`}>
+                          {isCustAdvance ? 'Advance Credit' : isCustDue ? `${utilizationPct}% limit used` : 'All Settled'}
                         </span>
                       </td>
 
@@ -393,39 +499,90 @@ export default function CustomersPage() {
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setEditingCustomer(cust)}
-                            className="h-7 px-2 bg-white hover:bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1] rounded-lg text-[11px] font-medium transition inline-flex items-center gap-1"
-                            title="Edit Customer Details"
-                          >
-                            <Edit3 className="w-3 h-3 text-[#64748B]" />
-                            <span>Edit</span>
-                          </button>
-                          <Link
-                            href={`/customers/${cust.id}`}
-                            className="h-7 px-2.5 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1] rounded-lg text-[11px] font-medium transition inline-flex items-center"
-                          >
-                            Ledger
-                          </Link>
-                          {balPaise > 0n && (
-                            <button
-                              type="button"
-                              onClick={() => setPaymentModalCustomer(cust)}
-                              className="h-7 px-2.5 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] rounded-lg text-[11px] font-semibold transition inline-flex items-center gap-1"
-                              title="Generate Instant UPI / Razorpay Payment Link"
-                            >
-                              <Zap className="w-3 h-3 text-[#16A34A]" />
-                              <span>Pay Link</span>
-                            </button>
-                          )}
+                        <div className="relative inline-flex items-center gap-1.5 customer-action-menu">
+                          {/* 1. Primary Action: Bill */}
                           <Link
                             href={`/pos?customerId=${cust.id}`}
-                            className="h-7 px-3 bg-[#C81E1E] hover:bg-[#A81818] text-white rounded-lg text-[11px] font-semibold transition inline-flex items-center"
+                            className="h-7 px-2.5 bg-[#C81E1E] hover:bg-[#A81818] text-white rounded-md text-[11px] font-semibold transition inline-flex items-center gap-1 shadow-2xs"
+                            title="Start POS Bill for this client"
                           >
-                            Bill
+                            <Receipt className="w-3 h-3" />
+                            <span>Bill</span>
                           </Link>
+
+                          {/* 2. Secondary Action: Ledger */}
+                          <Link
+                            href={`/customers/${cust.id}`}
+                            className="h-7 px-2.5 bg-white hover:bg-[#F8F9FA] text-[#0F172A] border border-[#CBD5E1] rounded-md text-[11px] font-medium transition inline-flex items-center shadow-2xs"
+                            title="View Account Ledger"
+                          >
+                            <span>Ledger</span>
+                          </Link>
+
+                          {/* 3. More Actions Dropdown Toggle */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(activeMenuId === cust.id ? null : cust.id);
+                            }}
+                            className={`w-7 h-7 flex items-center justify-center rounded-md border transition cursor-pointer ${
+                              activeMenuId === cust.id
+                                ? 'bg-[#0F172A] text-white border-[#0F172A]'
+                                : 'bg-white hover:bg-[#F8F9FA] text-[#64748B] hover:text-[#0F172A] border-[#CBD5E1]'
+                            }`}
+                            title="More Actions"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Floating Dropdown Menu */}
+                          {activeMenuId === cust.id && (
+                            <div 
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute right-0 top-8 z-50 w-44 bg-white border border-[#E2E8F0] rounded-lg shadow-lg py-1 text-left animate-in fade-in zoom-in-95 duration-100"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  setEditingCustomer(cust);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-[#334155] hover:bg-[#F8F9FA] flex items-center gap-2 font-medium transition cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-[#64748B]" />
+                                <span>Edit Profile</span>
+                              </button>
+
+                              {balPaise > 0n && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    setPaymentModalCustomer(cust);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-[#15803D] hover:bg-[#F0FDF4] flex items-center gap-2 font-medium transition cursor-pointer"
+                                >
+                                  <Zap className="w-3.5 h-3.5 text-[#16A34A]" />
+                                  <span>Send Pay Link / QR</span>
+                                </button>
+                              )}
+
+                              <div className="my-1 border-t border-[#F1F5F9]" />
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  handleDeleteCustomer(cust.id, cust.shopName || cust.name);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-[#DC2626] hover:bg-[#FEF2F2] flex items-center gap-2 font-medium transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-[#DC2626]" />
+                                <span>Delete Customer</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -560,6 +717,64 @@ export default function CustomersPage() {
                   </div>
                 </div>
 
+                {/* Opening Balance / Previous Udhar Section */}
+                <div className="bg-amber-50/70 border border-amber-200/80 p-3.5 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-amber-700" />
+                      Opening Balance / Previous Udhar (Optional)
+                    </span>
+                    <span className="text-[10px] text-amber-700 font-medium">
+                      Sets initial ledger balance
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                        Balance Type
+                      </label>
+                      <select
+                        value={newCustomer.openingBalanceType}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, openingBalanceType: e.target.value as 'DUE' | 'ADVANCE' })}
+                        className={`w-full h-8.5 px-2.5 rounded-xl text-xs font-bold border transition ${
+                          newCustomer.openingBalanceType === 'DUE'
+                            ? 'bg-white text-red-700 border-red-300'
+                            : 'bg-white text-emerald-700 border-emerald-300'
+                        }`}
+                      >
+                        <option value="DUE">🔴 Customer Owes (Previous Udhar)</option>
+                        <option value="ADVANCE">🟢 Customer Has Advance (Credit)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                        Opening Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={newCustomer.openingBalanceRupees}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, openingBalanceRupees: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full h-8.5 px-3 bg-white border border-amber-300 rounded-xl text-xs font-bold font-mono text-slate-900 focus:border-[#C81E1E] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={newCustomer.openingBalanceNarration}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, openingBalanceNarration: e.target.value })}
+                      placeholder="e.g. Previous register ledger migration"
+                      className="w-full h-7.5 px-2.5 bg-white/90 border border-amber-200 rounded-lg text-[11px] text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-[#C81E1E]"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2.5 pt-3 border-t border-[#E2E8F0]">
                   <button
                     type="button"
@@ -581,6 +796,14 @@ export default function CustomersPage() {
           </div>
         </ClientPortal>
       )}
+
+      {/* ----------------- BULK OPENING BALANCE MODAL ----------------- */}
+      <BulkOpeningBalanceModal
+        isOpen={isBulkOpeningModalOpen}
+        onClose={() => setIsBulkOpeningModalOpen(false)}
+        onSuccess={fetchCustomers}
+        existingCustomers={customers}
+      />
 
       {/* ----------------- RAZORPAY PAYMENT LINK MODAL ----------------- */}
       {paymentModalCustomer && (

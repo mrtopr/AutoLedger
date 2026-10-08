@@ -102,12 +102,12 @@ export async function POST(req: NextRequest) {
         status: customer.status || 'GREEN',
       },
       dealership: {
-        id: tenant?.id || 'tenant-honda-1',
-        name: tenant?.name || 'AutoLedger Dealership',
+        id: tenant?.id || 'tenant-apex-1',
+        name: tenant?.name || 'Apex Trade & Wholesale',
         phone: tenant?.phone || '+91 98221 00001',
-        address: tenant?.address || 'Main Market, Workshop Area',
+        address: tenant?.address || 'Main Market, Commercial Trade Hub',
         gstin: tenant?.gstin,
-        upiId: tenant?.upiId || 'royalauto@okhdfcbank',
+        upiId: tenant?.upiId || 'tradeledger@okhdfcbank',
       }
     });
 

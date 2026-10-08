@@ -28,13 +28,13 @@ export default function HeaderNav() {
   const isManager = user?.role === 'MANAGER';
   const isManagerOrOwner = isOwner || isManager;
 
-  const brandInitial = tenant?.name ? tenant.name.trim().charAt(0).toUpperCase() : 'B';
-  const brandName = tenant?.name || 'B2B Digital Khata';
+  const brandInitial = tenant?.name ? tenant.name.trim().charAt(0).toUpperCase() : 'T';
+  const brandName = tenant?.name || 'TradeLedger B2B';
   const brandSubtext = tenant?.address 
     ? `${tenant.address.split(',')[0]}${tenant.gstin ? ` • GST: ${tenant.gstin}` : ''}`
     : tenant?.gstin 
     ? `GST: ${tenant.gstin}` 
-    : 'Motorcycle Spares & Wholesale';
+    : 'Universal Wholesale & B2B Trade';
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
@@ -42,13 +42,13 @@ export default function HeaderNav() {
         <div className="flex items-center space-x-6">
           <Link href="/" className="flex items-center space-x-3 group">
             <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center overflow-hidden p-0.5 shadow-sm border border-slate-800">
-              <img src="/logo.png" alt="AutoLedger Emblem" className="w-full h-full object-contain" />
+              <img src="/logo.png" alt="TradeLedger Emblem" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="font-bold text-slate-900 text-base leading-tight tracking-tight flex items-center gap-2">
                 {brandName}
-                <span className="text-[10px] bg-blue-50 text-blue-700 font-mono font-bold px-1.5 py-0.5 rounded border border-blue-200">
-                  B2B KHATA
+                <span className="text-[10px] bg-red-50 text-[#C81E1E] font-mono font-bold px-1.5 py-0.5 rounded border border-red-200">
+                  ERP
                 </span>
               </div>
               <div className="text-xs text-slate-500 font-mono">
@@ -74,9 +74,9 @@ export default function HeaderNav() {
 
               <Link
                 href="/pos"
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition flex items-center gap-1.5 shadow-sm"
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-1.5 shadow-sm"
               >
-                <Receipt className="w-4 h-4 text-emerald-100" />
+                <Receipt className="w-4 h-4 text-white" />
                 Quick Bill (F2)
               </Link>
 
@@ -89,7 +89,7 @@ export default function HeaderNav() {
                 }`}
               >
                 <Users className="w-4 h-4 text-slate-500" />
-                Customers / Khata
+                Customer Accounts
               </Link>
 
               <Link

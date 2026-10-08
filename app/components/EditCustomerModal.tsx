@@ -14,7 +14,8 @@ import {
   Clock,
   IndianRupee,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
 import { parseRupeesToPaise, formatPaiseToRupees } from '@/server/lib/tax';
 import ClientPortal from '@/app/components/ClientPortal';
@@ -145,6 +146,28 @@ export default function EditCustomerModal({
     }
   };
 
+  const handleDelete = async () => {
+    if (!customer?.id) return;
+    if (!confirm(`Are you sure you want to delete customer "${customer.shopName || customer.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await fetch(`/api/v1/customers/${customer.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        onSuccess(null);
+        onClose();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setErrorMsg(err.error || 'Failed to delete customer');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error deleting customer');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
@@ -158,7 +181,7 @@ export default function EditCustomerModal({
               </div>
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-                  {language === 'hi' ? 'ग्राहक विवरण संपादित करें' : 'Edit Customer Account'}
+                  Edit Customer Account
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs font-mono font-semibold text-slate-600">
@@ -203,7 +226,7 @@ export default function EditCustomerModal({
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1">
                   <Store className="w-3 h-3 text-slate-400" />
-                  <span>Workshop / Shop Name</span>
+                  <span>Business / Shop Name</span>
                   <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -211,7 +234,7 @@ export default function EditCustomerModal({
                   required
                   value={formData.shopName}
                   onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
-                  placeholder="e.g. Sai Auto Garage"
+                  placeholder="e.g. Apex Enterprises"
                   className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-md text-xs font-semibold text-slate-900 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden transition"
                 />
               </div>
@@ -363,6 +386,16 @@ export default function EditCustomerModal({
             <div className="flex items-center gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
+                onClick={handleDelete}
+                disabled={submitting}
+                className="h-9 px-3 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-md text-xs transition flex items-center justify-center gap-1.5 disabled:opacity-60"
+                title="Delete this customer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Delete</span>
+              </button>
+              <button
+                type="button"
                 onClick={onClose}
                 disabled={submitting}
                 className="flex-1 h-9 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md text-xs transition"
@@ -382,7 +415,7 @@ export default function EditCustomerModal({
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    <span>Save Customer Changes</span>
+                    <span>Save Changes</span>
                   </>
                 )}
               </button>

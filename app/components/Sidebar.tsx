@@ -26,8 +26,8 @@ export default function Sidebar() {
   const { user, tenant, logout } = useAuth();
   const { t } = useLanguage();
 
-  const showroomName = tenant?.name || 'AutoLedger Dealership';
-  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Workshop & Service Bay';
+  const showroomName = tenant?.name || 'Apex Trade & Wholesale';
+  const showroomLocation = tenant?.address ? tenant.address.split(',')[0] : 'Main Trade Hub';
   const userName = user?.name || user?.phone || 'Operator';
   const userRole = user?.role || 'STAFF';
 
@@ -45,7 +45,7 @@ export default function Sidebar() {
       items: [
         { labelKey: 'app.new_bill', fallbackLabel: 'POS Billing', href: '/pos', icon: Receipt, shortcut: 'N' },
         { labelKey: 'nav.invoices', fallbackLabel: 'Invoices', href: '/invoices', icon: FileText },
-        { labelKey: 'nav.customers_khata', fallbackLabel: 'Khata Directory', href: '/customers', icon: Users, shortcut: 'C' },
+        { labelKey: 'nav.customers_khata', fallbackLabel: 'Customer Directory', href: '/customers', icon: Users, shortcut: 'C' },
         { labelKey: 'nav.inventory', fallbackLabel: 'Inventory & Stock', href: '/inventory', icon: Boxes, shortcut: 'I' },
       ],
     },
@@ -73,16 +73,17 @@ export default function Sidebar() {
       {/* Brand Header */}
       <div className="h-14 px-4 flex items-center justify-between border-b border-[#E2E8F0] bg-white">
         <Link href="/" className="flex items-center gap-2.5 min-w-0 group">
-          <img 
-            src="/logo.png" 
-            alt="AutoLedger" 
-            className="h-8 w-auto max-w-[125px] object-contain object-left transition-transform group-hover:scale-[1.02]" 
-          />
-          <div className="flex flex-col justify-center min-w-0 border-l border-slate-200 pl-2.5">
-            <span className="px-1.5 py-0.5 rounded bg-red-50 text-[#C81E1E] text-[9px] font-bold tracking-wider font-mono border border-red-100 uppercase w-fit leading-none">
-              DMS
-            </span>
-            <span className="text-[10px] text-[#64748B] font-medium truncate mt-1 max-w-[75px]" title={showroomLocation}>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center font-black text-sm shadow-xs shrink-0 tracking-tighter">
+            TL
+          </div>
+          <div className="flex flex-col justify-center min-w-0">
+            <div className="flex items-center gap-1.5 leading-none">
+              <span className="font-extrabold text-[#0F172A] text-sm tracking-tight">TradeLedger</span>
+              <span className="px-1 py-0.2 rounded bg-red-50 text-[#C81E1E] text-[8px] font-bold font-mono border border-red-200 uppercase">
+                ERP
+              </span>
+            </div>
+            <span className="text-[10px] text-[#64748B] font-medium truncate mt-1 max-w-[120px]" title={showroomLocation}>
               {showroomLocation}
             </span>
           </div>
@@ -108,6 +109,7 @@ export default function Sidebar() {
                   <Link
                     key={item.fallbackLabel}
                     href={item.href}
+                    data-tour={`nav-${item.href.replace('/', '') || 'dashboard'}`}
                     className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group ${
                       isActive
                         ? 'bg-red-50 text-[#C81E1E] font-semibold border border-red-200/80'

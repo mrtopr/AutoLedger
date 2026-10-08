@@ -156,28 +156,28 @@ function LoginFormContent() {
         <div className="md:col-span-5 p-8 sm:p-10 flex flex-col justify-between items-center text-center text-white relative">
           
           <div className="flex flex-col items-center mt-4">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-white/10 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-2xl mb-4 p-2 overflow-hidden">
-              <img src="/logo.png" alt="AutoLedger ERP Emblem" className="w-full h-full object-contain drop-shadow" />
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-2xl mb-4 text-white font-black text-3xl sm:text-4xl tracking-tighter drop-shadow">
+              TL
             </div>
 
             <h2 className="text-2xl font-black tracking-wide text-white">
-              AutoLedger ERP
+              TradeLedger ERP
             </h2>
             <p className="text-xs text-white/90 mt-1.5 font-medium">
-              Dealership DMS & Customer Khata Network
+              Universal B2B Trade & Billing Platform
             </p>
             
             <p className="text-xs text-white/75 mt-3 leading-relaxed max-w-[260px]">
               {loginMode === 'DEALERSHIP'
-                ? 'Access point-of-sale billing, inventory, double-entry khata, and daily settlements.'
-                : 'View your live garage Khata ledger, billed parts, receipts, and 1-click UPI payments.'}
+                ? 'Access point-of-sale billing, inventory, double-entry ledger, and daily settlements.'
+                : 'View your live account balance, billed items, invoices, and 1-click payment settlements.'}
             </p>
           </div>
 
           {/* Quick Info Pill */}
           <div className="mt-6 mb-2 flex flex-col items-center gap-2">
             <span className="text-[11px] text-white/80">
-              {loginMode === 'DEALERSHIP' ? 'Looking for your customer balance?' : 'Are you a dealership owner or staff?'}
+              {loginMode === 'DEALERSHIP' ? 'Looking for your customer balance?' : 'Are you a business owner or staff?'}
             </span>
             <button
               type="button"
@@ -196,7 +196,7 @@ function LoginFormContent() {
               ) : (
                 <>
                   <Building2 className="w-3.5 h-3.5" />
-                  <span>Switch to Dealership Sign In</span>
+                  <span>Switch to Business Sign In</span>
                 </>
               )}
             </button>
@@ -222,7 +222,7 @@ function LoginFormContent() {
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5 text-[#C81E1E]" />
-                <span>Dealership Staff</span>
+                <span>Business / Staff</span>
               </button>
 
               <button
@@ -238,7 +238,7 @@ function LoginFormContent() {
                 }`}
               >
                 <User className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Customer / Garage</span>
+                <span>Customer / Buyer</span>
               </button>
             </div>
 
@@ -251,12 +251,12 @@ function LoginFormContent() {
           {/* Heading */}
           <div className="my-1">
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {loginMode === 'DEALERSHIP' ? 'Sign In to Terminal' : 'Customer Khata Portal'}
+              {loginMode === 'DEALERSHIP' ? 'Sign In to Terminal' : 'Customer Account Portal'}
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               {loginMode === 'DEALERSHIP'
-                ? 'Enter your registered owner, manager, or counter staff credentials.'
-                : 'Log in with your registered phone number to view your real-time khata and bills.'}
+                ? 'Enter your registered owner, manager, or staff credentials.'
+                : 'Log in with your registered mobile phone to view your real-time balance and invoices.'}
             </p>
           </div>
 
@@ -269,7 +269,7 @@ function LoginFormContent() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 1: DEALERSHIP STAFF LOGIN FORM                       */}
+          {/* TAB 1: BUSINESS STAFF LOGIN FORM                         */}
           {/* ======================================================== */}
           {loginMode === 'DEALERSHIP' && (
             <form className="space-y-3.5 my-auto pt-2" onSubmit={handleDealershipSubmit}>
@@ -288,7 +288,7 @@ function LoginFormContent() {
                     autoComplete="username"
                     value={loginId}
                     onChange={(e) => setLoginId(e.target.value)}
-                    placeholder="e.g. 9822012345 or owner@hondadealer.com"
+                    placeholder="e.g. 9822012345 or owner@business.com"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
                   />
                 </div>
@@ -315,7 +315,7 @@ function LoginFormContent() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="p-1 text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2"
+                    className="p-1 text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -341,7 +341,7 @@ function LoginFormContent() {
                   href="/signup" 
                   className="text-xs font-semibold text-slate-500 hover:text-[#C81E1E] transition"
                 >
-                  Register Dealership →
+                  Register New Business →
                 </Link>
 
                 <button
@@ -366,7 +366,7 @@ function LoginFormContent() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: CUSTOMER / GARAGE OTP LOGIN FORM                  */}
+          {/* TAB 2: CUSTOMER OTP LOGIN FORM                           */}
           {/* ======================================================== */}
           {loginMode === 'CUSTOMER' && (
             <div className="my-auto pt-2 space-y-4">
@@ -388,12 +388,12 @@ function LoginFormContent() {
                         autoFocus
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="Enter 10-digit mobile (e.g. 7488542781)"
+                        placeholder="Enter 10-digit mobile (e.g. 9822100001)"
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-12 pr-4 py-2.5 text-xs font-mono font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:border-emerald-600 focus:outline-hidden focus:ring-1 focus:ring-emerald-600 transition"
                       />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1.5">
-                      Must match the mobile number registered in your dealership's Khata database.
+                      Must match the mobile phone number registered with your supplier or merchant.
                     </p>
                   </div>
 

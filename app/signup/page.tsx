@@ -59,19 +59,19 @@ export default function SignupPage() {
         <div className="md:col-span-4 p-8 sm:p-10 flex flex-col justify-between items-center text-center text-white relative">
           
           <div className="flex flex-col items-center mt-6">
-            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white/10 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-2xl mb-4 p-2 overflow-hidden">
-              <img src="/logo.png" alt="AutoLedger ERP Emblem" className="w-full h-full object-contain drop-shadow" />
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-2xl mb-4 text-white font-black text-3xl sm:text-4xl tracking-tighter drop-shadow">
+              TL
             </div>
 
             <h2 className="text-2xl font-black tracking-wide text-white">
-              Register Dealership
+              TradeLedger ERP
             </h2>
             <p className="text-xs text-white/90 mt-2 font-medium">
-              Start Your Digital Workshop & Khata OS
+              Universal B2B Trade & Billing Platform
             </p>
             
             <p className="text-xs text-white/75 mt-4 leading-relaxed max-w-[220px]">
-              Set up your custom inventory catalog, customer credit limits, GST invoices, and POS billing terminal.
+              Set up your catalog, client credit limits, GST invoices, and POS billing terminal in minutes.
             </p>
           </div>
 
@@ -103,7 +103,7 @@ export default function SignupPage() {
 
           <div className="my-1">
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Create Dealership Account
+              Create Business Account
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               Fill in your business details. You can configure inventory, staff & bank QR codes next.
@@ -122,7 +122,7 @@ export default function SignupPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Dealership / Business Name *
+                  Business / Company Name *
                 </label>
                 <div className="relative">
                   <Store className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -132,7 +132,7 @@ export default function SignupPage() {
                     name="businessName"
                     value={formData.businessName}
                     onChange={handleChange}
-                    placeholder="e.g. Royal Honda Auto Spares"
+                    placeholder="e.g. Apex Trade & Supplies Pvt Ltd"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                   />
                 </div>
@@ -259,7 +259,7 @@ export default function SignupPage() {
             {/* Row 5: Address */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                Showroom / Workshop Address
+                Business / Office / Shop Address
               </label>
               <div className="relative">
                 <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -268,7 +268,7 @@ export default function SignupPage() {
                   name="address"
                   value={formData.address}
                   onChange={handleChange}
-                  placeholder="e.g. NH-16, Cuttack Road, Bhubaneswar"
+                  placeholder="e.g. Main Commercial Market, Pune"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-none transition font-medium"
                 />
               </div>

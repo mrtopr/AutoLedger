@@ -101,7 +101,7 @@ export default function ReportsPage() {
       const headers = [
         'Invoice Number',
         'Date',
-        'Customer / Garage',
+        'Customer / Client',
         'Customer GSTIN',
         'Taxable Value (INR)',
         'CGST (INR)',
@@ -109,7 +109,7 @@ export default function ReportsPage() {
         'Total Tax (INR)',
         'Grand Total (INR)',
         'Paid at Counter (INR)',
-        'Balance on Khata (INR)',
+        'Outstanding Balance (INR)',
         'Status'
       ];
 
@@ -132,7 +132,7 @@ export default function ReportsPage() {
           grandTotal.toFixed(2),
           paidNow.toFixed(2),
           balance.toFixed(2),
-          `"${balance <= 0 ? 'Fully Paid' : 'Due on Khata'}"`
+          `"${balance <= 0 ? 'Fully Paid' : 'Credit Due'}"`
         ];
       });
 
@@ -144,20 +144,20 @@ export default function ReportsPage() {
     }
   };
 
-  // 2. Export Garage Khata Ledger Aging Report
+  // 2. Export Customer Receivables Aging Report
   const exportAgingReport = () => {
     if (customers.length === 0) {
-      triggerToast('No customer khata records to export');
+      triggerToast('No customer ledger records to export');
       return;
     }
     setIsExporting(true);
     try {
       const headers = [
-        'Garage / Customer Name',
+        'Business / Client Name',
         'Contact Person',
         'Phone',
         'GSTIN',
-        'Total Khata Balance (INR)',
+        'Total Receivables Balance (INR)',
         '0-15 Days Current (INR)',
         '16-30 Days Overdue (INR)',
         '31-60 Days Overdue (INR)',
@@ -173,8 +173,8 @@ export default function ReportsPage() {
         const d60 = (bal * 0.1).toFixed(2);
 
         return [
-          `"${c.shopName || c.name || 'Garage'}"`,
-          `"${c.name || 'Owner'}"`,
+          `"${c.shopName || c.name || 'Client Account'}"`,
+          `"${c.name || 'Contact'}"`,
           `"${c.phone || ''}"`,
           `"${c.gstin || 'URP'}"`,
           bal.toFixed(2),
@@ -187,8 +187,8 @@ export default function ReportsPage() {
       });
 
       const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      downloadCSV(`Garage_Khata_Aging_Report_${new Date().toISOString().split('T')[0]}.csv`, csv);
-      triggerToast('Garage Khata Aging Schedule exported (.CSV)');
+      downloadCSV(`Receivables_Aging_Report_${new Date().toISOString().split('T')[0]}.csv`, csv);
+      triggerToast('Customer Receivables Aging Schedule exported (.CSV)');
     } finally {
       setIsExporting(false);
     }
@@ -294,7 +294,7 @@ export default function ReportsPage() {
   const exportTaxReport = () => {
     setIsExporting(true);
     try {
-      const showroom = tenant?.name || 'Dealership Workshop';
+      const showroom = tenant?.name || 'B2B Trade Hub';
       const gstin = tenant?.gstin || 'URP / Not Set';
 
       const headers = [
@@ -310,7 +310,7 @@ export default function ReportsPage() {
       ];
 
       const rows = [
-        ['"GSTR-1 Table 4A"', '"B2B Registered Garages (with GSTIN)"', '"8714"', gstSummary.b2b.count.toString(), gstSummary.b2b.taxable.toFixed(2), '0.00', (gstSummary.b2b.tax / 2).toFixed(2), (gstSummary.b2b.tax / 2).toFixed(2), gstSummary.b2b.tax.toFixed(2)],
+        ['"GSTR-1 Table 4A"', '"B2B Registered Clients (with GSTIN)"', '"8714"', gstSummary.b2b.count.toString(), gstSummary.b2b.taxable.toFixed(2), '0.00', (gstSummary.b2b.tax / 2).toFixed(2), (gstSummary.b2b.tax / 2).toFixed(2), gstSummary.b2b.tax.toFixed(2)],
         ['"GSTR-1 Table 5A"', '"B2C Large Invoices (> 2.5 Lakhs)"', '"8714"', gstSummary.b2cLarge.count.toString(), gstSummary.b2cLarge.taxable.toFixed(2), '0.00', (gstSummary.b2cLarge.tax / 2).toFixed(2), (gstSummary.b2cLarge.tax / 2).toFixed(2), gstSummary.b2cLarge.tax.toFixed(2)],
         ['"GSTR-1 Table 7"', '"B2C Small Retail Counter Sales"', '"8714"', gstSummary.b2cSmall.count.toString(), gstSummary.b2cSmall.taxable.toFixed(2), '0.00', (gstSummary.b2cSmall.tax / 2).toFixed(2), (gstSummary.b2cSmall.tax / 2).toFixed(2), gstSummary.b2cSmall.tax.toFixed(2)],
         ['"GSTR-3B Table 3.1(a)"', '"Outward Taxable Supplies (Total)"', '"ALL"', gstSummary.total.count.toString(), gstSummary.total.taxable.toFixed(2), '0.00', (gstSummary.total.tax / 2).toFixed(2), (gstSummary.total.tax / 2).toFixed(2), gstSummary.total.tax.toFixed(2)]
@@ -318,7 +318,7 @@ export default function ReportsPage() {
 
       const csv = [
         `"GST COMPLIANCE SUMMARY - ${showroom}"`,
-        `"DEALERSHIP GSTIN: ${gstin}"`,
+        `"SUPPLIER GSTIN: ${gstin}"`,
         `"PERIOD: Current Financial Period"`,
         '',
         headers.join(','),
@@ -373,12 +373,10 @@ export default function ReportsPage() {
           </div>
           <div>
             <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0F172A]">
-              {language === 'hi' ? 'रिपोर्ट्स एवं वित्तीय लेखा विश्लेषण' : 'Financial Reports & Tax Analytics'}
+              Financial Reports & Tax Analytics
             </h1>
             <p className="text-xs text-[#64748B] mt-0.5">
-              {language === 'hi' 
-                ? 'जीएसटी बिक्री रजिस्टर, गैराज खाता बही, स्टॉक मूल्यांकन और जीएसटीआर रिपोर्ट डाउनलोड करें।'
-                : 'Export GST sales registers, garage aging ledgers, stock asset valuations, and GSTR tax schedules.'}
+              Export GST sales registers, customer aging ledgers, stock asset valuations, and GSTR tax schedules.
             </p>
           </div>
         </div>
@@ -391,7 +389,7 @@ export default function ReportsPage() {
               dateRange === 'thisMonth' ? 'bg-white text-[#0F172A] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
             }`}
           >
-            {language === 'hi' ? 'इस माह' : 'This Month'}
+            This Month
           </button>
           <button
             onClick={() => setDateRange('last30Days')}
@@ -399,7 +397,7 @@ export default function ReportsPage() {
               dateRange === 'last30Days' ? 'bg-white text-[#0F172A] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
             }`}
           >
-            {language === 'hi' ? 'पिछले 30 दिन' : 'Last 30 Days'}
+            Last 30 Days
           </button>
           <button
             onClick={() => setDateRange('financialYear')}
@@ -407,7 +405,7 @@ export default function ReportsPage() {
               dateRange === 'financialYear' ? 'bg-white text-[#0F172A] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
             }`}
           >
-            {language === 'hi' ? 'वित्त वर्ष 2026-27' : 'FY 2026-27'}
+            FY 2026-27
           </button>
         </div>
       </div>
@@ -473,14 +471,14 @@ export default function ReportsPage() {
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-[#D97706] uppercase tracking-wider flex items-center gap-1.5">
                 <BookOpen className="w-3.5 h-3.5" />
-                Khata Aging
+                Receivables Aging
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FEFCE8] text-[#A16207] border border-[#FEF08A]">
                 {customers.length} Accounts
               </span>
             </div>
             <div className="text-xs font-bold text-[#0F172A] mt-2">
-              Garage Khata Aging Schedule
+              Customer Receivables Aging Schedule
             </div>
             <p className="text-[11px] text-[#64748B] mt-0.5">
               Receivables bucketed into 0-15d, 30d, and 60d+ dues
@@ -516,7 +514,7 @@ export default function ReportsPage() {
                 Valuation
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]">
-                {products.length} Parts
+                {products.length} Items
               </span>
             </div>
             <div className="text-xs font-bold text-[#0F172A] mt-2">
@@ -591,7 +589,7 @@ export default function ReportsPage() {
             <FileText className="w-4 h-4 text-[#C81E1E]" />
             <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
               {activeReport === 'SALES' && 'Preview: Sales & Invoicing Register'}
-              {activeReport === 'AGING' && 'Preview: Garage Khata Aging Schedule'}
+              {activeReport === 'AGING' && 'Preview: Customer Receivables Aging Schedule'}
               {activeReport === 'INVENTORY' && 'Preview: Inventory Stock Valuation'}
               {activeReport === 'GST' && 'Preview: GSTR-1 & GSTR-3B Tax Filing Schedule'}
             </h2>
@@ -644,13 +642,13 @@ export default function ReportsPage() {
                       <tr className="border-b border-[#E2E8F0] bg-[#F8F9FA] text-[#64748B] font-semibold uppercase text-[10px]">
                         <th className="py-3 px-4">Invoice No</th>
                         <th className="py-3 px-4">Date</th>
-                        <th className="py-3 px-4">Customer / Garage</th>
+                        <th className="py-3 px-4">Customer / Client</th>
                         <th className="py-3 px-4">GSTIN</th>
                         <th className="py-3 px-4 text-right">Taxable (₹)</th>
                         <th className="py-3 px-4 text-right">GST (₹)</th>
                         <th className="py-3 px-4 text-right">Grand Total (₹)</th>
                         <th className="py-3 px-4 text-right">Paid (₹)</th>
-                        <th className="py-3 px-4 text-right">Khata Due (₹)</th>
+                        <th className="py-3 px-4 text-right">Balance Due (₹)</th>
                         <th className="py-3 px-4 text-center">Status</th>
                       </tr>
                     </thead>
@@ -677,7 +675,7 @@ export default function ReportsPage() {
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
                                 balance <= 0 ? 'bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]' : 'bg-[#FEFCE8] text-[#A16207] border border-[#FEF08A]'
                               }`}>
-                                {balance <= 0 ? 'Paid' : 'Khata Due'}
+                                {balance <= 0 ? 'Paid' : 'Balance Due'}
                               </span>
                             </td>
                           </tr>
@@ -689,18 +687,18 @@ export default function ReportsPage() {
               )
             )}
 
-            {/* 2. GARAGE AGING PREVIEW */}
+            {/* 2. RECEIVABLES AGING PREVIEW */}
             {activeReport === 'AGING' && (
               filteredCustomers.length === 0 ? (
                 <div className="py-12 text-center text-[#94A3B8] text-xs">
-                  No customer khata accounts found.
+                  No customer accounts found.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-[#E2E8F0] bg-[#F8F9FA] text-[#64748B] font-semibold uppercase text-[10px]">
-                        <th className="py-3 px-4">Garage Workshop</th>
+                        <th className="py-3 px-4">Client Business / Account</th>
                         <th className="py-3 px-4">Phone</th>
                         <th className="py-3 px-4">GSTIN</th>
                         <th className="py-3 px-4 text-right">Total Balance (₹)</th>
@@ -716,7 +714,7 @@ export default function ReportsPage() {
                         const bal = Number(c.balancePaise || 0) / 100;
                         return (
                           <tr key={idx} className="hover:bg-[#F8F9FA] transition">
-                            <td className="py-3 px-4 font-sans font-semibold text-[#0F172A]">{c.shopName || c.name || 'Garage'}</td>
+                            <td className="py-3 px-4 font-sans font-semibold text-[#0F172A]">{c.shopName || c.name || 'Client Account'}</td>
                             <td className="py-3 px-4 text-[#64748B] text-[11px]">{c.phone || '-'}</td>
                             <td className="py-3 px-4 text-[#475569] text-[11px]">{c.gstin || 'URP'}</td>
                             <td className="py-3 px-4 text-right font-bold text-[#0F172A] tabular-nums">₹{bal.toLocaleString('en-IN')}</td>
@@ -728,7 +726,7 @@ export default function ReportsPage() {
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
                                 bal > 0 ? 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]' : 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
                               }`}>
-                                {bal > 0 ? (c.status || 'Active Khata') : 'Clear'}
+                                {bal > 0 ? (c.status || 'Active Balance') : 'Clear'}
                               </span>
                             </td>
                           </tr>
@@ -813,7 +811,7 @@ export default function ReportsPage() {
                   <tbody className="divide-y divide-[#E2E8F0] text-xs">
                     <tr className="hover:bg-[#F8F9FA]">
                       <td className="py-3 px-4 font-mono font-bold text-[#2563EB]">GSTR-1 Table 4A</td>
-                      <td className="py-3 px-4 font-medium text-[#0F172A]">B2B Invoices to Registered Garages (with GSTIN)</td>
+                      <td className="py-3 px-4 font-medium text-[#0F172A]">B2B Invoices to Registered Clients (with GSTIN)</td>
                       <td className="py-3 px-4 text-center font-mono">8714</td>
                       <td className="py-3 px-4 text-center font-mono font-bold">{gstSummary.b2b.count}</td>
                       <td className="py-3 px-4 text-right font-mono tabular-nums">₹{gstSummary.b2b.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>

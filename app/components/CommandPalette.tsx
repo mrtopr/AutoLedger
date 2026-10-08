@@ -192,17 +192,17 @@ export default function CommandPalette() {
       paidNowPaise: inv.paidNowPaise || '0',
       creditBalancePaise: inv.creditBalancePaise || '0',
       tenant: {
-        name: tenant?.name || 'AutoLedger Dealership',
-        legalName: tenant?.legalName || 'AutoLedger Spares Pvt Ltd',
-        address: tenant?.address || 'Near Main Market, Showroom No. 1',
+        name: tenant?.name || 'Apex Trade & Wholesale',
+        legalName: tenant?.legalName || 'Apex Trade & Wholesale Pvt Ltd',
+        address: tenant?.address || 'Near Main Market, Trade Hub No. 1',
         gstin: tenant?.gstin || '27ABCDE1234F1Z5',
         phone: tenant?.phone || '+91 9822100001',
-        email: tenant?.email || 'billing@autoledger.com',
+        email: tenant?.email || 'billing@tradeledger.app',
         stateCode: tenant?.stateCode || '27 - Maharashtra',
         bankName: tenant?.bankDetails?.bankName || 'HDFC Bank',
         accountNumber: tenant?.bankDetails?.accountNumber || '50200012345678',
         ifscCode: tenant?.bankDetails?.ifscCode || 'HDFC0001234',
-        upiId: tenant?.upiId || 'autoledger@okhdfcbank',
+        upiId: tenant?.upiId || 'tradeledger@okhdfcbank',
       }
     };
 
@@ -213,7 +213,7 @@ export default function CommandPalette() {
   const defaultCommands: CommandItem[] = [
     {
       id: 'act-new-bill',
-      title: language === 'hi' ? 'नया बिल बनाएं (New Bill / Counter POS)' : 'New Bill / Counter POS',
+      title: 'New Bill / Counter POS',
       category: 'Actions',
       shortcut: 'N',
       icon: Receipt,
@@ -223,19 +223,8 @@ export default function CommandPalette() {
       },
     },
     {
-      id: 'act-toggle-lang',
-      title: language === 'hi' ? 'Switch Language to English (अंग्रेज़ी में बदलें)' : 'हिन्दी में बदलें (Switch to Hindi)',
-      category: 'Language',
-      shortcut: 'L',
-      icon: Languages,
-      action: () => {
-        toggleLanguage();
-        setIsOpen(false);
-      },
-    },
-    {
       id: 'act-add-customer',
-      title: language === 'hi' ? 'नया ग्राहक / खाता जोड़ें (Add New Customer)' : 'Add New Customer / Khata',
+      title: 'Add New Customer / Khata',
       category: 'Actions',
       shortcut: 'C',
       icon: UserPlus,
@@ -246,7 +235,7 @@ export default function CommandPalette() {
     },
     {
       id: 'act-stock-inward',
-      title: language === 'hi' ? 'इन्वेंट्री / स्टॉक एंट्री (Inventory & Stock)' : 'Stock Inward / Inventory Entry',
+      title: 'Stock Inward / Inventory Entry',
       category: 'Actions',
       shortcut: 'I',
       icon: Boxes,
@@ -257,7 +246,7 @@ export default function CommandPalette() {
     },
     {
       id: 'act-collect-payment',
-      title: language === 'hi' ? 'भुगतान प्राप्त करें (Collect Payment)' : 'Collect Payment / Clear Ledger',
+      title: 'Collect Payment / Clear Ledger',
       category: 'Actions',
       shortcut: 'P',
       icon: CreditCard,
@@ -268,7 +257,7 @@ export default function CommandPalette() {
     },
     {
       id: 'act-gst-export',
-      title: language === 'hi' ? 'जीएसटी रिपोर्ट डाउनलोड (Export GSTR Reports)' : 'Export GSTR-1 & Reports',
+      title: 'Export GSTR-1 & Reports',
       category: 'Actions',
       icon: FileSpreadsheet,
       action: () => {
@@ -278,7 +267,7 @@ export default function CommandPalette() {
     },
     {
       id: 'nav-invoices',
-      title: language === 'hi' ? 'बिल एवं चालान इतिहास (Invoices & Bills)' : 'Invoices & Billing History',
+      title: 'Invoices & Billing History',
       category: 'Navigation',
       icon: Receipt,
       action: () => {
@@ -288,7 +277,7 @@ export default function CommandPalette() {
     },
     {
       id: 'nav-dashboard',
-      title: language === 'hi' ? 'डैशबोर्ड (Dashboard Overview)' : 'Dashboard Overview',
+      title: 'Dashboard Overview',
       category: 'Navigation',
       icon: Sparkles,
       action: () => {
@@ -298,7 +287,7 @@ export default function CommandPalette() {
     },
     {
       id: 'nav-customers',
-      title: language === 'hi' ? 'ग्राहक एवं खाता बही (Customers & Khata)' : 'Customer Directory & Ledgers',
+      title: 'Customer Directory & Ledgers',
       category: 'Navigation',
       icon: Users,
       action: () => {
@@ -308,7 +297,7 @@ export default function CommandPalette() {
     },
     {
       id: 'nav-inventory',
-      title: language === 'hi' ? 'स्पेयर पार्ट्स इन्वेंट्री (Parts & Stock)' : 'Parts & Catalog Registry',
+      title: 'Products & Inventory Catalog',
       category: 'Navigation',
       icon: Package,
       action: () => {
@@ -318,7 +307,7 @@ export default function CommandPalette() {
     },
     {
       id: 'nav-reports',
-      title: language === 'hi' ? 'वित्तीय रिपोर्ट्स (Reports & Analytics)' : 'Financial Reports & Settlement',
+      title: 'Financial Reports & Analytics',
       category: 'Navigation',
       icon: BarChart3,
       action: () => {
@@ -328,7 +317,7 @@ export default function CommandPalette() {
     },
     {
       id: 'nav-settings',
-      title: language === 'hi' ? 'डीलरशिप सेटिंग्स (Dealership Settings)' : 'Dealership Settings & Profile',
+      title: 'System Settings & Profile',
       category: 'Navigation',
       icon: Settings,
       action: () => {
@@ -466,7 +455,7 @@ export default function CommandPalette() {
                 setSelectedIndex(0);
               }}
               onKeyDown={handleKeyDownInMenu}
-              placeholder={language === 'hi' ? 'बिल नंबर (उदा: 3947), ग्राहक, पार्ट्स या कमांड खोजें...' : 'Search by bill/invoice # (e.g. 3947), customer, parts or command...'}
+              placeholder="Search by bill/invoice # (e.g. 3947), customer, parts or command..."
               className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 focus:outline-none"
             />
             {query && (

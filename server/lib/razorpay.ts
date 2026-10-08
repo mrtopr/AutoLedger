@@ -50,7 +50,7 @@ export function verifyRazorpaySignature(
   signature: string,
   secret?: string
 ): boolean {
-  const webhookSecret = secret || process.env.RAZORPAY_WEBHOOK_SECRET || 'autoledger_webhook_secret_2026';
+  const webhookSecret = secret || process.env.RAZORPAY_WEBHOOK_SECRET || 'tradeledger_webhook_secret_2026';
   
   try {
     const expectedSignature = crypto
@@ -100,10 +100,10 @@ export async function createPaymentLink(
           tenantId: params.tenantId || '',
           customerId: params.customerId || '',
           invoiceId: params.invoiceId || '',
-          platform: 'AutoLedger ERP',
+          platform: 'TradeLedger ERP',
           ...params.notes,
         },
-        callback_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://x-autoledger.vercel.app'}/pos`,
+        callback_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://tradeledger.app'}/pos`,
         callback_method: 'get',
       });
 
@@ -126,7 +126,7 @@ export async function createPaymentLink(
   const encodedDesc = encodeURIComponent(params.description);
   
   // Standard UPI Intent Link
-  const upiIntentUrl = `upi://pay?pa=autoledger@okhdfcbank&pn=${encodeURIComponent(params.customer.name)}&am=${amountRupees}&cu=INR&tn=${encodedDesc}`;
+  const upiIntentUrl = `upi://pay?pa=tradeledger@okhdfcbank&pn=${encodeURIComponent(params.customer.name)}&am=${amountRupees}&cu=INR&tn=${encodedDesc}`;
 
   return {
     id: mockId,

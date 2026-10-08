@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       invoiceId,
       customerName = 'Customer',
       customerPhone = '',
-      description = 'AutoLedger Spares Payment',
+      description = 'Trade Payment',
     } = body;
 
     const finalAmountPaise = amountPaise 
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-default';
-    const showroomName = authUser?.tenant?.name || 'AutoLedger Spares';
+    const showroomName = authUser?.tenant?.name || 'Apex Trade Supplies';
 
     // 1. Generate Razorpay Link
     const linkResult = await createPaymentLink({

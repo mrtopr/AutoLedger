@@ -65,6 +65,15 @@ export async function GET(
                 days61to90: '0',
                 days90Plus: '0',
               },
+              invoices: customer.invoices.map((inv: any) => ({
+                id: inv.id,
+                invoiceNumber: inv.number || `INV-${inv.id.slice(0, 6)}`,
+                date: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : 'Today',
+                grandTotalPaise: (inv.grandTotal || 0n).toString(),
+                paidNowPaise: (inv.amountPaid || 0n).toString(),
+                creditBalancePaise: ((inv.grandTotal || 0n) - (inv.amountPaid || 0n)).toString(),
+                itemsCount: inv.items ? inv.items.length : 1,
+              })),
               ledger: ledgerWithRunning,
             }
           });
@@ -82,6 +91,15 @@ export async function GET(
 
     const ledgerEntries = localStore.getLedger(customerId);
     const localBal = BigInt(localCust.balancePaise || 0);
+    const customerInvoices = localStore.getInvoices().filter((inv: any) => inv.customerId === customerId).map((inv: any) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber || inv.number || `INV-${inv.id.slice(0, 6)}`,
+      date: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : 'Today',
+      grandTotalPaise: inv.grandTotalPaise || inv.amountPaise || '0',
+      paidNowPaise: inv.paidNowPaise || '0',
+      creditBalancePaise: inv.creditBalancePaise || '0',
+      itemsCount: inv.items ? inv.items.length : 1,
+    }));
 
     return NextResponse.json({
       success: true,
@@ -104,6 +122,7 @@ export async function GET(
           days61to90: '0',
           days90Plus: '0',
         },
+        invoices: customerInvoices,
         ledger: ledgerEntries,
       }
     });

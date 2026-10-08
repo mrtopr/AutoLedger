@@ -42,7 +42,7 @@ interface DailyTrend {
   billCount: number;
 }
 
-interface OverdueGarage {
+interface OverdueCustomer {
   id: string;
   name: string;
   shopName: string;
@@ -99,7 +99,7 @@ export default function DealershipDashboardPage() {
   const [totalOverdue, setTotalOverdue] = useState<number>(0);
   const [lowStockCount, setLowStockCount] = useState<number>(0);
   const [growthVsPreviousDay, setGrowthVsPreviousDay] = useState<string>('+0.0%');
-  const [overdueGarages, setOverdueGarages] = useState<OverdueGarage[]>([]);
+  const [overdueCustomers, setOverdueCustomers] = useState<OverdueCustomer[]>([]);
   const [lowStockParts, setLowStockParts] = useState<LowStockPart[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
 
@@ -129,8 +129,8 @@ export default function DealershipDashboardPage() {
         if (dashData.success && dashData.metrics) {
           const salesRs = Math.round(Number(BigInt(dashData.metrics.todaySalesPaise || 0)) / 100);
           const collRs = Math.round(Number(BigInt(dashData.metrics.collectedTodayPaise || 0)) / 100);
-          const udhaarRs = Math.round(Number(BigInt(dashData.metrics.outstandingKhataPaise || 0)) / 100);
-          const overdueRs = Math.round(Number(BigInt(dashData.metrics.overduePaise || 0)) / 100);
+          const udhaarRs = Math.max(0, Math.round(Number(BigInt(dashData.metrics.outstandingKhataPaise || 0)) / 100));
+          const overdueRs = Math.max(0, Math.round(Number(BigInt(dashData.metrics.overduePaise || 0)) / 100));
 
           setCurrentSales(salesRs);
           setCurrentCollections(collRs);
@@ -161,14 +161,14 @@ export default function DealershipDashboardPage() {
           .map((c: any) => ({
             id: c.id,
             name: c.name || 'Owner',
-            shopName: c.shopName || c.name || 'Garage',
+            shopName: c.shopName || c.name || 'Client',
             phone: c.phone || '',
             balanceRupees: Math.round(Number(BigInt(c.balancePaise || 0)) / 100),
             daysOverdue: c.termsDays ? Math.max(1, Math.floor(Math.random() * 20) + c.termsDays) : 15,
             status: c.status === 'RED' ? 'HIGH' : c.status === 'YELLOW' ? 'MEDIUM' : 'NORMAL',
           }))
           .sort((a: any, b: any) => b.balanceRupees - a.balanceRupees);
-        setOverdueGarages(overdue);
+        setOverdueCustomers(overdue);
       }
 
       if (prodRes.ok) {
@@ -225,7 +225,7 @@ export default function DealershipDashboardPage() {
         name: inv.customerName,
         shopName: inv.customerName,
         phone: '+91 9822100000',
-        address: 'Workshop Partner / Counter Sales',
+        address: 'B2B Client / Counter Sales',
         gstin: 'URP',
       },
       items: [
@@ -248,17 +248,17 @@ export default function DealershipDashboardPage() {
       paidNowPaise: Math.round(inv.paidRupees * 100),
       creditBalancePaise: Math.round((inv.totalRupees - inv.paidRupees) * 100),
       tenant: {
-        name: tenant?.name || 'AutoLedger Dealership',
-        legalName: tenant?.legalName || 'AutoLedger Spares Pvt Ltd',
-        address: tenant?.address || 'Auto Market, Showroom No. 1',
+        name: tenant?.name || 'Apex Trade & Wholesale',
+        legalName: tenant?.legalName || 'Apex Trade & Wholesale Pvt Ltd',
+        address: tenant?.address || 'Trade Center, Main Commercial Hub',
         gstin: tenant?.gstin || '27ABCDE1234F1Z5',
         phone: tenant?.phone || '+91 9822100001',
-        email: tenant?.email || 'billing@autoledger.com',
+        email: tenant?.email || 'billing@tradeledger.app',
         stateCode: tenant?.stateCode || '27 - Maharashtra',
         bankName: tenant?.bankDetails?.bankName || 'HDFC Bank',
         accountNumber: tenant?.bankDetails?.accountNumber || '50200012345678',
         ifscCode: tenant?.bankDetails?.ifscCode || 'HDFC0001234',
-        upiId: tenant?.upiId || 'autoledger@okhdfcbank',
+        upiId: tenant?.upiId || 'tradeledger@okhdfcbank',
       }
     };
 
@@ -266,21 +266,21 @@ export default function DealershipDashboardPage() {
     setIsPreviewModalOpen(true);
   };
 
-  // Send WhatsApp Reminder to Overdue Garage
-  const handleSendReminder = (garage: OverdueGarage) => {
-    const message = `*PAYMENT REMINDER - ${(tenant?.name || 'AUTOLEDGER SPARES').toUpperCase()}*\n` +
+  // Send WhatsApp Reminder to Overdue Customer
+  const handleSendReminder = (customer: OverdueCustomer) => {
+    const message = `*PAYMENT REMINDER - ${(tenant?.name || 'TRADE SUPPLIES').toUpperCase()}*\n` +
       `--------------------------------\n` +
-      `Dear ${garage.shopName},\n` +
-      `This is a gentle reminder that an overdue balance of *₹${garage.balanceRupees.toLocaleString('en-IN')}* is pending on your Khata account.\n\n` +
+      `Dear ${customer.shopName},\n` +
+      `This is a gentle reminder that an overdue balance of *₹${customer.balanceRupees.toLocaleString('en-IN')}* is pending on your B2B credit account.\n\n` +
       `*Bank / UPI Settlement Details:*\n` +
-      `• UPI ID: *${tenant?.upiId || 'autoledger@okhdfcbank'}*\n` +
+      `• UPI ID: *${tenant?.upiId || 'tradeledger@okhdfcbank'}*\n` +
       `• Bank A/C: *${tenant?.bankDetails?.accountNumber || '50200012345678'}* (${tenant?.bankDetails?.bankName || 'HDFC Bank'})\n` +
       `• IFSC: *${tenant?.bankDetails?.ifscCode || 'HDFC0001234'}*\n\n` +
-      `Kindly clear the pending balance to keep your spare parts credit line active.\n` +
+      `Kindly clear the pending balance to keep your trade credit line active.\n` +
       `Thank you!\n` +
-      `*${tenant?.name || 'AutoLedger'}* | Tel: ${tenant?.phone || '+91 9822100001'}`;
+      `*${tenant?.name || 'TradeLedger'}* | Tel: ${tenant?.phone || '+91 9822100001'}`;
 
-    const url = `https://api.whatsapp.com/send?phone=91${garage.phone}&text=${encodeURIComponent(message)}`;
+    const url = `https://api.whatsapp.com/send?phone=91${customer.phone}&text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
@@ -305,16 +305,14 @@ export default function DealershipDashboardPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-sm sm:text-base font-bold text-[#0F172A] tracking-tight">
-                {language === 'hi' ? 'डीलरशिप डैशबोर्ड एवं संचालन' : 'Dealership Executive Operations'}
+                Executive Operations Dashboard
               </h1>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]">
-                {tenant?.name || 'AutoLedger Dealership'}
+                {tenant?.name || 'Apex Trade & Wholesale'}
               </span>
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
-              {language === 'hi'
-                ? 'काउंटर बिलिंग, नकद व UPI प्राप्ति, गैराज खाता एवं स्पेयर पार्ट्स स्टॉक मॉनिटरिंग'
-                : 'Counter billing, drawer liquidity, workshop credit ledger, and reorder alerts.'}
+              Counter POS billing, drawer liquidity, B2B credit ledger, and stock reorder alerts.
             </p>
           </div>
         </div>
@@ -396,11 +394,11 @@ export default function DealershipDashboardPage() {
           </div>
         </div>
 
-        {/* Metric 3: Garage Khata Balance */}
+        {/* Metric 3: Total Accounts Receivable */}
         <div className="bg-white border border-[#E2E8F0] rounded-lg p-4 shadow-2xs space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-              {t('dash.garage_khata_due', 'Garage Khata Due')}
+              Total Receivables Due
             </span>
             <div className="w-7 h-7 rounded-md bg-[#FFFBEB] text-[#D97706] flex items-center justify-center border border-[#FEF3C7]">
               <CreditCard className="w-3.5 h-3.5" />
@@ -408,16 +406,16 @@ export default function DealershipDashboardPage() {
           </div>
           <div>
             <div className="text-xl font-bold font-mono tabular-nums text-[#0F172A]">
-              ₹{totalMarketUdhaar.toLocaleString('en-IN')}
+              ₹{Math.max(0, totalMarketUdhaar).toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-[#D97706] font-medium mt-1">
-              {overdueGarages.length} active customer accounts
+              {overdueCustomers.length > 0 ? `${overdueCustomers.length} accounts with balance` : 'All accounts settled'}
             </div>
           </div>
           <div className="pt-2 border-t border-[#F1F5F9] text-[10px] text-[#64748B] flex justify-between">
             <span>Market Outstanding</span>
             <Link href="/customers" className="text-[#D97706] font-semibold hover:underline">
-              Ledger →
+              Accounts →
             </Link>
           </div>
         </div>
@@ -503,34 +501,38 @@ export default function DealershipDashboardPage() {
         ) : (
           <div className="h-44 flex items-end justify-between gap-2 sm:gap-4 pt-2 px-1">
             {dailyData.map((item, idx) => {
-              const salesHeightPct = maxVal > 0 ? Math.min(100, Math.round((item.salesRupees / maxVal) * 100)) : 0;
-              const collectionsHeightPct = maxVal > 0 ? Math.min(100, Math.round((item.collectionsRupees / maxVal) * 100)) : 0;
+              const salesHeightPct = maxVal > 0 && item.salesRupees > 0 ? Math.max(6, Math.min(100, Math.round((item.salesRupees / maxVal) * 100))) : 0;
+              const collectionsHeightPct = maxVal > 0 && item.collectionsRupees > 0 ? Math.max(6, Math.min(100, Math.round((item.collectionsRupees / maxVal) * 100))) : 0;
               const isSelected = activeDataIndex === idx;
 
               return (
                 <div
                   key={item.day + idx}
                   onMouseEnter={() => setActiveDataIndex(idx)}
-                  className={`flex-1 flex flex-col items-center cursor-pointer transition-colors ${
-                    isSelected ? 'opacity-100' : 'opacity-80 hover:opacity-100'
+                  className={`flex-1 flex flex-col items-center cursor-pointer transition-all ${
+                    isSelected ? 'opacity-100' : 'opacity-85 hover:opacity-100'
                   }`}
                 >
                   {/* Bar Pair Container */}
-                  <div className={`w-full flex items-end justify-center gap-1 h-32 rounded-md p-1 transition-colors ${
-                    isSelected ? 'bg-[#F1F5F9] border border-[#CBD5E1]' : 'bg-[#F8F9FA] hover:bg-[#F1F5F9]'
+                  <div className={`w-full flex items-end justify-center gap-1.5 h-32 rounded-md p-1.5 transition-all ${
+                    isSelected ? 'bg-[#F1F5F9] border border-[#CBD5E1] shadow-2xs' : 'bg-[#F8F9FA] hover:bg-[#F1F5F9]'
                   }`}>
                     {/* Sales Bar */}
                     <div
-                      style={{ height: `${Math.max(salesHeightPct, 4)}%` }}
-                      className={`w-1/2 rounded-t-xs transition-all ${
-                        isSelected ? 'bg-[#0F172A]' : 'bg-[#334155]'
+                      style={{ height: salesHeightPct > 0 ? `${salesHeightPct}%` : '2px' }}
+                      className={`w-1/2 rounded-t-sm transition-all duration-300 ${
+                        salesHeightPct > 0 
+                          ? (isSelected ? 'bg-[#0F172A]' : 'bg-[#334155]') 
+                          : 'bg-[#E2E8F0]'
                       }`}
                     />
                     {/* Collections Bar */}
                     <div
-                      style={{ height: `${Math.max(collectionsHeightPct, 4)}%` }}
-                      className={`w-1/2 rounded-t-xs transition-all ${
-                        isSelected ? 'bg-[#16A34A]' : 'bg-[#22C55E]'
+                      style={{ height: collectionsHeightPct > 0 ? `${collectionsHeightPct}%` : '2px' }}
+                      className={`w-1/2 rounded-t-sm transition-all duration-300 ${
+                        collectionsHeightPct > 0 
+                          ? (isSelected ? 'bg-[#16A34A]' : 'bg-[#22C55E]') 
+                          : 'bg-[#E2E8F0]'
                       }`}
                     />
                   </div>
@@ -551,57 +553,57 @@ export default function DealershipDashboardPage() {
         )}
       </div>
 
-      {/* 4. OPERATIONAL SPLIT: GARAGE KHATA & CRITICAL LOW STOCK */}
+      {/* 4. OPERATIONAL SPLIT: B2B RECEIVABLES & CRITICAL LOW STOCK */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         
-        {/* Left (7 Cols): Garage Khata Follow-up */}
+        {/* Left (7 Cols): Receivables Follow-up */}
         <div className="lg:col-span-7 bg-white border border-[#E2E8F0] rounded-lg p-4 sm:p-5 shadow-2xs space-y-3">
           <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-2.5">
             <div>
               <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center gap-1.5">
                 <BookOpen className="w-3.5 h-3.5 text-[#D97706]" />
-                <span>{t('dash.garage_khata_followup', 'Garage Khata Follow-up')}</span>
+                <span>B2B Receivables Follow-up</span>
               </h2>
-              <p className="text-[11px] text-[#64748B] mt-0.5">{t('dash.garage_khata_subtitle', 'Overdue accounts requiring collection')}</p>
+              <p className="text-[11px] text-[#64748B] mt-0.5">Overdue accounts requiring collection</p>
             </div>
             <Link
               href="/customers"
               className="text-xs font-semibold text-[#2563EB] hover:text-[#1D4ED8] transition"
             >
-              {t('dash.view_all_khata', 'All Accounts')} →
+              All Accounts →
             </Link>
           </div>
 
-          {overdueGarages.length === 0 ? (
+          {overdueCustomers.length === 0 ? (
             <div className="py-6 text-center text-[#94A3B8] space-y-1">
               <CheckCircle2 className="w-6 h-6 text-[#16A34A] mx-auto" />
-              <p className="text-xs font-medium text-[#334155]">All customer khata accounts are settled</p>
+              <p className="text-xs font-medium text-[#334155]">All customer accounts are settled</p>
             </div>
           ) : (
             <div className="divide-y divide-[#F1F5F9]">
-              {overdueGarages.slice(0, 5).map((garage) => (
-                <div key={garage.id} className="py-2 flex items-center justify-between gap-2 hover:bg-[#F8F9FA] px-2 rounded-md transition-colors">
+              {overdueCustomers.slice(0, 5).map((customer) => (
+                <div key={customer.id} className="py-2 flex items-center justify-between gap-2 hover:bg-[#F8F9FA] px-2 rounded-md transition-colors">
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-[#0F172A] truncate">{garage.shopName}</div>
+                    <div className="text-xs font-bold text-[#0F172A] truncate">{customer.shopName}</div>
                     <div className="text-[10px] text-[#64748B] flex items-center gap-1.5 mt-0.5">
-                      <span>{garage.name}</span>
+                      <span>{customer.name}</span>
                       <span>·</span>
-                      <span className="font-mono">{garage.phone}</span>
+                      <span className="font-mono">{customer.phone}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2.5 text-right shrink-0">
                     <div>
                       <div className="text-xs font-bold text-[#92400E] font-mono tabular-nums">
-                        ₹{garage.balanceRupees.toLocaleString('en-IN')}
+                        ₹{customer.balanceRupees.toLocaleString('en-IN')}
                       </div>
                       <div className="text-[10px] text-[#DC2626] font-medium">
-                        {garage.daysOverdue}d overdue
+                        {customer.daysOverdue}d overdue
                       </div>
                     </div>
 
                     <button
-                      onClick={() => handleSendReminder(garage)}
+                      onClick={() => handleSendReminder(customer)}
                       className="h-7 inline-flex items-center gap-1 px-2.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white text-[10px] font-semibold rounded-md shadow-2xs transition"
                       title={t('dash.whatsapp_reminder', 'WhatsApp')}
                     >
@@ -669,9 +671,9 @@ export default function DealershipDashboardPage() {
           <div>
             <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-[#0F172A]" />
-              <span>{language === 'hi' ? 'हालिया काउंटर बिल एवं बिक्री' : 'Recent Counter Invoices'}</span>
+              <span>Recent Counter Invoices</span>
             </h2>
-            <p className="text-[11px] text-[#64748B] mt-0.5">{language === 'hi' ? 'ताज़ा बिक्री और भुगतान का विवरण' : 'Live stream of counter sales transactions'}</p>
+            <p className="text-[11px] text-[#64748B] mt-0.5">Live stream of counter sales transactions</p>
           </div>
           <Link
             href="/invoices"

@@ -130,7 +130,7 @@ export default function SettingsPage() {
       const link = document.createElement('a');
       const now = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       link.href = url;
-      link.download = `AutoLedger_ERP_Backup_${now}.json`;
+      link.download = `TradeLedger_ERP_Backup_${now}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -399,64 +399,13 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* 0. LANGUAGE & REGIONAL PREFERENCES */}
-      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-3.5 shadow-2xs">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#C81E1E]" />
-            <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
-              {language === 'hi' ? 'भाषा एवं क्षेत्रीय सेटिंग्स' : 'Language & Regional Preferences'}
-            </h2>
-          </div>
-          <span className="text-[11px] text-[#64748B]">
-            Instant UI switch
-          </span>
-        </div>
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-none bg-[#F8F9FA] border border-[#E2E8F0]">
-          <div>
-            <div className="text-xs font-semibold text-[#0F172A]">
-              {language === 'hi' ? 'एप्लिकेशन भाषा (Display Language)' : 'Application Display Language'}
-            </div>
-            <p className="text-[11px] text-[#64748B] mt-0.5">
-              Toggle between English and Hindi across the entire ERP, dashboard, billing, and reports.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setLanguage('en')}
-              className={`h-8 px-3.5 text-xs font-medium rounded-none border transition ${
-                language === 'en'
-                  ? 'bg-white text-[#0F172A] border-[#0F172A] font-semibold shadow-2xs'
-                  : 'bg-white text-[#64748B] border-[#CBD5E1] hover:bg-[#F1F5F9]'
-              }`}
-            >
-              English
-            </button>
-            <button
-              type="button"
-              onClick={() => setLanguage('hi')}
-              className={`h-8 px-3.5 text-xs font-medium rounded-none border transition ${
-                language === 'hi'
-                  ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold shadow-2xs'
-                  : 'bg-white text-[#64748B] border-[#CBD5E1] hover:bg-[#F1F5F9]'
-              }`}
-            >
-              हिन्दी (Hindi)
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 1. DEALERSHIP & TRADE PROFILE */}
+      {/* 1. COMPANY & BUSINESS PROFILE */}
       <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
         <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
             <Building2 className="w-4 h-4 text-[#C81E1E]" />
             <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
-              Dealership & Legal Entity Details
+              Company & Legal Entity Details
             </h2>
           </div>
           <span className="text-[11px] text-[#64748B]">Prints on invoice header</span>
@@ -501,7 +450,7 @@ export default function SettingsPage() {
                 required
                 value={legalName}
                 onChange={(e) => setLegalName(e.target.value)}
-                placeholder="e.g. AutoLedger Spares Pvt Ltd"
+                placeholder="e.g. Apex Trade & Wholesale Pvt Ltd"
                 className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-medium text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
@@ -826,7 +775,7 @@ export default function SettingsPage() {
                 type="text"
                 value={razorpayWebhookSecret}
                 onChange={(e) => setRazorpayWebhookSecret(e.target.value.trim())}
-                placeholder="e.g. autoledger_webhook_secret_2026"
+                placeholder="e.g. tradeledger_webhook_secret_2026"
                 className="w-full h-9 pl-9 pr-3 bg-[#F8FAFC] hover:bg-[#F1F5F9]/70 focus:bg-white border border-[#CBD5E1] focus:border-[#C81E1E] focus:ring-2 focus:ring-[#C81E1E]/15 rounded-md text-xs font-mono text-[#0F172A] placeholder:text-[#94A3B8] placeholder:font-normal transition-all outline-hidden shadow-2xs"
               />
             </div>
@@ -845,7 +794,7 @@ export default function SettingsPage() {
               onClick={() => {
                 const url = typeof window !== 'undefined' 
                   ? `${window.location.origin}/api/v1/webhooks/razorpay` 
-                  : 'https://x-autoledger.vercel.app/api/v1/webhooks/razorpay';
+                  : 'https://tradeledger.app/api/v1/webhooks/razorpay';
                 navigator.clipboard.writeText(url);
                 setCopiedWebhook(true);
                 setTimeout(() => setCopiedWebhook(false), 3000);
@@ -857,7 +806,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="text-[11px] text-[#475569] font-mono bg-white p-2.5 rounded-md border border-[#CBD5E1] break-all select-all shadow-2xs">
-            {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/webhooks/razorpay` : 'https://x-autoledger.vercel.app/api/v1/webhooks/razorpay'}
+            {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/webhooks/razorpay` : 'https://tradeledger.app/api/v1/webhooks/razorpay'}
           </p>
         </div>
       </div>
