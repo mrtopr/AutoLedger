@@ -67,9 +67,9 @@ export async function GET(req: NextRequest) {
           brand: p.brand || 'GENUINE OEM',
           category: p.category || 'General Spares',
           hsnCode: p.hsnCode || '87141090',
-          salePricePaise: p.salePricePaise.toString(),
-          mrpPaise: p.mrpPaise?.toString() || p.salePricePaise.toString(),
-          stockQty: p.stockQty || 0,
+          salePricePaise: (p.salePrice || 0n).toString(),
+          mrpPaise: (p.mrp || p.salePrice || 0n).toString(),
+          stockQty: (p as any).stockQty || 0,
           models: (p as any).models || ['Universal', 'Honda Activa', 'Hero Splendor', 'Bajaj Pulsar'],
         }));
       } catch (dbErr) {
