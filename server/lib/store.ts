@@ -128,6 +128,7 @@ function getInitialData(): LocalStoreData {
     customers: [],
     ledgerEntries: [],
     invoices: [],
+    payments: [],
     paymentAttempts: {},
     hasSeededProducts: {},
     hasSeededCustomers: {},
