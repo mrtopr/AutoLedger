@@ -28,19 +28,26 @@ export async function POST(req: NextRequest) {
     const hasDb = await isPostgresAvailable();
     if (hasDb) {
       try {
-        const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+        const customer = await prisma.customer.findUnique({
+          where: { id: customerId },
+          include: { ledgerEntries: true },
+        });
         if (customer) {
-          const newBal = customer.currentBalance - amt;
-          
+          let currentBalance = 0n;
+          for (const entry of customer.ledgerEntries || []) {
+            currentBalance = currentBalance + (entry.debit || 0n) - (entry.credit || 0n);
+          }
+          const newBal = currentBalance - amt;
+
           await prisma.$transaction([
             prisma.payment.create({
               data: {
                 tenantId: customer.tenantId,
                 customerId: customer.id,
                 amount: amt,
-                paymentMode: mode === 'UPI' ? 'UPI' : 'BANK_TRANSFER',
-                referenceNumber,
-                status: 'CONFIRMED',
+                mode: mode === 'UPI' ? 'UPI' : 'BANK',
+                reference: referenceNumber,
+                status: 'CLEARED',
                 notes: narration,
               },
             }),
@@ -52,14 +59,6 @@ export async function POST(req: NextRequest) {
                 credit: amt,
                 debit: 0n,
                 narration,
-                refNumber: referenceNumber,
-              },
-            }),
-            prisma.customer.update({
-              where: { id: customerId },
-              data: {
-                currentBalance: newBal,
-                status: newBal <= customer.creditLimit ? 'GREEN' : 'YELLOW',
               },
             }),
           ]);
