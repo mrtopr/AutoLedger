@@ -72,21 +72,8 @@ export default function Sidebar() {
     <aside className="hidden lg:flex flex-col w-[240px] bg-white text-slate-700 border-r border-[#E2E8F0] fixed inset-y-0 left-0 z-40 select-none">
       {/* Brand Header */}
       <div className="h-14 px-4 flex items-center justify-between border-b border-[#E2E8F0] bg-white">
-        <Link href="/" className="flex items-center gap-2.5 min-w-0 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center font-black text-sm shadow-xs shrink-0 tracking-tighter">
-            TL
-          </div>
-          <div className="flex flex-col justify-center min-w-0">
-            <div className="flex items-center gap-1.5 leading-none">
-              <span className="font-extrabold text-[#0F172A] text-sm tracking-tight">TradeLedger</span>
-              <span className="px-1 py-0.2 rounded bg-red-50 text-[#C81E1E] text-[8px] font-bold font-mono border border-red-200 uppercase">
-                ERP
-              </span>
-            </div>
-            <span className="text-[10px] text-[#64748B] font-medium truncate mt-1 max-w-[120px]" title={showroomLocation}>
-              {showroomLocation}
-            </span>
-          </div>
+        <Link href="/" className="flex items-center min-w-0 group h-full py-2.5">
+          <img src="/logo.png" alt="TradeLeger Logo" className="h-full w-auto object-contain shrink-0 max-h-[36px]" />
         </Link>
       </div>
 

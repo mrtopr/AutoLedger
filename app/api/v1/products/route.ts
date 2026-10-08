@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     const lowStockOnly = searchParams.get('lowStock') === 'true';
 
     let formatted: any[] = [];
+    let dbSuccess = false;
 
     // 1. Try Prisma first if Postgres is reachable
     const hasDb = await isPostgresAvailable();
@@ -62,13 +63,14 @@ export async function GET(req: NextRequest) {
             };
           });
         }
+        dbSuccess = true;
       } catch (dbErr) {
         console.warn('Postgres unavailable for products GET, using localStore fallback');
       }
     }
 
-    // 2. If no products from DB or DB offline, use localStore
-    if (formatted.length === 0) {
+    // 2. If DB offline or query failed, use localStore
+    if (!dbSuccess) {
       const localProducts = localStore.getProducts(authUser?.tenantId);
       formatted = localProducts.map((p) => ({
         id: p.id,

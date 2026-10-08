@@ -89,7 +89,10 @@ export async function GET(req: NextRequest) {
           include: {
             ledgerEntries: { select: { debit: true, credit: true, createdAt: true } },
             invoices: {
-              where: { createdAt: { lte: dayEnd } },
+              where: { 
+                createdAt: { lte: dayEnd },
+                status: { not: 'CANCELLED' }
+              },
               select: { grandTotal: true, dueDate: true, status: true }
             }
           }
@@ -136,11 +139,12 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // 3. Invoices on target date & 7-day window
+        // 3. Invoices on target date & 7-day window (strictly excluding CANCELLED)
         const allRecentInvoices = await prisma.invoice.findMany({
           where: { 
             tenantId: targetTenantId,
-            createdAt: { gte: sevenDaysAgo, lte: dayEnd }
+            createdAt: { gte: sevenDaysAgo, lte: dayEnd },
+            status: { not: 'CANCELLED' }
           },
           orderBy: { createdAt: 'desc' },
           include: { 
@@ -224,6 +228,7 @@ export async function GET(req: NextRequest) {
       }
 
       for (const inv of localInvoices) {
+        if (inv.status === 'CANCELLED') continue; // Skip voided/cancelled invoices
         const invDate = toDateStr(new Date(inv.createdAt));
         const gTotal = BigInt(inv.grandTotalPaise || 0);
         const pNow = BigInt(inv.paidNowPaise || 0);
@@ -271,7 +276,7 @@ export async function GET(req: NextRequest) {
       growthText = '+100.0%';
     }
 
-    // Generate 7-Day Performance trend array
+    // Generate 7-Day Performance trend array with exact rupees
     const chartDays = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(targetDate);
@@ -283,6 +288,10 @@ export async function GET(req: NextRequest) {
       chartDays.push({
         date: dStr,
         day: dayLabel,
+        salesPaise: dayData.salesPaise.toString(),
+        collPaise: dayData.collPaise.toString(),
+        salesRupees: Math.round(Number(dayData.salesPaise) / 100),
+        collectionsRupees: Math.round(Number(dayData.collPaise) / 100),
         sales: Number(dayData.salesPaise / 100n) / 100000,
         coll: Number(dayData.collPaise / 100n) / 100000,
       });

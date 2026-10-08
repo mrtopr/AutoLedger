@@ -66,10 +66,24 @@ interface RecentInvoice {
   id: string;
   invoiceNumber: string;
   customerName: string;
+  customerShop?: string;
+  customerPhone?: string;
+  customerGstin?: string | null;
+  customerAddress?: string;
   time: string;
+  dateStr?: string;
   totalRupees: number;
   paidRupees: number;
   isCredit: boolean;
+  status: string;
+  cancelReason?: string | null;
+  items?: any[];
+  taxableValuePaise?: string;
+  cgstPaise?: string;
+  sgstPaise?: string;
+  grandTotalPaise?: string;
+  paidNowPaise?: string;
+  creditBalancePaise?: string;
 }
 
 export default function DealershipDashboardPage() {
@@ -143,8 +157,8 @@ export default function DealershipDashboardPage() {
             const mappedTrends: DailyTrend[] = dashData.chartDays.map((cd: any) => ({
               day: cd.day,
               date: cd.date,
-              salesRupees: Math.round((cd.sales || 0) * 100000),
-              collectionsRupees: Math.round((cd.coll || 0) * 100000),
+              salesRupees: cd.salesRupees ?? Math.round((cd.sales || 0) * 100000),
+              collectionsRupees: cd.collectionsRupees ?? Math.round((cd.coll || 0) * 100000),
               billCount: 0,
             }));
             setDailyData(mappedTrends);
@@ -158,15 +172,22 @@ export default function DealershipDashboardPage() {
         const list = custData.customers || (Array.isArray(custData) ? custData : []);
         const overdue = list
           .filter((c: any) => BigInt(c.balancePaise || 0) > 0n)
-          .map((c: any) => ({
-            id: c.id,
-            name: c.name || 'Owner',
-            shopName: c.shopName || c.name || 'Client',
-            phone: c.phone || '',
-            balanceRupees: Math.round(Number(BigInt(c.balancePaise || 0)) / 100),
-            daysOverdue: c.termsDays ? Math.max(1, Math.floor(Math.random() * 20) + c.termsDays) : 15,
-            status: c.status === 'RED' ? 'HIGH' : c.status === 'YELLOW' ? 'MEDIUM' : 'NORMAL',
-          }))
+          .map((c: any) => {
+            const balPaise = BigInt(c.balancePaise || 0);
+            const balRs = Math.round(Number(balPaise) / 100);
+            const terms = c.termsDays || 15;
+            const daysOvd = c.daysOverdue || (c.createdAt ? Math.max(1, Math.floor((Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24))) : terms);
+            
+            return {
+              id: c.id,
+              name: c.name || 'Owner',
+              shopName: c.shopName || c.name || 'Client',
+              phone: c.phone || '',
+              balanceRupees: balRs,
+              daysOverdue: daysOvd,
+              status: c.status === 'RED' ? 'HIGH' : c.status === 'YELLOW' ? 'MEDIUM' : 'NORMAL',
+            };
+          })
           .sort((a: any, b: any) => b.balanceRupees - a.balanceRupees);
         setOverdueCustomers(overdue);
       }
@@ -192,14 +213,28 @@ export default function DealershipDashboardPage() {
       if (invRes.ok) {
         const invData = await invRes.json();
         const list = invData.invoices || (Array.isArray(invData) ? invData : []);
-        const recent = list.map((inv: any) => ({
+        const recent: RecentInvoice[] = list.map((inv: any) => ({
           id: inv.id,
           invoiceNumber: inv.invoiceNumber || 'INV-001',
           customerName: inv.customerName || inv.customerShop || 'Counter Customer',
+          customerShop: inv.customerShop || inv.customerName || 'Counter Customer',
+          customerPhone: inv.customerPhone || '',
+          customerGstin: inv.customerGstin || null,
+          customerAddress: inv.customerAddress || '',
           time: inv.createdAt ? new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Today',
+          dateStr: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today',
           totalRupees: Math.round(Number(BigInt(inv.grandTotalPaise || inv.amountPaise || 0)) / 100),
           paidRupees: Math.round(Number(BigInt(inv.paidNowPaise || (inv.creditBalancePaise === '0' ? inv.grandTotalPaise : 0))) / 100),
           isCredit: BigInt(inv.creditBalancePaise || 0) > 0n,
+          status: inv.status || 'ISSUED',
+          cancelReason: inv.cancelReason || null,
+          items: Array.isArray(inv.items) ? inv.items : [],
+          taxableValuePaise: inv.taxableValuePaise || inv.grandTotalPaise,
+          cgstPaise: inv.cgstPaise || '0',
+          sgstPaise: inv.sgstPaise || '0',
+          grandTotalPaise: inv.grandTotalPaise,
+          paidNowPaise: inv.paidNowPaise,
+          creditBalancePaise: inv.creditBalancePaise,
         }));
         setRecentInvoices(recent);
       }
@@ -214,39 +249,55 @@ export default function DealershipDashboardPage() {
     fetchDashboardData();
   }, []);
 
-  // Handle invoice modal preview
+  // Handle invoice modal preview with actual items and status
   const handleViewInvoice = (inv: RecentInvoice) => {
+    const rawItems = (inv.items && inv.items.length > 0) ? inv.items : [
+      {
+        name: 'Automotive Spares & Consumables',
+        partNumber: 'AUTO-GEN-01',
+        hsnCode: '8714',
+        qty: 1,
+        unit: 'set',
+        ratePaise: Math.round((inv.totalRupees / 1.18) * 100),
+        rateRupees: (inv.totalRupees / 1.18).toFixed(2),
+        gstRateBp: 1800,
+        totalPaise: Math.round(inv.totalRupees * 100),
+      }
+    ];
+
+    const previewItems = rawItems.map((it: any) => ({
+      name: it.name || it.description || 'Spare Part',
+      partNumber: it.partNumber || '',
+      hsnCode: it.hsnCode || '8714',
+      qty: Number(it.qty) || 1,
+      unit: it.unit || 'pcs',
+      ratePaise: it.ratePaise ? it.ratePaise.toString() : (it.rateRupees ? Math.round(parseFloat(it.rateRupees) * 100).toString() : '0'),
+      rateRupees: it.rateRupees || (it.ratePaise ? (Number(it.ratePaise) / 100).toFixed(2) : '0.00'),
+      gstRateBp: it.gstRateBp || 1800,
+      totalPaise: it.totalPaise ? it.totalPaise.toString() : (it.lineTotal ? it.lineTotal.toString() : '0'),
+    }));
+
     const previewData: InvoicePreviewData = {
       invoiceNumber: inv.invoiceNumber,
-      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      status: inv.status,
+      cancelReason: inv.cancelReason || undefined,
+      date: inv.dateStr || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       time: inv.time,
       placeOfSupply: tenant?.stateCode || '27 - Maharashtra',
       customer: {
         name: inv.customerName,
-        shopName: inv.customerName,
-        phone: '+91 9822100000',
-        address: 'B2B Client / Counter Sales',
-        gstin: 'URP',
+        shopName: inv.customerShop || inv.customerName,
+        phone: inv.customerPhone || '+91 9822100000',
+        address: inv.customerAddress || 'B2B Client / Counter Sales',
+        gstin: inv.customerGstin || 'URP',
       },
-      items: [
-        {
-          name: 'OEM Spares Kit & Replacement Parts',
-          partNumber: 'AUTO-GEN-01',
-          hsnCode: '8714',
-          qty: 1,
-          unit: 'set',
-          ratePaise: Math.round((inv.totalRupees / 1.18) * 100),
-          rateRupees: (inv.totalRupees / 1.18).toFixed(2),
-          gstRateBp: 1800,
-          totalPaise: Math.round(inv.totalRupees * 100),
-        }
-      ],
-      taxableValuePaise: Math.round((inv.totalRupees / 1.18) * 100),
-      cgstPaise: Math.round((inv.totalRupees - (inv.totalRupees / 1.18)) / 2 * 100),
-      sgstPaise: Math.round((inv.totalRupees - (inv.totalRupees / 1.18)) / 2 * 100),
-      grandTotalPaise: Math.round(inv.totalRupees * 100),
-      paidNowPaise: Math.round(inv.paidRupees * 100),
-      creditBalancePaise: Math.round((inv.totalRupees - inv.paidRupees) * 100),
+      items: previewItems,
+      taxableValuePaise: inv.taxableValuePaise || Math.round((inv.totalRupees / 1.18) * 100).toString(),
+      cgstPaise: inv.cgstPaise || Math.round(((inv.totalRupees - (inv.totalRupees / 1.18)) / 2) * 100).toString(),
+      sgstPaise: inv.sgstPaise || Math.round(((inv.totalRupees - (inv.totalRupees / 1.18)) / 2) * 100).toString(),
+      grandTotalPaise: inv.grandTotalPaise || Math.round(inv.totalRupees * 100).toString(),
+      paidNowPaise: inv.paidNowPaise || Math.round(inv.paidRupees * 100).toString(),
+      creditBalancePaise: inv.creditBalancePaise || Math.round((inv.totalRupees - inv.paidRupees) * 100).toString(),
       tenant: {
         name: tenant?.name || 'Apex Trade & Wholesale',
         legalName: tenant?.legalName || 'Apex Trade & Wholesale Pvt Ltd',
@@ -327,15 +378,6 @@ export default function DealershipDashboardPage() {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#C81E1E]' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-
-          <Link
-            href="/pos"
-            className="h-8 inline-flex items-center gap-1.5 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white font-semibold text-xs rounded-md transition shadow-2xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{t('app.new_bill', 'Counter POS')}</span>
-            <kbd className="hidden sm:inline px-1.5 py-0.5 bg-red-900/60 rounded text-[10px] text-white font-mono">F2</kbd>
-          </Link>
         </div>
       </div>
 
@@ -703,26 +745,41 @@ export default function DealershipDashboardPage() {
               </thead>
               <tbody className="divide-y divide-[#F1F5F9] text-[#334155]">
                 {recentInvoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-[#F8F9FA] transition-colors">
+                  <tr key={inv.id} className={`hover:bg-[#F8F9FA] transition-colors ${inv.status === 'CANCELLED' ? 'bg-[#FFF1F2]/40 opacity-75' : ''}`}>
                     <td className="py-2.5 px-3.5 font-mono font-semibold text-[#0F172A]">
-                      {inv.invoiceNumber}
+                      <div className="flex items-center gap-1.5">
+                        <span className={inv.status === 'CANCELLED' ? 'line-through text-[#94A3B8]' : ''}>
+                          {inv.invoiceNumber}
+                        </span>
+                        {inv.status === 'CANCELLED' && (
+                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-[#FFE4E6] text-[#E11D48] border border-[#FECDD3]">
+                            Cancelled
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-3.5 font-medium text-[#0F172A]">
-                      {inv.customerName}
+                      <span className={inv.status === 'CANCELLED' ? 'line-through text-[#94A3B8]' : ''}>
+                        {inv.customerName}
+                      </span>
                     </td>
                     <td className="py-2.5 px-3.5 text-[#64748B] font-mono text-[11px]">
                       {inv.time}
                     </td>
-                    <td className="py-2.5 px-3.5 text-right font-mono tabular-nums font-semibold text-[#0F172A]">
+                    <td className={`py-2.5 px-3.5 text-right font-mono tabular-nums font-semibold ${
+                      inv.status === 'CANCELLED' ? 'line-through text-[#94A3B8]' : 'text-[#0F172A]'
+                    }`}>
                       ₹{inv.totalRupees.toLocaleString('en-IN')}
                     </td>
                     <td className="py-2.5 px-3.5 text-center">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        !inv.isCredit 
-                          ? 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]' 
-                          : 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]'
+                        inv.status === 'CANCELLED'
+                          ? 'bg-[#FFE4E6] text-[#BE123C] border border-[#FECDD3]'
+                          : !inv.isCredit 
+                            ? 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]' 
+                            : 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]'
                       }`}>
-                        {!inv.isCredit ? '● Paid' : '● Due'}
+                        {inv.status === 'CANCELLED' ? '● Cancelled' : (!inv.isCredit ? '● Paid' : '● Due')}
                       </span>
                     </td>
                     <td className="py-2.5 px-3.5 text-right">

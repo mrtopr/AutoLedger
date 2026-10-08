@@ -29,7 +29,8 @@ import {
   AlertCircle,
   Store,
   Phone,
-  Users
+  Users,
+  Calendar
 } from 'lucide-react';
 import { calculateInvoiceTax, formatPaiseToRupees, parseRupeesToPaise, LineItemInput } from '@/server/lib/tax';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
@@ -107,7 +108,7 @@ export default function QuickBillPosPage() {
       name: '',
       qty: 1,
       unit: 'pcs',
-      rateRupees: '0.00',
+      rateRupees: '',
       discountType: 'FLAT',
       discountValue: '0',
       gstRateBp: 1800,
@@ -117,11 +118,12 @@ export default function QuickBillPosPage() {
 
   // Payment states
   const [paymentMode, setPaymentMode] = useState<'FULL_CASH' | 'FULL_UPI' | 'FULL_KHATA' | 'SPLIT'>('FULL_CASH');
-  const [cashAmount, setCashAmount] = useState<string>('0.00');
-  const [upiAmount, setUpiAmount] = useState<string>('0.00');
+  const [cashAmount, setCashAmount] = useState<string>('');
+  const [upiAmount, setUpiAmount] = useState<string>('');
   const [upiRef, setUpiRef] = useState<string>('');
 
   // Invoice / Success / Customer Modal states
+  const [invoiceDate, setInvoiceDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState<boolean>(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState<boolean>(false);
   const [isSubmittingBill, setIsSubmittingBill] = useState<boolean>(false);
@@ -303,6 +305,23 @@ export default function QuickBillPosPage() {
   const totalPaidNowPaise = cashPaise + upiPaise;
   const balanceOnCreditPaise = grandTotalPaise > totalPaidNowPaise ? (grandTotalPaise - totalPaidNowPaise) : 0n;
 
+  // Simple Split Handlers (Cash & UPI)
+  const handleSelectSplitMode = () => {
+    setPaymentMode('SPLIT');
+    if (cashAmount === '0.00' || cashAmount === '0') setCashAmount('');
+    if (upiAmount === '0.00' || upiAmount === '0') setUpiAmount('');
+  };
+
+  const handleCashAmountChange = (val: string) => {
+    const cleaned = val.replace(/[^0-9.]/g, '');
+    setCashAmount(cleaned);
+  };
+
+  const handleUpiAmountChange = (val: string) => {
+    const cleaned = val.replace(/[^0-9.]/g, '');
+    setUpiAmount(cleaned);
+  };
+
   // Add Item Row
   const addItemRow = (prod?: CatalogOption) => {
     const newItem: PosLineItem = prod ? {
@@ -322,7 +341,7 @@ export default function QuickBillPosPage() {
       name: '',
       qty: 1,
       unit: 'pcs',
-      rateRupees: '0.00',
+      rateRupees: '',
       discountType: 'FLAT',
       discountValue: '0',
       gstRateBp: 1800,
@@ -343,7 +362,7 @@ export default function QuickBillPosPage() {
           name: '',
           qty: 1,
           unit: 'pcs',
-          rateRupees: '0.00',
+          rateRupees: '',
           discountType: 'FLAT',
           discountValue: '0',
           gstRateBp: 1800,
@@ -413,6 +432,7 @@ export default function QuickBillPosPage() {
         customerName: selectedCustomer.shopName || selectedCustomer.name,
         customerPhone: selectedCustomer.phone,
         customerGstin: selectedCustomer.gstin,
+        invoiceDate: invoiceDate || undefined,
         items: validItems.map(it => ({
           productId: it.productId,
           name: it.name,
@@ -451,6 +471,7 @@ export default function QuickBillPosPage() {
         upiPaidPaise: upiPaise,
         creditBalancePaise: balanceOnCreditPaise,
         paidNowPaise: totalPaidNowPaise,
+        invoiceDate,
       });
 
       setIsSuccessModal(true);
@@ -465,21 +486,22 @@ export default function QuickBillPosPage() {
 
   const startNextBill = () => {
     setIsSuccessModal(false);
+    setInvoiceDate(new Date().toISOString().split('T')[0]);
     setItems([
       {
         id: Math.random().toString(),
         name: '',
         qty: 1,
         unit: 'pcs',
-        rateRupees: '0.00',
+        rateRupees: '',
         discountType: 'FLAT',
         discountValue: '0',
         gstRateBp: 1800,
         isTaxInclusive: false,
       }
     ]);
-    setCashAmount('0.00');
-    setUpiAmount('0.00');
+    setCashAmount('');
+    setUpiAmount('');
     setUpiRef('');
     setWalkInName('');
     setWalkInPhone('');
@@ -516,7 +538,9 @@ export default function QuickBillPosPage() {
 
     const previewInvoice: InvoicePreviewData = {
       invoiceNumber: issuedInvoiceData?.invoiceNumber || `${tenant?.settings?.invoicePrefix || 'INV/2026-27/'}DRAFT`,
-      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      date: invoiceDate 
+        ? new Date(`${invoiceDate}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
       placeOfSupply: tenant?.stateCode || '27 - Maharashtra',
       customer: {
@@ -639,8 +663,26 @@ export default function QuickBillPosPage() {
           </div>
         </div>
 
-        {/* Right: Mode Switcher & Quick Navigation */}
-        <div className="flex items-center gap-2">
+        {/* Right: Date Picker, Mode Switcher & Quick Navigation */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Invoice Date Picker (Supports today & backdated billings) */}
+          <div className="flex items-center gap-1.5 bg-[#F8F9FA] hover:bg-white border border-[#CBD5E1] rounded-lg px-2.5 py-0.5 shadow-2xs transition focus-within:border-[#C81E1E] focus-within:bg-white h-8">
+            <Calendar className="w-3.5 h-3.5 text-[#C81E1E] shrink-0" />
+            <div className="flex flex-col justify-center">
+              <label htmlFor="invoice-date-input" className="text-[8px] uppercase font-bold text-[#64748B] leading-none select-none">
+                Invoice Date
+              </label>
+              <input
+                id="invoice-date-input"
+                type="date"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+                className="text-[11px] font-semibold text-[#0F172A] bg-transparent border-0 outline-hidden p-0 cursor-pointer h-3.5 font-mono"
+                title="Invoice Date (Select past date if billing forgotten orders)"
+              />
+            </div>
+          </div>
+
           {/* Segmented Mode Control */}
           <div className="bg-[#F1F5F9] p-0.5 rounded-lg flex items-center border border-[#E2E8F0]">
             <button
@@ -959,6 +1001,7 @@ export default function QuickBillPosPage() {
                             min="1"
                             value={item.qty}
                             onChange={(e) => updateItemRow(item.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                            onFocus={(e) => e.target.select()}
                             onKeyDown={(e) => handleItemKeyDown(e, idx, 'qty')}
                             className="w-14 text-center bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 font-semibold font-mono tabular-nums text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
                           />
@@ -986,8 +1029,15 @@ export default function QuickBillPosPage() {
                             type="text"
                             value={item.rateRupees}
                             onChange={(e) => updateItemRow(item.id, 'rateRupees', e.target.value)}
+                            onFocus={(e) => {
+                              if (item.rateRupees === '0' || item.rateRupees === '0.00' || item.rateRupees === '0.0') {
+                                updateItemRow(item.id, 'rateRupees', '');
+                              }
+                              e.target.select();
+                            }}
                             onKeyDown={(e) => handleItemKeyDown(e, idx, 'rate')}
-                            className="w-22 text-right bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-2 font-mono tabular-nums font-semibold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
+                            placeholder="0.00"
+                            className="w-22 text-right bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-2 font-mono tabular-nums font-semibold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs placeholder:text-slate-400"
                           />
                         </td>
 
@@ -1113,7 +1163,7 @@ export default function QuickBillPosPage() {
 
                 <button
                   type="button"
-                  onClick={() => setPaymentMode('SPLIT')}
+                  onClick={handleSelectSplitMode}
                   className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
                     paymentMode === 'SPLIT' 
                       ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold' 
@@ -1141,26 +1191,44 @@ export default function QuickBillPosPage() {
               </div>
             )}
 
-            {/* Split / Custom Input */}
+            {/* Split: Simple Cash & UPI Inputs */}
             {paymentMode === 'SPLIT' && (
               <div className="bg-[#F8F9FA] p-3 rounded-md border border-[#E2E8F0] space-y-2 text-xs shadow-2xs">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">Cash Paid (₹)</label>
+                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">
+                      💵 Cash Paid (₹)
+                    </label>
                     <input
                       type="text"
                       value={cashAmount}
-                      onChange={(e) => setCashAmount(e.target.value)}
-                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A]"
+                      onChange={(e) => handleCashAmountChange(e.target.value)}
+                      onFocus={(e) => {
+                        if (cashAmount === '0' || cashAmount === '0.00' || cashAmount === '0.0') {
+                          setCashAmount('');
+                        }
+                        e.target.select();
+                      }}
+                      placeholder="0.00"
+                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs placeholder:text-slate-400"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">UPI Paid (₹)</label>
+                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">
+                      📱 UPI Paid (₹)
+                    </label>
                     <input
                       type="text"
                       value={upiAmount}
-                      onChange={(e) => setUpiAmount(e.target.value)}
-                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A]"
+                      onChange={(e) => handleUpiAmountChange(e.target.value)}
+                      onFocus={(e) => {
+                        if (upiAmount === '0' || upiAmount === '0.00' || upiAmount === '0.0') {
+                          setUpiAmount('');
+                        }
+                        e.target.select();
+                      }}
+                      placeholder="0.00"
+                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs placeholder:text-slate-400"
                     />
                   </div>
                 </div>
@@ -1169,8 +1237,8 @@ export default function QuickBillPosPage() {
                     type="text"
                     value={upiRef}
                     onChange={(e) => setUpiRef(e.target.value)}
-                    placeholder="Optional UPI Ref / UTR..."
-                    className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 text-[11px] text-[#334155]"
+                    placeholder="Optional UPI Ref / UTR number..."
+                    className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 text-[11px] text-[#334155] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden"
                   />
                 </div>
               </div>

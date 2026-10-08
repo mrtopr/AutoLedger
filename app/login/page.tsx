@@ -156,13 +156,10 @@ function LoginFormContent() {
         <div className="md:col-span-5 p-8 sm:p-10 flex flex-col justify-between items-center text-center text-white relative">
           
           <div className="flex flex-col items-center mt-4">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-2xl mb-4 text-white font-black text-3xl sm:text-4xl tracking-tighter drop-shadow">
-              TL
+            <div className="w-56 sm:w-72 flex items-center justify-center mb-4 drop-shadow-lg">
+              <img src="/logo.png" alt="TradeLeger Logo" className="w-full h-auto object-contain" />
             </div>
 
-            <h2 className="text-2xl font-black tracking-wide text-white">
-              TradeLedger ERP
-            </h2>
             <p className="text-xs text-white/90 mt-1.5 font-medium">
               Universal B2B Trade & Billing Platform
             </p>

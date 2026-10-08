@@ -373,7 +373,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
             <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-between print:bg-red-100">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                <span><strong>VOID / CANCELLED INVOICE:</strong> {invoice.cancelReason ? `Reason: ${invoice.cancelReason}` : 'This bill has been cancelled and reversed.'}</span>
+                <span><strong>CANCELLED INVOICE:</strong> {invoice.cancelReason ? `Reason: ${invoice.cancelReason}` : 'This bill has been cancelled and reversed.'}</span>
               </div>
               <span className="font-mono text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">
                 Reversed on Ledger
@@ -394,9 +394,6 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
             {/* Top-Left: Company Logo & Identity */}
             <div className="space-y-1 max-w-md">
               <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-xl bg-slate-900 flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1 print:w-12 print:h-12 border border-slate-800">
-                  <img src="/logo.png" alt="Company Logo" className="w-full h-full object-contain" />
-                </div>
                 <div>
                   <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-none uppercase">
                     {showroomName}
@@ -695,8 +692,14 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
             </div>
           </div>
 
-          <div className="text-center text-[9px] text-slate-400 border-t border-slate-100 pt-1.5 font-mono">
-            Digitally generated & signed tax invoice compliant with Information Technology Act, 2000 & Rule 46 of CGST Rules, 2017. Physical signature not required.
+          <div className="text-center flex flex-col items-center justify-center pt-3 border-t border-slate-100 mt-2">
+            <div className="flex items-center justify-center gap-1.5 mb-1.5 opacity-60 mix-blend-multiply print:opacity-50">
+              <span className="text-[9px] font-semibold tracking-widest text-slate-500 uppercase">POWERED BY</span>
+              <img src="/logo.png" alt="TradeLeger" className="h-3.5 w-auto" />
+            </div>
+            <div className="text-[9px] text-slate-400 font-mono">
+              Digitally generated & signed tax invoice compliant with Information Technology Act, 2000 & Rule 46 of CGST Rules, 2017. Physical signature not required.
+            </div>
           </div>
         </div>
       </div>

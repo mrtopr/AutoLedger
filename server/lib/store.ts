@@ -116,6 +116,8 @@ export interface LocalStoreData {
   invoices: LocalInvoice[];
   payments: LocalPayment[];
   paymentAttempts?: Record<string, { status: 'paid' | 'failed' | 'pending'; reason?: string; paymentId?: string; updatedAt: string }>;
+  hasSeededProducts?: Record<string, boolean>;
+  hasSeededCustomers?: Record<string, boolean>;
 }
 
 function getInitialData(): LocalStoreData {
@@ -126,8 +128,9 @@ function getInitialData(): LocalStoreData {
     customers: [],
     ledgerEntries: [],
     invoices: [],
-    payments: [],
     paymentAttempts: {},
+    hasSeededProducts: {},
+    hasSeededCustomers: {},
   };
 }
 
@@ -269,7 +272,14 @@ class LocalStore {
   getProducts(tenantId?: string): LocalProduct[] {
     if (tenantId) {
       const filtered = this.data.products.filter((p) => p.tenantId === tenantId);
-      if (filtered.length > 0) return filtered;
+      
+      this.data.hasSeededProducts = this.data.hasSeededProducts || {};
+      if (filtered.length > 0 || this.data.hasSeededProducts[tenantId]) {
+        return filtered;
+      }
+
+      this.data.hasSeededProducts[tenantId] = true;
+      this.save();
 
       // Seed starter catalog products if tenant is empty
       const defaultProducts = [
@@ -434,7 +444,14 @@ class LocalStore {
   getCustomers(tenantId?: string): LocalCustomer[] {
     if (tenantId) {
       const filtered = this.data.customers.filter((c) => c.tenantId === tenantId);
-      if (filtered.length > 0) return filtered;
+      
+      this.data.hasSeededCustomers = this.data.hasSeededCustomers || {};
+      if (filtered.length > 0 || this.data.hasSeededCustomers[tenantId]) {
+        return filtered;
+      }
+
+      this.data.hasSeededCustomers[tenantId] = true;
+      this.save();
 
       // Seed starter B2B customers for this tenant
       const defaultCustomers = [
@@ -581,13 +598,14 @@ class LocalStore {
     return withRunning.reverse();
   }
 
-  addLedgerEntry(entry: Omit<LocalLedgerEntry, 'id' | 'createdAt' | 'runningBalancePaise' | 'date'> & { date?: string }): LocalLedgerEntry {
+  addLedgerEntry(entry: Omit<LocalLedgerEntry, 'id' | 'createdAt' | 'runningBalancePaise' | 'date'> & { date?: string; createdAt?: string }): LocalLedgerEntry {
+    const entryCreatedAt = entry.createdAt || new Date().toISOString();
     const newEntry: LocalLedgerEntry = {
       ...entry,
       id: `led-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      date: entry.date || new Date().toISOString().split('T')[0],
+      date: entry.date || entryCreatedAt.split('T')[0],
       runningBalancePaise: '0',
-      createdAt: new Date().toISOString(),
+      createdAt: entryCreatedAt,
     };
     this.data.ledgerEntries.unshift(newEntry);
 
@@ -607,12 +625,12 @@ class LocalStore {
     return newEntry;
   }
 
-  createInvoice(invoice: Omit<LocalInvoice, 'id' | 'createdAt'>): LocalInvoice {
+  createInvoice(invoice: Omit<LocalInvoice, 'id' | 'createdAt'> & { createdAt?: string }): LocalInvoice {
     const newInvoice: LocalInvoice = {
       ...invoice,
       id: `inv-${Date.now()}`,
       status: invoice.status || 'ISSUED',
-      createdAt: new Date().toISOString(),
+      createdAt: invoice.createdAt || new Date().toISOString(),
     };
     this.data.invoices.unshift(newInvoice);
 
@@ -675,11 +693,11 @@ class LocalStore {
     return this.data.payments;
   }
 
-  createPayment(payment: Omit<LocalPayment, 'id' | 'createdAt'>): LocalPayment {
+  createPayment(payment: Omit<LocalPayment, 'id' | 'createdAt'> & { createdAt?: string }): LocalPayment {
     const newPayment: LocalPayment = {
       ...payment,
       id: `pay-${Date.now()}`,
-      createdAt: new Date().toISOString(),
+      createdAt: payment.createdAt || new Date().toISOString(),
     };
     this.data.payments.unshift(newPayment);
     this.save();

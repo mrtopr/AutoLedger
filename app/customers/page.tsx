@@ -389,7 +389,7 @@ export default function CustomersPage() {
 
       {/* High-Density Customer Registry Table */}
       <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden shadow-2xs">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[300px]">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#F8F9FA] border-b border-[#E2E8F0] text-[10px] font-semibold text-[#64748B] uppercase tracking-wider">
@@ -417,7 +417,7 @@ export default function CustomersPage() {
                   </td>
                 </tr>
               ) : (
-                customers.map((cust) => {
+                customers.map((cust, idx) => {
                   const balPaise = BigInt(cust.balancePaise || 0);
                   const limPaise = BigInt(cust.creditLimitPaise || 5000000);
                   const overdue = BigInt(cust.overduePaise || 0);
@@ -540,7 +540,7 @@ export default function CustomersPage() {
                           {activeMenuId === cust.id && (
                             <div 
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute right-0 top-8 z-50 w-44 bg-white border border-[#E2E8F0] rounded-lg shadow-lg py-1 text-left animate-in fade-in zoom-in-95 duration-100"
+                              className={`absolute right-0 z-50 w-44 bg-white border border-[#E2E8F0] rounded-lg shadow-lg py-1 text-left animate-in fade-in zoom-in-95 duration-100 ${idx >= customers.length - 2 && customers.length >= 3 ? 'bottom-full mb-1' : 'top-8'}`}
                             >
                               <button
                                 type="button"

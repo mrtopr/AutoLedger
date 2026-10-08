@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     }
 
     let invoices: any[] = [];
+    let dbSuccess = false;
     const hasDb = await isPostgresAvailable();
     if (hasDb && isUuid(targetTenantId)) {
       try {
@@ -66,12 +67,13 @@ export async function GET(req: NextRequest) {
             };
           });
         }
+        dbSuccess = true;
       } catch (err) {
         console.warn('Postgres unavailable for invoices GET, using localStore fallback');
       }
     }
 
-    if (invoices.length === 0) {
+    if (!dbSuccess) {
       const localInvs = localStore.getInvoices(targetTenantId);
       invoices = localInvs.map((inv) => {
         const cust = localStore.getCustomerById(inv.customerId || '');
@@ -118,6 +120,7 @@ export async function POST(req: NextRequest) {
       cashPaidPaise = 0,
       upiPaidPaise = 0,
       upiRef,
+      invoiceDate,
     } = body;
 
     if (!items || items.length === 0) {
@@ -125,6 +128,16 @@ export async function POST(req: NextRequest) {
     }
 
     const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
+
+    // Parse custom invoice date if provided
+    let invoiceCreatedDate = new Date();
+    if (invoiceDate && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate)) {
+      const parsed = new Date(`${invoiceDate}T12:00:00.000Z`);
+      if (!isNaN(parsed.getTime())) {
+        invoiceCreatedDate = parsed;
+      }
+    }
+    const invoiceCreatedIso = invoiceCreatedDate.toISOString();
 
     // 1. Calculate Tax & Totals
     const calculationInputs: LineItemInput[] = items.map((item: any) => ({
@@ -166,6 +179,7 @@ export async function POST(req: NextRequest) {
             paidNow: totalPaidNow,
             amountPaid: totalPaidNow,
             balanceDue: balanceOnCredit,
+            createdAt: invoiceCreatedDate,
             items: {
               create: items.map((it: any) => ({
                 productId: it.productId || null,
@@ -197,6 +211,7 @@ export async function POST(req: NextRequest) {
               debit: taxSummary.grandTotal,
               credit: 0n,
               narration: `Tax Invoice #${invoiceNumber}`,
+              createdAt: invoiceCreatedDate,
             },
           });
 
@@ -212,6 +227,7 @@ export async function POST(req: NextRequest) {
                 reference: upiRef || `POS-${invoiceNumber}`,
                 status: PaymentStatus.CLEARED,
                 notes: `Counter Settlement for Invoice #${invoiceNumber}`,
+                createdAt: invoiceCreatedDate,
               },
             });
 
@@ -233,6 +249,7 @@ export async function POST(req: NextRequest) {
                 debit: 0n,
                 credit: totalPaidNow,
                 narration: `Counter Settlement (${mappedMode}) for Invoice #${invoiceNumber}`,
+                createdAt: invoiceCreatedDate,
               },
             });
           }
@@ -263,6 +280,7 @@ export async function POST(req: NextRequest) {
       grandTotalPaise: taxSummary.grandTotal.toString(),
       paidNowPaise: totalPaidNow.toString(),
       creditBalancePaise: balanceOnCredit.toString(),
+      createdAt: invoiceCreatedIso,
       items: items.map((it: any) => ({
         productId: it.productId,
         name: it.name,
@@ -282,6 +300,8 @@ export async function POST(req: NextRequest) {
         narration: `Tax Invoice #${invoiceNumber}`,
         debitPaise: taxSummary.grandTotal.toString(),
         creditPaise: '0',
+        date: invoiceCreatedIso.split('T')[0],
+        createdAt: invoiceCreatedIso,
       });
 
       // 2. If paid at counter (full or partial), post Credit Ledger Entry & Payment Record
@@ -293,6 +313,7 @@ export async function POST(req: NextRequest) {
           amountPaise: totalPaidNow.toString(),
           mode: payMode,
           referenceNumber: upiRef || `POS-${invoiceNumber}`,
+          createdAt: invoiceCreatedIso,
         });
 
         localStore.addLedgerEntry({
@@ -303,6 +324,8 @@ export async function POST(req: NextRequest) {
           narration: `Counter Settlement (${payMode}) for Invoice #${invoiceNumber}`,
           debitPaise: '0',
           creditPaise: totalPaidNow.toString(),
+          date: invoiceCreatedIso.split('T')[0],
+          createdAt: invoiceCreatedIso,
         });
       }
     }

@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status') || '';
 
     let formatted: any[] = [];
+    let dbSuccess = false;
 
     // 1. Try Prisma first if Postgres is available
     const hasDb = await isPostgresAvailable();
@@ -68,13 +69,14 @@ export async function GET(req: NextRequest) {
             };
           });
         }
+        dbSuccess = true;
       } catch (dbErr) {
         console.warn('Postgres unavailable for customers GET, using localStore fallback');
       }
     }
 
-    // 2. If no customers from DB, use localStore
-    if (formatted.length === 0) {
+    // 2. If DB offline or query failed, use localStore
+    if (!dbSuccess) {
       const localCusts = localStore.getCustomers(authUser?.tenantId);
       formatted = localCusts.map((c) => ({
         id: c.id,
