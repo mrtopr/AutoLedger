@@ -359,6 +359,44 @@ export default function QuickBillPosPage() {
     setItems(prev => prev.map(it => it.id === id ? { ...it, [field]: value } : it));
   };
 
+  // Keyboard Navigation: Enter jumps to next field, and Enter on Rate creates & focuses next item row
+  const handleItemKeyDown = (e: React.KeyboardEvent, idx: number, field: 'name' | 'qty' | 'rate') => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+
+      if (field === 'name') {
+        const qtyInput = document.getElementById(`item-qty-${idx}`) as HTMLInputElement;
+        if (qtyInput) {
+          qtyInput.focus();
+          qtyInput.select();
+        }
+      } else if (field === 'qty') {
+        const rateInput = document.getElementById(`item-rate-${idx}`) as HTMLInputElement;
+        if (rateInput) {
+          rateInput.focus();
+          rateInput.select();
+        }
+      } else if (field === 'rate') {
+        if (idx === items.length - 1) {
+          addItemRow();
+          setTimeout(() => {
+            const nextNameInput = document.getElementById(`item-name-${idx + 1}`) as HTMLInputElement;
+            if (nextNameInput) {
+              nextNameInput.focus();
+              nextNameInput.select();
+            }
+          }, 40);
+        } else {
+          const nextNameInput = document.getElementById(`item-name-${idx + 1}`) as HTMLInputElement;
+          if (nextNameInput) {
+            nextNameInput.focus();
+            nextNameInput.select();
+          }
+        }
+      }
+    }
+  };
+
   // Handle Complete Bill Submission
   const handleIssueInvoice = async () => {
     const validItems = items.filter(it => it.name.trim() !== '');
@@ -903,9 +941,11 @@ export default function QuickBillPosPage() {
                         {/* Name & SKU */}
                         <td className="py-2 px-2.5">
                           <input
+                            id={`item-name-${idx}`}
                             type="text"
                             value={item.name}
                             onChange={(e) => updateItemRow(item.id, 'name', e.target.value)}
+                            onKeyDown={(e) => handleItemKeyDown(e, idx, 'name')}
                             placeholder="Enter item description..."
                             className="w-full bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg px-2.5 py-1 text-xs font-medium text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
                           />
@@ -914,10 +954,12 @@ export default function QuickBillPosPage() {
                         {/* Qty */}
                         <td className="py-2 px-2 text-center">
                           <input
+                            id={`item-qty-${idx}`}
                             type="number"
                             min="1"
                             value={item.qty}
                             onChange={(e) => updateItemRow(item.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                            onKeyDown={(e) => handleItemKeyDown(e, idx, 'qty')}
                             className="w-14 text-center bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 font-semibold font-mono tabular-nums text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
                           />
                         </td>
@@ -940,9 +982,11 @@ export default function QuickBillPosPage() {
                         {/* Rate (₹) */}
                         <td className="py-2 px-2.5 text-right">
                           <input
+                            id={`item-rate-${idx}`}
                             type="text"
                             value={item.rateRupees}
                             onChange={(e) => updateItemRow(item.id, 'rateRupees', e.target.value)}
+                            onKeyDown={(e) => handleItemKeyDown(e, idx, 'rate')}
                             className="w-22 text-right bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-2 font-mono tabular-nums font-semibold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
                           />
                         </td>
