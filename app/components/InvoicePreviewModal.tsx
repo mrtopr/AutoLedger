@@ -38,7 +38,10 @@ export interface InvoicePreviewItem {
 }
 
 export interface InvoicePreviewData {
+  id?: string;
   invoiceNumber: string;
+  status?: string;
+  cancelReason?: string;
   date?: string;
   time?: string;
   placeOfSupply?: string;
@@ -364,8 +367,27 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
            ============================================================ */}
         <div 
           id="printable-invoice-container"
-          className="flex-1 overflow-y-auto p-6 sm:p-7 space-y-3.5 text-slate-900 bg-white print:p-0 print:m-0 print:overflow-visible print:space-y-2.5 print:text-[11px]"
+          className="flex-1 overflow-y-auto p-6 sm:p-7 space-y-3.5 text-slate-900 bg-white relative print:p-0 print:m-0 print:overflow-visible print:space-y-2.5 print:text-[11px]"
         >
+          {invoice.status === 'CANCELLED' && (
+            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-between print:bg-red-100">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                <span><strong>VOID / CANCELLED INVOICE:</strong> {invoice.cancelReason ? `Reason: ${invoice.cancelReason}` : 'This bill has been cancelled and reversed.'}</span>
+              </div>
+              <span className="font-mono text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">
+                Reversed on Ledger
+              </span>
+            </div>
+          )}
+
+          {invoice.status === 'CANCELLED' && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none overflow-hidden z-20">
+              <div className="text-red-500/15 border-8 border-red-500/20 text-6xl sm:text-8xl font-black uppercase tracking-widest rotate-[-25deg] px-8 py-3 rounded-2xl select-none">
+                CANCELLED
+              </div>
+            </div>
+          )}
           
           {/* 1. COMPANY HEADER & TAX INVOICE METADATA */}
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-3">

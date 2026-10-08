@@ -68,6 +68,8 @@ export async function GET(
               invoices: customer.invoices.map((inv: any) => ({
                 id: inv.id,
                 invoiceNumber: inv.number || `INV-${inv.id.slice(0, 6)}`,
+                status: inv.status,
+                cancelReason: inv.cancelReason || null,
                 date: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : 'Today',
                 grandTotalPaise: (inv.grandTotal || 0n).toString(),
                 paidNowPaise: (inv.amountPaid || 0n).toString(),
@@ -94,6 +96,8 @@ export async function GET(
     const customerInvoices = localStore.getInvoices().filter((inv: any) => inv.customerId === customerId).map((inv: any) => ({
       id: inv.id,
       invoiceNumber: inv.invoiceNumber || inv.number || `INV-${inv.id.slice(0, 6)}`,
+      status: inv.status || 'ISSUED',
+      cancelReason: inv.cancelReason || null,
       date: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : 'Today',
       grandTotalPaise: inv.grandTotalPaise || inv.amountPaise || '0',
       paidNowPaise: inv.paidNowPaise || '0',

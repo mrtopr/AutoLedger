@@ -43,6 +43,8 @@ export async function GET(req: NextRequest) {
               customerPhone: inv.customer?.phone || '',
               customerGstin: inv.customer?.gstin || null,
               customerAddress: inv.customer?.address || '',
+              status: inv.status,
+              cancelReason: inv.cancelReason || null,
               grandTotalPaise: inv.grandTotal.toString(),
               paidNowPaise: paidNow.toString(),
               creditBalancePaise: balDue.toString(),
@@ -82,6 +84,8 @@ export async function GET(req: NextRequest) {
           customerPhone: cust?.phone || '',
           customerGstin: cust?.gstin || null,
           customerAddress: cust?.address || '',
+          status: inv.status || 'ISSUED',
+          cancelReason: inv.cancelReason || null,
           grandTotalPaise: inv.grandTotalPaise,
           paidNowPaise: inv.paidNowPaise,
           creditBalancePaise: inv.creditBalancePaise,
@@ -317,5 +321,117 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Invoice create error:', error);
     return NextResponse.json({ error: error.message || 'Failed to issue invoice' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const authUser = await getAuthenticatedUser(req);
+    const { searchParams } = new URL(req.url);
+    
+    let id = searchParams.get('id');
+    let reason = searchParams.get('reason') || 'Billing cancellation';
+
+    if (!id) {
+      try {
+        const body = await req.json();
+        id = body.id;
+        if (body.reason) reason = body.reason;
+      } catch {
+        // query param used
+      }
+    }
+
+    if (!id) {
+      return NextResponse.json({ error: 'Invoice ID is required' }, { status: 400 });
+    }
+
+    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id;
+
+    // 1. Try Postgres reversal if available
+    const hasDb = await isPostgresAvailable();
+    if (hasDb && isUuid(id)) {
+      try {
+        const invoice = await prisma.invoice.findUnique({
+          where: { id },
+          include: { items: true, customer: true },
+        });
+
+        if (invoice) {
+          if (invoice.status === InvoiceStatus.CANCELLED) {
+            return NextResponse.json({ success: true, message: 'Invoice is already cancelled' });
+          }
+
+          // A. Mark Invoice Cancelled
+          await prisma.invoice.update({
+            where: { id },
+            data: {
+              status: InvoiceStatus.CANCELLED,
+              cancelReason: reason,
+            },
+          });
+
+          // B. Restore Stock Movement for items
+          for (const item of invoice.items) {
+            if (item.productId) {
+              await prisma.stockMovement.create({
+                data: {
+                  tenantId: invoice.tenantId,
+                  productId: item.productId,
+                  qty: Number(item.qty),
+                  reason: 'RETURN_IN',
+                  refType: 'INVOICE_CANCEL',
+                  refId: invoice.id,
+                  unitCost: item.rate,
+                },
+              }).catch(() => {});
+            }
+          }
+
+          // C. Reverse Customer Khata Ledger Entry
+          if (invoice.customerId) {
+            await prisma.ledgerEntry.create({
+              data: {
+                tenantId: invoice.tenantId,
+                customerId: invoice.customerId,
+                entryType: LedgerEntryType.ADJUSTMENT,
+                refId: invoice.id,
+                debit: 0n,
+                credit: invoice.grandTotal,
+                narration: `Reversal - Cancelled Invoice #${invoice.number || id.slice(0, 8)} (${reason})`,
+              },
+            });
+
+            // Update Customer Running Balance & Health
+            const cust = await prisma.customer.findUnique({
+              where: { id: invoice.customerId },
+              include: { ledgerEntries: { select: { debit: true, credit: true } } },
+            });
+            if (cust) {
+              const runningBal = cust.ledgerEntries.reduce((sum, e) => sum + e.debit - e.credit, 0n);
+              await prisma.customer.update({
+                where: { id: invoice.customerId },
+                data: { status: runningBal <= cust.creditLimit ? 'GREEN' : 'YELLOW' },
+              });
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.warn('Postgres invoice cancel error, fallback to localStore:', dbErr);
+      }
+    }
+
+    // 2. Always sync with localStore
+    if (typeof localStore.cancelInvoice === 'function') {
+      localStore.cancelInvoice(id, reason);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Invoice cancelled successfully. Inventory stock and Khata ledger have been reversed.',
+    });
+  } catch (error: any) {
+    console.error('Invoice cancel error:', error);
+    return NextResponse.json({ error: error.message || 'Failed to cancel invoice' }, { status: 500 });
   }
 }

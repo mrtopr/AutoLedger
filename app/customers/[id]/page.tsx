@@ -177,7 +177,10 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   const handlePreviewInvoice = (inv: any) => {
     const previewData: InvoicePreviewData = {
+      id: inv.id,
       invoiceNumber: inv.invoiceNumber || `INV-${inv.id?.slice(0, 6)}`,
+      status: inv.status,
+      cancelReason: inv.cancelReason,
       date: inv.date || (inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : 'Today'),
       time: inv.createdAt ? new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Now',
       placeOfSupply: '27 - Maharashtra',
@@ -594,15 +597,16 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       const total = BigInt(inv.grandTotalPaise || 0);
                       const paid = BigInt(inv.paidNowPaise || 0);
                       const due = BigInt(inv.creditBalancePaise || 0);
-                      const isPaid = due === 0n;
-                      const isPartial = due > 0n && paid > 0n;
+                      const isCancelled = inv.status === 'CANCELLED';
+                      const isPaid = !isCancelled && due === 0n;
+                      const isPartial = !isCancelled && due > 0n && paid > 0n;
 
                       return (
-                        <tr key={inv.id} className="hover:bg-[#F8F9FA] transition">
+                        <tr key={inv.id} className={`transition ${isCancelled ? 'bg-rose-50/30 opacity-75' : 'hover:bg-[#F8F9FA]'}`}>
                           <td className="py-3 px-4 font-bold text-[#0F172A]">
                             <button
                               onClick={() => handlePreviewInvoice(inv)}
-                              className="hover:text-[#C81E1E] hover:underline text-left inline-flex items-center gap-1.5 cursor-pointer"
+                              className={`hover:text-[#C81E1E] hover:underline text-left inline-flex items-center gap-1.5 cursor-pointer ${isCancelled ? 'line-through text-slate-500' : ''}`}
                             >
                               <FileText className="w-3.5 h-3.5 text-[#64748B]" />
                               <span>{inv.invoiceNumber}</span>
@@ -610,7 +614,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                           </td>
                           <td className="py-3 px-4 text-[#64748B]">{inv.date}</td>
                           <td className="py-3 px-4 text-[#475569] font-sans">{inv.itemsCount || 1} items</td>
-                          <td className="py-3 px-4 text-right font-bold text-[#0F172A] tabular-nums">
+                          <td className={`py-3 px-4 text-right font-bold tabular-nums ${isCancelled ? 'line-through text-slate-400' : 'text-[#0F172A]'}`}>
                             {formatPaiseToRupees(total)}
                           </td>
                           <td className="py-3 px-4 text-right font-semibold text-[#16A34A] tabular-nums">
@@ -620,15 +624,21 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                             {formatPaiseToRupees(due)}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              isPaid 
-                                ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
-                                : isPartial 
-                                ? 'bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]' 
-                                : 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]'
-                            }`}>
-                              {isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID'}
-                            </span>
+                            {isCancelled ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA]">
+                                CANCELLED
+                              </span>
+                            ) : (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                isPaid 
+                                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
+                                  : isPartial 
+                                  ? 'bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]' 
+                                  : 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]'
+                              }`}>
+                                {isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID'}
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="inline-flex items-center gap-1.5 font-sans">
@@ -640,14 +650,44 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                                 <Printer className="w-3 h-3 text-slate-500" />
                                 <span>Print</span>
                               </button>
-                              <button
-                                onClick={() => handleShareInvoiceWhatsApp(inv)}
-                                className="h-7 px-2.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] font-semibold text-[11px] rounded border border-[#25D366]/30 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer"
-                                title="Share Invoice on WhatsApp"
-                              >
-                                <MessageCircle className="w-3 h-3 text-[#128C7E]" />
-                                <span>WhatsApp</span>
-                              </button>
+                              {!isCancelled && (
+                                <button
+                                  onClick={() => handleShareInvoiceWhatsApp(inv)}
+                                  className="h-7 px-2.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] font-semibold text-[11px] rounded border border-[#25D366]/30 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer"
+                                  title="Share Invoice on WhatsApp"
+                                >
+                                  <MessageCircle className="w-3 h-3 text-[#128C7E]" />
+                                  <span>WhatsApp</span>
+                                </button>
+                              )}
+                              {!isCancelled && (
+                                <button
+                                  onClick={async () => {
+                                    const reason = prompt(`Reason for cancelling invoice #${inv.invoiceNumber}:`, 'Customer Cancellation / Billing Error');
+                                    if (!reason) return;
+                                    try {
+                                      const res = await fetch('/api/v1/invoices', {
+                                        method: 'DELETE',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ id: inv.id, reason }),
+                                      });
+                                      if (res.ok) {
+                                        fetchCustomerDetail();
+                                      } else {
+                                        const err = await res.json().catch(() => ({}));
+                                        alert(err.error || 'Failed to cancel invoice');
+                                      }
+                                    } catch (e: any) {
+                                      alert(e.message || 'Error cancelling invoice');
+                                    }
+                                  }}
+                                  className="h-7 px-2 bg-white hover:bg-rose-50 text-rose-600 rounded border border-rose-200 transition inline-flex items-center gap-1 text-[11px] shadow-2xs cursor-pointer"
+                                  title="Cancel & Reverse Invoice"
+                                >
+                                  <Trash2 className="w-3 h-3 text-rose-500" />
+                                  <span className="hidden sm:inline">Cancel</span>
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

@@ -88,6 +88,8 @@ export interface LocalInvoice {
   tenantId: string;
   customerId?: string;
   invoiceNumber: string;
+  status?: string;
+  cancelReason?: string;
   grandTotalPaise: string;
   paidNowPaise: string;
   creditBalancePaise: string;
@@ -609,6 +611,7 @@ class LocalStore {
     const newInvoice: LocalInvoice = {
       ...invoice,
       id: `inv-${Date.now()}`,
+      status: invoice.status || 'ISSUED',
       createdAt: new Date().toISOString(),
     };
     this.data.invoices.unshift(newInvoice);
@@ -622,6 +625,40 @@ class LocalStore {
 
     this.save();
     return newInvoice;
+  }
+
+  cancelInvoice(id: string, reason?: string): LocalInvoice | null {
+    const inv = this.data.invoices.find((i) => i.id === id || i.invoiceNumber === id);
+    if (!inv) return null;
+    if (inv.status === 'CANCELLED') return inv;
+
+    inv.status = 'CANCELLED';
+    inv.cancelReason = reason || 'Customer / Billing cancellation';
+
+    // 1. Restore product stock
+    if (inv.items && Array.isArray(inv.items)) {
+      for (const item of inv.items) {
+        if (item.productId) {
+          this.adjustProductStock(item.productId, item.qty || 1);
+        }
+      }
+    }
+
+    // 2. Reverse Khata balance if customer linked
+    if (inv.customerId) {
+      this.addLedgerEntry({
+        tenantId: inv.tenantId,
+        customerId: inv.customerId,
+        type: 'ADJUSTMENT',
+        refNo: inv.invoiceNumber,
+        narration: `Reversal - Cancelled Invoice #${inv.invoiceNumber} (${inv.cancelReason})`,
+        debitPaise: '0',
+        creditPaise: inv.grandTotalPaise,
+      });
+    }
+
+    this.save();
+    return inv;
   }
 
   getInvoices(tenantId?: string): LocalInvoice[] {
@@ -671,10 +708,14 @@ const globalStore = globalThis as unknown as { _localStore?: LocalStore };
 
 if (
   !globalStore._localStore ||
+  typeof globalStore._localStore.cancelInvoice !== 'function' ||
   typeof globalStore._localStore.getCustomerByPhone !== 'function' ||
   typeof globalStore._localStore.getTenant !== 'function'
 ) {
   globalStore._localStore = new LocalStore();
+} else {
+  // Ensure prototype methods are up-to-date across hot module reloads
+  Object.setPrototypeOf(globalStore._localStore, LocalStore.prototype);
 }
 
 export const localStore: LocalStore = globalStore._localStore;

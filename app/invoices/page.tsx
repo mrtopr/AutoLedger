@@ -13,10 +13,16 @@ import {
   Clock,
   CheckCircle2,
   Calendar,
-  Filter
+  Filter,
+  Trash2,
+  Ban,
+  AlertTriangle,
+  Loader2,
+  X
 } from 'lucide-react';
 import { formatPaiseToRupees } from '@/server/lib/tax';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
+import ClientPortal from '@/app/components/ClientPortal';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 
@@ -31,6 +37,12 @@ export default function InvoicesPage() {
   // Preview Modal State
   const [selectedInvoiceForPreview, setSelectedInvoiceForPreview] = useState<InvoicePreviewData | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // Cancellation Modal State
+  const [invoiceToCancel, setInvoiceToCancel] = useState<any | null>(null);
+  const [cancelReason, setCancelReason] = useState('Billing Error / Incorrect Items');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const fetchInvoices = async () => {
     try {
@@ -53,9 +65,40 @@ export default function InvoicesPage() {
     fetchInvoices();
   }, []);
 
+  const handleCancelInvoice = async () => {
+    if (!invoiceToCancel) return;
+    try {
+      setIsCancelling(true);
+      setCancelError(null);
+      const res = await fetch('/api/v1/invoices', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: invoiceToCancel.id,
+          reason: cancelReason,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setInvoiceToCancel(null);
+        await fetchInvoices();
+      } else {
+        setCancelError(data.error || 'Failed to cancel invoice');
+      }
+    } catch (err: any) {
+      setCancelError(err.message || 'Error occurred while cancelling invoice');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const openPreview = (inv: any) => {
     const previewData: InvoicePreviewData = {
+      id: inv.id,
       invoiceNumber: inv.invoiceNumber || inv.number || 'INV-DRAFT',
+      status: inv.status,
+      cancelReason: inv.cancelReason,
       date: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today',
       time: inv.createdAt ? new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Now',
       placeOfSupply: '27 - Maharashtra',
@@ -146,12 +189,20 @@ export default function InvoicesPage() {
   };
 
   const filteredInvoices = invoices.filter(inv => {
+    const isCancelled = inv.status === 'CANCELLED';
+    const isPaid = !isCancelled && BigInt(inv.creditBalancePaise || 0) === 0n;
+    const isCredit = !isCancelled && BigInt(inv.creditBalancePaise || 0) > 0n;
+
+    const matchesFilter = 
+      filterMode === 'ALL' ||
+      (filterMode === 'PAID' && isPaid) ||
+      (filterMode === 'CREDIT' && isCredit) ||
+      (filterMode === 'CANCELLED' && isCancelled);
+
+    if (!matchesFilter) return false;
+
     const q = search.toLowerCase().trim();
-    if (!q) {
-      return filterMode === 'ALL' ||
-        (filterMode === 'PAID' && BigInt(inv.creditBalancePaise || 0) === 0n) ||
-        (filterMode === 'CREDIT' && BigInt(inv.creditBalancePaise || 0) > 0n);
-    }
+    if (!q) return true;
 
     const digitQuery = q.replace(/\D/g, '');
     const invNum = (inv.invoiceNumber || inv.number || '').toLowerCase();
@@ -160,25 +211,21 @@ export default function InvoicesPage() {
     const custPhone = (inv.customerPhone || '').toLowerCase();
     const amountRs = (Number(BigInt(inv.grandTotalPaise || inv.amountPaise || 0)) / 100).toString();
 
-    const matchesSearch =
+    return (
       invNum.includes(q) ||
       (digitQuery && invNum.includes(digitQuery)) ||
       custName.includes(q) ||
       custShop.includes(q) ||
       custPhone.includes(q) ||
-      amountRs.includes(q);
-
-    const matchesFilter = filterMode === 'ALL' ||
-      (filterMode === 'PAID' && BigInt(inv.creditBalancePaise || 0) === 0n) ||
-      (filterMode === 'CREDIT' && BigInt(inv.creditBalancePaise || 0) > 0n);
-
-    return matchesSearch && matchesFilter;
+      amountRs.includes(q)
+    );
   });
 
   // KPI telemetry
-  const totalBilledPaise = invoices.reduce((sum, inv) => sum + BigInt(inv.grandTotalPaise || inv.amountPaise || 0), 0n);
-  const totalCollectedPaise = invoices.reduce((sum, inv) => sum + BigInt(inv.paidNowPaise || (inv.creditBalancePaise === '0' ? inv.grandTotalPaise : 0)), 0n);
-  const totalDuePaise = invoices.reduce((sum, inv) => sum + BigInt(inv.creditBalancePaise || 0), 0n);
+  const activeInvoices = invoices.filter(i => i.status !== 'CANCELLED');
+  const totalBilledPaise = activeInvoices.reduce((sum, inv) => sum + BigInt(inv.grandTotalPaise || inv.amountPaise || 0), 0n);
+  const totalCollectedPaise = activeInvoices.reduce((sum, inv) => sum + BigInt(inv.paidNowPaise || (inv.creditBalancePaise === '0' ? inv.grandTotalPaise : 0)), 0n);
+  const totalDuePaise = activeInvoices.reduce((sum, inv) => sum + BigInt(inv.creditBalancePaise || 0), 0n);
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
@@ -232,7 +279,7 @@ export default function InvoicesPage() {
             <div className="text-lg font-bold font-mono text-[#0F172A] mt-0.5">
               {formatPaiseToRupees(totalBilledPaise)}
             </div>
-            <span className="text-[10px] text-[#64748B]">{invoices.length} total tax bills</span>
+            <span className="text-[10px] text-[#64748B]">{activeInvoices.length} active bills</span>
           </div>
           <div className="w-7 h-7 rounded-md bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center border border-[#DBEAFE]">
             <Receipt className="w-3.5 h-3.5" />
@@ -259,7 +306,7 @@ export default function InvoicesPage() {
               {formatPaiseToRupees(totalDuePaise)}
             </div>
             <span className="text-[10px] text-[#D97706] font-medium">
-              {invoices.filter(inv => BigInt(inv.creditBalancePaise || 0) > 0n).length} bills with pending balance
+              {activeInvoices.filter(inv => BigInt(inv.creditBalancePaise || 0) > 0n).length} bills with pending balance
             </span>
           </div>
           <div className="w-7 h-7 rounded-md bg-[#FFFBEB] text-[#D97706] flex items-center justify-center border border-[#FEF3C7]">
@@ -285,7 +332,8 @@ export default function InvoicesPage() {
           {[
             { id: 'ALL', label: 'All Invoices' },
             { id: 'PAID', label: 'Fully Paid' },
-            { id: 'CREDIT', label: 'Credit Due' }
+            { id: 'CREDIT', label: 'Credit Due' },
+            { id: 'CANCELLED', label: 'Cancelled' }
           ].map(({ id, label }) => (
             <button
               key={id}
@@ -334,17 +382,18 @@ export default function InvoicesPage() {
                 </tr>
               ) : (
                 filteredInvoices.map((inv) => {
-                  const isPaid = BigInt(inv.creditBalancePaise || 0) === 0n;
+                  const isCancelled = inv.status === 'CANCELLED';
+                  const isPaid = !isCancelled && BigInt(inv.creditBalancePaise || 0) === 0n;
                   const formattedDate = inv.createdAt 
                     ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                     : 'Today';
 
                   return (
-                    <tr key={inv.id} className="hover:bg-[#F8F9FA] transition-colors group">
+                    <tr key={inv.id} className={`transition-colors group ${isCancelled ? 'bg-[#FFF1F2]/40 opacity-75' : 'hover:bg-[#F8F9FA]'}`}>
                       <td className="py-3 px-4 font-mono font-semibold text-[#0F172A]">
                         <button
                           onClick={() => openPreview(inv)}
-                          className="hover:text-[#C81E1E] flex items-center gap-1.5 text-[#0F172A] transition cursor-pointer"
+                          className={`flex items-center gap-1.5 transition cursor-pointer ${isCancelled ? 'line-through text-red-900 hover:text-red-700' : 'hover:text-[#C81E1E] text-[#0F172A]'}`}
                         >
                           <Eye className="w-3.5 h-3.5 text-[#64748B] group-hover:text-[#C81E1E]" />
                           <span>{inv.invoiceNumber || inv.number}</span>
@@ -364,18 +413,25 @@ export default function InvoicesPage() {
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono tabular-nums font-semibold text-[#0F172A]">
+                      <td className={`py-3 px-4 text-right font-mono tabular-nums font-semibold ${isCancelled ? 'line-through text-slate-400' : 'text-[#0F172A]'}`}>
                         {formatPaiseToRupees(BigInt(inv.grandTotalPaise || inv.amountPaise || 0))}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                          isPaid 
-                            ? 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]' 
-                            : 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-[#16A34A]' : 'bg-[#D97706]'}`} />
-                          {isPaid ? 'PAID' : 'DUE ON CREDIT'}
-                        </span>
+                        {isCancelled ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA]" title={inv.cancelReason || 'Cancelled'}>
+                            <Ban className="w-2.5 h-2.5" />
+                            CANCELLED
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                            isPaid 
+                              ? 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]' 
+                              : 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-[#16A34A]' : 'bg-[#D97706]'}`} />
+                            {isPaid ? 'PAID' : 'DUE ON CREDIT'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-[#64748B] text-[11px]">
                         {formattedDate}
@@ -391,14 +447,33 @@ export default function InvoicesPage() {
                             <span>Print</span>
                           </button>
 
-                          <button
-                            onClick={() => handleShareWhatsApp(inv)}
-                            className="h-7 px-2.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white rounded-md transition flex items-center gap-1.5 text-[11px] font-semibold shadow-2xs cursor-pointer"
-                            title="Direct WhatsApp Dispatch"
-                          >
-                            <MessageCircle className="w-3 h-3" />
-                            <span>WhatsApp</span>
-                          </button>
+                          {!isCancelled && (
+                            <button
+                              onClick={() => handleShareWhatsApp(inv)}
+                              className="h-7 px-2.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white rounded-md transition flex items-center gap-1.5 text-[11px] font-semibold shadow-2xs cursor-pointer"
+                              title="Direct WhatsApp Dispatch"
+                            >
+                              <MessageCircle className="w-3 h-3" />
+                              <span>WhatsApp</span>
+                            </button>
+                          )}
+
+                          {!isCancelled ? (
+                            <button
+                              onClick={() => {
+                                setInvoiceToCancel(inv);
+                                setCancelReason('Billing Error / Incorrect Items');
+                                setCancelError(null);
+                              }}
+                              className="h-7 px-2 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 rounded-md border border-rose-200 transition flex items-center gap-1 text-[11px] font-medium shadow-2xs cursor-pointer"
+                              title="Cancel / Void Invoice (Auto-reverses stock & ledger)"
+                            >
+                              <Trash2 className="w-3 h-3 text-rose-500" />
+                              <span className="hidden sm:inline">Cancel</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic px-1 font-mono">Voided</span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -416,6 +491,94 @@ export default function InvoicesPage() {
         onClose={() => setIsPreviewOpen(false)}
         invoice={selectedInvoiceForPreview}
       />
+
+      {/* Cancel Invoice Confirmation Modal */}
+      {invoiceToCancel && (
+        <ClientPortal>
+          <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Cancel Invoice #{invoiceToCancel.invoiceNumber || invoiceToCancel.number}?
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    GST compliant cancellation with automatic balance & stock reversal.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 space-y-1">
+                <div className="font-semibold flex items-center gap-1">
+                  <span>⚡ Automatic ERP Reversals:</span>
+                </div>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
+                  <li><strong>Inventory Restocked:</strong> All billed line items will be returned to stock.</li>
+                  <li><strong>Khata Reversed:</strong> Customer account ledger will be credited by {formatPaiseToRupees(BigInt(invoiceToCancel.grandTotalPaise || invoiceToCancel.amountPaise || 0))}.</li>
+                  <li><strong>Audit Trail Preserved:</strong> Invoice number remains registered with a <span className="font-bold text-red-700">CANCELLED</span> watermark for tax audit compliance.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">
+                  Reason for Cancellation <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  className="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-hidden font-medium text-slate-800"
+                >
+                  <option value="Billing Error / Incorrect Items">Billing Error / Incorrect Items</option>
+                  <option value="Customer Cancelled Order">Customer Cancelled Order</option>
+                  <option value="Duplicate Invoice Issued">Duplicate Invoice Issued</option>
+                  <option value="Pricing / Discount Mismatch">Pricing / Discount Mismatch</option>
+                  <option value="Goods Returned at Counter">Goods Returned at Counter</option>
+                  <option value="Other Administrative Correction">Other Administrative Correction</option>
+                </select>
+              </div>
+
+              {cancelError && (
+                <div className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200">
+                  {cancelError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setInvoiceToCancel(null)}
+                  disabled={isCancelling}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                >
+                  Keep Invoice
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCancelInvoice}
+                  disabled={isCancelling}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Reversing & Cancelling...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Confirm Cancellation</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </ClientPortal>
+      )}
     </div>
   );
 }
