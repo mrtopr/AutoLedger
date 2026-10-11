@@ -4,6 +4,9 @@ import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { StockReason } from '@prisma/client';
 
+const isUuid = (id?: string | null): boolean =>
+  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
@@ -16,13 +19,13 @@ export async function GET(req: NextRequest) {
     let formatted: any[] = [];
     let dbSuccess = false;
 
-    // 1. Try Prisma first if Postgres is reachable
+    // 1. Try Prisma first if Postgres is reachable and tenantId is either absent or a valid UUID
     const hasDb = await isPostgresAvailable();
-    if (hasDb) {
+    if (hasDb && (!authUser?.tenantId || isUuid(authUser.tenantId))) {
       try {
         const products = await prisma.product.findMany({
           where: {
-            ...(authUser ? { tenantId: authUser.tenantId } : {}),
+            ...(authUser?.tenantId && isUuid(authUser.tenantId) ? { tenantId: authUser.tenantId } : {}),
             isActive: true,
             ...(query ? {
               OR: [
@@ -149,13 +152,27 @@ export async function POST(req: NextRequest) {
     const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
     let createdProd: any = null;
 
-    // 1. Try Prisma first if available
+    // 1. Try Prisma first if available and targetTenantId is a valid UUID (or find default DB tenant)
     const hasDb = await isPostgresAvailable();
+    let dbTenantId: string | null = null;
     if (hasDb) {
+      if (isUuid(targetTenantId)) {
+        dbTenantId = targetTenantId;
+      } else {
+        try {
+          const firstTenant = await prisma.tenant.findFirst({ select: { id: true } });
+          if (firstTenant && isUuid(firstTenant.id)) {
+            dbTenantId = firstTenant.id;
+          }
+        } catch {}
+      }
+    }
+
+    if (hasDb && dbTenantId) {
       try {
         const product = await prisma.product.create({
           data: {
-            tenantId: targetTenantId,
+            tenantId: dbTenantId,
             name,
             partNumber: partNumber || null,
             brand: brand || null,
@@ -174,12 +191,12 @@ export async function POST(req: NextRequest) {
         if (parseInt(openingStock, 10) > 0) {
           await prisma.stockMovement.create({
             data: {
-              tenantId: targetTenantId,
+              tenantId: dbTenantId,
               productId: product.id,
               qty: parseInt(openingStock, 10),
               reason: StockReason.OPENING,
               unitCost: BigInt(purchasePricePaise || 0),
-              createdBy: authUser?.id || null,
+              createdBy: authUser?.id && isUuid(authUser.id) ? authUser.id : null,
             }
           });
         }

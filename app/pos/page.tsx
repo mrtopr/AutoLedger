@@ -30,7 +30,8 @@ import {
   Store,
   Phone,
   Users,
-  Calendar
+  Calendar,
+  Calculator
 } from 'lucide-react';
 import { calculateInvoiceTax, formatPaiseToRupees, parseRupeesToPaise, LineItemInput } from '@/server/lib/tax';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
@@ -725,6 +726,15 @@ export default function QuickBillPosPage() {
           >
             <FileText className="w-3.5 h-3.5 text-[#64748B]" />
             <span className="hidden sm:inline">Past Invoices</span>
+          </Link>
+
+          <Link
+            href="/settlement"
+            className="h-8 inline-flex items-center gap-1.5 px-3 bg-white hover:bg-red-50 text-[#C81E1E] font-medium text-xs rounded-lg border border-red-200 transition shadow-2xs"
+            title="End of Day Cash Settlement & Till Reconciliation"
+          >
+            <Calculator className="w-3.5 h-3.5 text-[#C81E1E]" />
+            <span className="hidden sm:inline">Day-End Tally</span>
           </Link>
         </div>
       </div>

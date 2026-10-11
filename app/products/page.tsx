@@ -20,10 +20,12 @@ import {
   Filter,
   Sparkles,
   Zap,
-  DollarSign
+  DollarSign,
+  FileSpreadsheet
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
 import ClientPortal from '@/app/components/ClientPortal';
+import BulkImportModal from '@/app/components/BulkImportModal';
 
 interface ProductItem {
   id: string;
@@ -84,6 +86,7 @@ export default function ProductsPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Modal States
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [isAddProductModal, setIsAddProductModal] = useState(false);
   const [isAdjustStockModal, setIsAdjustStockModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -387,6 +390,14 @@ export default function ProductsPage() {
             <Boxes className="w-3.5 h-3.5 text-[#64748B]" />
             <span>Inward / Stock</span>
             <kbd className="hidden sm:inline px-1.5 py-0.5 bg-[#F1F5F9] rounded-md text-[10px] text-[#64748B] font-mono border border-[#E2E8F0]">Alt+S</kbd>
+          </button>
+          <button
+            onClick={() => setIsBulkImportOpen(true)}
+            className="h-8.5 px-3 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] text-xs font-semibold rounded-xl border border-[#BBF7D0] transition shadow-2xs flex items-center gap-1.5"
+            title="Import inventory as a whole using Tally Excel or CSV"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[#16A34A]" />
+            <span>Import Tally / Excel</span>
           </button>
           <button
             onClick={() => setIsAddProductModal(true)}
@@ -1134,6 +1145,15 @@ export default function ProductsPage() {
           </div>
         </ClientPortal>
       )}
+
+      {/* Bulk Excel / Tally Importer */}
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        onSuccess={() => {
+          fetchProducts();
+        }}
+      />
     </div>
   );
 }

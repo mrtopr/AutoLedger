@@ -4,17 +4,20 @@ import { getAuthenticatedUser, hashPassword } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { Role } from '@prisma/client';
 
+const isUuid = (id?: string | null): boolean =>
+  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
     let users: any[] = [];
 
-    // 1. Try Prisma first if Postgres is reachable
+    // 1. Try Prisma first if Postgres is reachable and tenantId is either absent or a valid UUID
     const hasDb = await isPostgresAvailable();
-    if (hasDb) {
+    if (hasDb && (!authUser?.tenantId || isUuid(authUser.tenantId))) {
       try {
         const dbUsers = await prisma.user.findMany({
-          where: { ...(authUser?.tenantId ? { tenantId: authUser.tenantId } : {}) },
+          where: { ...(authUser?.tenantId && isUuid(authUser.tenantId) ? { tenantId: authUser.tenantId } : {}) },
           orderBy: [{ role: 'asc' }, { createdAt: 'desc' }],
           select: {
             id: true,
@@ -70,13 +73,27 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await hashPassword(password);
     let createdUser: any = null;
 
-    // 1. Try Prisma if available
+    // 1. Try Prisma if available and targetTenantId is a valid UUID (or find default DB tenant)
     const hasDb = await isPostgresAvailable();
+    let dbTenantId: string | null = null;
     if (hasDb) {
+      if (isUuid(targetTenantId)) {
+        dbTenantId = targetTenantId;
+      } else {
+        try {
+          const firstTenant = await prisma.tenant.findFirst({ select: { id: true } });
+          if (firstTenant && isUuid(firstTenant.id)) {
+            dbTenantId = firstTenant.id;
+          }
+        } catch {}
+      }
+    }
+
+    if (hasDb && dbTenantId) {
       try {
         const user = await prisma.user.create({
           data: {
-            tenantId: targetTenantId,
+            tenantId: dbTenantId,
             name,
             phone,
             email: email || null,

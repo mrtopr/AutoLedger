@@ -40,6 +40,7 @@ export interface LocalProduct {
   partNumber?: string;
   brand?: string;
   category?: string;
+  subcategory?: string;
   hsnCode: string;
   gstRateBp: number;
   unit: string;
@@ -107,6 +108,30 @@ export interface LocalPayment {
   createdAt: string;
 }
 
+export interface LocalCashSettlement {
+  id: string;
+  tenantId: string;
+  date: string; // YYYY-MM-DD
+  openingFloatPaise: string;
+  cashSalesPaise: string;
+  cashReceiptsPaise: string;
+  cashExpensesPaise: string;
+  expectedCashPaise: string;
+  denominations: Record<string, number>;
+  countedCashPaise: string;
+  differencePaise: string;
+  retainedFloatPaise: string;
+  withdrawnPaise: string;
+  upiTotalPaise: string;
+  bankTotalPaise: string;
+  upiVerified: boolean;
+  notes?: string;
+  status: 'BALANCED' | 'SHORT' | 'EXCESS';
+  closedByUserId?: string;
+  closedByName?: string;
+  createdAt: string;
+}
+
 export interface LocalStoreData {
   tenants: LocalTenant[];
   users: LocalUser[];
@@ -115,6 +140,7 @@ export interface LocalStoreData {
   ledgerEntries: LocalLedgerEntry[];
   invoices: LocalInvoice[];
   payments: LocalPayment[];
+  cashSettlements?: LocalCashSettlement[];
   paymentAttempts?: Record<string, { status: 'paid' | 'failed' | 'pending'; reason?: string; paymentId?: string; updatedAt: string }>;
   hasSeededProducts?: Record<string, boolean>;
   hasSeededCustomers?: Record<string, boolean>;
@@ -129,6 +155,7 @@ function getInitialData(): LocalStoreData {
     ledgerEntries: [],
     invoices: [],
     payments: [],
+    cashSettlements: [],
     paymentAttempts: {},
     hasSeededProducts: {},
     hasSeededCustomers: {},
@@ -149,7 +176,9 @@ class LocalStore {
       }
       if (fs.existsSync(STORE_FILE)) {
         const raw = fs.readFileSync(STORE_FILE, 'utf-8');
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        parsed.cashSettlements = parsed.cashSettlements || [];
+        return parsed;
       }
     } catch (err) {
       console.warn('Could not read store file, initializing defaults:', err);
@@ -164,7 +193,7 @@ class LocalStore {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
-      fs.writeFileSync(STORE_FILE, JSON.stringify(dataToSave || this.data, null, 2), 'utf-8');
+      fs.writeFileSync(STORE_FILE, JSON.stringify(dataToSave || this.data), 'utf-8');
     } catch (err) {
       console.warn('Could not write to store file:', err);
     }
@@ -246,8 +275,16 @@ class LocalStore {
 
   findUser(loginId: string): (LocalUser & { tenant?: LocalTenant }) | null {
     const clean = loginId.trim();
+    const clean10 = clean.replace(/[^0-9]/g, '').slice(-10);
     const user = this.data.users.find(
-      (u) => u.phone === clean || (u.email && u.email.toLowerCase() === clean.toLowerCase())
+      (u) => {
+        const uPhone10 = u.phone ? u.phone.replace(/[^0-9]/g, '').slice(-10) : '';
+        return (
+          u.phone === clean ||
+          (clean10.length === 10 && uPhone10 === clean10) ||
+          (u.email && u.email.toLowerCase() === clean.toLowerCase())
+        );
+      }
     );
     if (!user) return null;
     const tenant = this.getTenantById(user.tenantId);
@@ -401,6 +438,98 @@ class LocalStore {
     return this.data.products[idx];
   }
 
+  bulkUpsertProducts(
+    tenantId: string,
+    items: Array<{
+      name: string;
+      partNumber?: string;
+      brand?: string;
+      category?: string;
+      subcategory?: string;
+      hsnCode?: string;
+      gstRateBp?: number;
+      unit?: string;
+      purchasePricePaise?: string;
+      salePricePaise?: string;
+      mrpPaise?: string;
+      stockQty?: number;
+      reorderLevel?: number;
+      models?: string[];
+      existingProductId?: string;
+      syncAction?: 'CREATE' | 'UPDATE' | 'SKIP';
+      isUnpriced?: boolean;
+    }>
+  ): { importedCount: number; updatedCount: number; skippedCount: number } {
+    const existingById = new Map<string, LocalProduct>();
+    const existingByName = new Map<string, LocalProduct>();
+
+    for (const p of this.data.products) {
+      if (p.tenantId === tenantId) {
+        existingById.set(p.id, p);
+        if (p.name) {
+          existingByName.set(p.name.trim().toLowerCase(), p);
+        }
+      }
+    }
+
+    let importedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const item of items) {
+      const trimmedName = (item.name || '').trim();
+      if (!trimmedName || item.syncAction === 'SKIP') {
+        skippedCount++;
+        continue;
+      }
+
+      const existing = (item.existingProductId ? existingById.get(item.existingProductId) : null) ||
+                       existingByName.get(trimmedName.toLowerCase());
+
+      if (existing) {
+        if (item.salePricePaise !== undefined) existing.salePricePaise = item.salePricePaise;
+        if (item.purchasePricePaise !== undefined) existing.purchasePricePaise = item.purchasePricePaise;
+        if (item.mrpPaise !== undefined) existing.mrpPaise = item.mrpPaise;
+        if (item.brand) existing.brand = item.brand;
+        if (item.category) existing.category = item.category;
+        if (item.subcategory) existing.subcategory = item.subcategory;
+        if (item.models && item.models.length > 0) existing.models = item.models;
+        if (item.stockQty !== undefined && !item.isUnpriced) existing.stockQty = item.stockQty;
+        updatedCount++;
+      } else {
+        const newProduct: LocalProduct = {
+          id: `p-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          tenantId,
+          name: trimmedName,
+          partNumber: item.partNumber || `SKU-${Date.now().toString(36).toUpperCase()}`,
+          brand: item.brand || 'Standard',
+          category: item.category || 'General Automobile Spares',
+          subcategory: item.subcategory || 'Spare Parts',
+          hsnCode: item.hsnCode || '8714',
+          gstRateBp: item.gstRateBp || 1800,
+          unit: item.unit || 'pcs',
+          purchasePricePaise: item.purchasePricePaise || '0',
+          salePricePaise: item.salePricePaise || '0',
+          mrpPaise: item.mrpPaise || '0',
+          stockQty: item.stockQty || 0,
+          reorderLevel: item.reorderLevel || 5,
+          models: item.models || ['Universal / Multi-Fit'],
+          createdAt: nowIso,
+        };
+        this.data.products.push(newProduct);
+        existingById.set(newProduct.id, newProduct);
+        existingByName.set(newProduct.name.toLowerCase(), newProduct);
+        importedCount++;
+      }
+    }
+
+    // Save to disk ONCE after entire batch is processed in memory
+    this.save();
+
+    return { importedCount, updatedCount, skippedCount };
+  }
+
   upsertProduct(id: string, updates: Partial<LocalProduct>): LocalProduct {
     const idx = this.data.products.findIndex((prod) => prod.id === id);
     if (idx === -1) {
@@ -439,6 +568,54 @@ class LocalStore {
       return true;
     }
     return false;
+  }
+
+  deleteProducts(ids: string[]): number {
+    const idSet = new Set(ids);
+    const beforeLen = this.data.products.length;
+    this.data.products = this.data.products.filter((prod) => !idSet.has(prod.id));
+    const deletedCount = beforeLen - this.data.products.length;
+    if (deletedCount > 0) {
+      this.save();
+    }
+    return deletedCount;
+  }
+
+  deleteProductsByFilter(
+    tenantId?: string, 
+    options?: { category?: string; brand?: string; zeroStockOnly?: boolean; search?: string; all?: boolean }
+  ): number {
+    const beforeLen = this.data.products.length;
+    this.data.products = this.data.products.filter((prod) => {
+      if (tenantId && prod.tenantId !== tenantId) return true; // keep other tenants
+      if (options?.all) return false; // delete all for this tenant
+      
+      let matches = true;
+      if (options?.category && options.category !== 'All Departments') {
+        matches = matches && prod.category === options.category;
+      }
+      if (options?.brand) {
+        matches = matches && prod.brand === options.brand;
+      }
+      if (options?.zeroStockOnly) {
+        matches = matches && prod.stockQty <= 0;
+      }
+      if (options?.search) {
+        const q = options.search.toLowerCase();
+        matches = matches && (
+          prod.name.toLowerCase().includes(q) ||
+          (prod.partNumber && prod.partNumber.toLowerCase().includes(q)) ||
+          (prod.brand && prod.brand.toLowerCase().includes(q))
+        );
+      }
+      return !matches; // if it matched filter criteria, remove it
+    });
+
+    const deletedCount = beforeLen - this.data.products.length;
+    if (deletedCount > 0) {
+      this.save();
+    }
+    return deletedCount;
   }
 
   // Customer methods
@@ -720,6 +897,47 @@ class LocalStore {
     if (!this.data.paymentAttempts) return null;
     return this.data.paymentAttempts[linkId] || null;
   }
+
+  // Cash Settlements (Day-End Till Reconciliation)
+  getCashSettlements(tenantId?: string): LocalCashSettlement[] {
+    this.data.cashSettlements = this.data.cashSettlements || [];
+    if (tenantId) {
+      return this.data.cashSettlements.filter((s) => s.tenantId === tenantId);
+    }
+    return this.data.cashSettlements;
+  }
+
+  getLatestCashSettlement(tenantId?: string): LocalCashSettlement | null {
+    const list = this.getCashSettlements(tenantId);
+    if (!list || list.length === 0) return null;
+    return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  }
+
+  getCashSettlementByDate(date: string, tenantId?: string): LocalCashSettlement | null {
+    const list = this.getCashSettlements(tenantId);
+    return list.find((s) => s.date === date) || null;
+  }
+
+  saveCashSettlement(settlement: Omit<LocalCashSettlement, 'id' | 'createdAt'>): LocalCashSettlement {
+    this.data.cashSettlements = this.data.cashSettlements || [];
+    const existingIdx = this.data.cashSettlements.findIndex(
+      (s) => s.tenantId === settlement.tenantId && s.date === settlement.date
+    );
+
+    const newRecord: LocalCashSettlement = {
+      ...settlement,
+      id: existingIdx >= 0 ? this.data.cashSettlements[existingIdx].id : `settle-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (existingIdx >= 0) {
+      this.data.cashSettlements[existingIdx] = newRecord;
+    } else {
+      this.data.cashSettlements.unshift(newRecord);
+    }
+    this.save();
+    return newRecord;
+  }
 }
 
 // Global singleton instance
@@ -729,7 +947,8 @@ if (
   !globalStore._localStore ||
   typeof globalStore._localStore.cancelInvoice !== 'function' ||
   typeof globalStore._localStore.getCustomerByPhone !== 'function' ||
-  typeof globalStore._localStore.getTenant !== 'function'
+  typeof globalStore._localStore.getTenant !== 'function' ||
+  typeof globalStore._localStore.saveCashSettlement !== 'function'
 ) {
   globalStore._localStore = new LocalStore();
 } else {

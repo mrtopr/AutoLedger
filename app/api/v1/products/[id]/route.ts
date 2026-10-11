@@ -3,6 +3,9 @@ import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 
+const isUuid = (id?: string | null): boolean =>
+  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -12,7 +15,7 @@ export async function GET(
     const productId = params.id;
 
     const hasDb = await isPostgresAvailable();
-    if (hasDb) {
+    if (hasDb && isUuid(productId)) {
       try {
         const product = await prisma.product.findUnique({
           where: { id: productId },
@@ -94,7 +97,7 @@ export async function PATCH(
     } = body;
 
     const hasDb = await isPostgresAvailable();
-    if (hasDb) {
+    if (hasDb && isUuid(productId)) {
       try {
         await prisma.product.update({
           where: { id: productId },
@@ -151,7 +154,7 @@ export async function DELETE(
     const productId = params.id;
 
     const hasDb = await isPostgresAvailable();
-    if (hasDb) {
+    if (hasDb && isUuid(productId)) {
       try {
         await prisma.product.update({
           where: { id: productId },

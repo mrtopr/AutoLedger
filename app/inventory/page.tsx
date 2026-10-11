@@ -13,7 +13,12 @@ import {
   Check, 
   AlertCircle,
   Package,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckSquare,
+  Square,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
 import ClientPortal from '@/app/components/ClientPortal';
@@ -65,6 +70,17 @@ export default function InventoryPage() {
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Multi-select & Bulk Deletion
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleteAction, setBulkDeleteAction] = useState<'SELECTED' | 'FILTER' | 'ALL'>('SELECTED');
+  const [confirmDeleteText, setConfirmDeleteText] = useState('');
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   // Add Part Form
   const [newPart, setNewPart] = useState({
@@ -166,6 +182,90 @@ export default function InventoryPage() {
       return matchDept && matchStatus && matchSearch;
     });
   }, [products, selectedDept, statusFilter, search]);
+
+  // Pagination & Displayed Subset
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDept, statusFilter, search, pageSize]);
+
+  // Selection Handlers
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => 
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const isAllCurrentPageSelected = 
+    paginatedProducts.length > 0 && 
+    paginatedProducts.every((p) => selectedIds.includes(p.id));
+
+  const handleToggleSelectAllPage = () => {
+    if (isAllCurrentPageSelected) {
+      const pageIdSet = new Set(paginatedProducts.map((p) => p.id));
+      setSelectedIds((prev) => prev.filter((id) => !pageIdSet.has(id)));
+    } else {
+      const newIds = new Set(selectedIds);
+      paginatedProducts.forEach((p) => newIds.add(p.id));
+      setSelectedIds(Array.from(newIds));
+    }
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedIds(filtered.map((p) => p.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  // Bulk Delete Execution
+  const handleExecuteBulkDelete = async () => {
+    try {
+      setBulkDeleting(true);
+
+      let payload: any = { action: bulkDeleteAction };
+      if (bulkDeleteAction === 'SELECTED') {
+        payload.productIds = selectedIds;
+      } else if (bulkDeleteAction === 'FILTER') {
+        payload.filter = {
+          category: selectedDept !== 'All Departments' ? selectedDept : undefined,
+          search: search.trim() || undefined,
+        };
+      } else if (bulkDeleteAction === 'ALL') {
+        if (confirmDeleteText.trim().toUpperCase() !== 'DELETE') {
+          showToast('error', 'Please type DELETE to confirm wiping entire inventory.');
+          setBulkDeleting(false);
+          return;
+        }
+        payload.confirmAll = true;
+      }
+
+      const res = await fetch('/api/v1/products/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete products');
+
+      showToast('success', data.message || `Deleted ${data.count} items from inventory`);
+      setIsBulkDeleteModalOpen(false);
+      setSelectedIds([]);
+      setConfirmDeleteText('');
+      await loadProducts();
+    } catch (err: any) {
+      showToast('error', err.message || 'Error executing bulk delete');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -354,16 +454,35 @@ export default function InventoryPage() {
           <button
             onClick={() => setIsBulkImportOpen(true)}
             data-tour="import-excel-btn"
-            className="h-8 inline-flex items-center gap-1.5 px-3 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0] text-xs font-semibold rounded-md shadow-2xs transition"
+            className="h-8 inline-flex items-center gap-1.5 px-3 bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0] text-xs font-semibold rounded-md shadow-2xs transition cursor-pointer"
             title="Import inventory as a whole using Excel or CSV sheet"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-[#16A34A]" />
             <span>Import Excel / CSV</span>
           </button>
 
+          {/* Delete Stock Options Button */}
+          <button
+            onClick={() => {
+              if (selectedIds.length > 0) {
+                setBulkDeleteAction('SELECTED');
+              } else if (selectedDept !== 'All Departments' || search.trim()) {
+                setBulkDeleteAction('FILTER');
+              } else {
+                setBulkDeleteAction('ALL');
+              }
+              setIsBulkDeleteModalOpen(true);
+            }}
+            className="h-8 inline-flex items-center gap-1.5 px-3 bg-[#FEF2F2] hover:bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA] text-xs font-semibold rounded-md shadow-2xs transition cursor-pointer"
+            title="Delete stock in bulk, by filter, or purge all"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-[#DC2626]" />
+            <span>Delete Stock</span>
+          </button>
+
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="h-8 inline-flex items-center gap-1.5 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md shadow-2xs transition"
+            className="h-8 inline-flex items-center gap-1.5 px-3.5 bg-[#C81E1E] hover:bg-[#A81818] text-white text-xs font-semibold rounded-md shadow-2xs transition cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{t('inv.add_product', 'Add Product')}</span>
@@ -477,12 +596,59 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      {/* Active Multi-Selection Action Strip */}
+      {selectedIds.length > 0 && (
+        <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-2.5 px-3 flex flex-wrap items-center justify-between gap-2 text-xs shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-[#991B1B] flex items-center gap-1.5">
+              <CheckSquare className="w-4 h-4 text-[#DC2626]" />
+              {selectedIds.length} spare parts selected
+            </span>
+            {filtered.length > selectedIds.length && (
+              <button
+                onClick={handleSelectAllFiltered}
+                className="text-xs text-[#DC2626] hover:underline font-semibold cursor-pointer ml-1"
+              >
+                (Select all {filtered.length} matching filter)
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearSelection}
+              className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-white rounded border border-slate-300 transition cursor-pointer"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={() => {
+                setBulkDeleteAction('SELECTED');
+                setIsBulkDeleteModalOpen(true);
+              }}
+              className="px-3 py-1 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded font-bold text-xs shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 4. Table */}
       <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-[#E2E8F0] bg-[#F8F9FA] text-[#64748B] text-[10px] font-semibold uppercase">
+                <th className="py-3 px-3 text-center w-10">
+                  <input
+                    type="checkbox"
+                    checked={isAllCurrentPageSelected}
+                    onChange={handleToggleSelectAllPage}
+                    className="rounded border-slate-300 text-[#C81E1E] focus:ring-0 cursor-pointer"
+                    title="Select/Deselect all on this page"
+                  />
+                </th>
                 <th className="py-3 px-4 font-semibold">{t('inv.sku_part_no', 'Part Name & SKU')}</th>
                 <th className="py-3 px-4 font-semibold">{t('inv.category', 'Category')}</th>
                 <th className="py-3 px-4 text-center font-semibold">{t('inv.stock_qty', 'Stock')}</th>
@@ -495,24 +661,40 @@ export default function InventoryPage() {
             <tbody className="divide-y divide-[#F1F5F9] text-[#334155]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#94A3B8]">
+                  <td colSpan={8} className="py-12 text-center text-[#94A3B8]">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#CBD5E1]" />
                     <span>{t('common.loading', 'Loading inventory records...')}</span>
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#94A3B8]">
+                  <td colSpan={8} className="py-12 text-center text-[#94A3B8]">
                     {t('common.no_data', 'No spare parts found matching your filter criteria.')}
                   </td>
                 </tr>
               ) : (
-                filtered.map((p) => {
+                paginatedProducts.map((p) => {
                   const isLow = p.stockQty <= p.reorderLevel;
                   const isOut = p.stockQty <= 0;
+                  const isSelected = selectedIds.includes(p.id);
 
                   return (
-                    <tr key={p.id} className="hover:bg-[#F8F9FA] transition-colors">
+                    <tr 
+                      key={p.id} 
+                      className={`transition-colors ${
+                        isSelected ? 'bg-red-50/40 hover:bg-red-50/60' : 'hover:bg-[#F8F9FA]'
+                      }`}
+                    >
+                      {/* Selection Checkbox */}
+                      <td className="py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelect(p.id)}
+                          className="rounded border-slate-300 text-[#C81E1E] focus:ring-0 cursor-pointer"
+                        />
+                      </td>
+
                       {/* Part Name & SKU */}
                       <td className="py-3 px-4">
                         <div className="font-medium text-[#0F172A] text-xs">{p.name}</div>
@@ -644,6 +826,51 @@ export default function InventoryPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#F8F9FA] border-t border-[#E2E8F0] text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-[#64748B] text-[11px]">Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="h-7 text-xs bg-white border border-[#CBD5E1] rounded px-2 font-medium"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={250}>250</option>
+            </select>
+            <span className="text-[11px] text-[#64748B] font-mono ml-2">
+              Showing {filtered.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} SKUs
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="h-7 px-2.5 rounded border border-[#CBD5E1] bg-white hover:bg-slate-50 disabled:opacity-40 text-[#334155] transition flex items-center gap-1 font-semibold cursor-pointer shadow-2xs"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Previous</span>
+            </button>
+            <span className="px-2 text-[11px] font-mono text-[#475569]">
+              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="h-7 px-2.5 rounded border border-[#CBD5E1] bg-white hover:bg-slate-50 disabled:opacity-40 text-[#334155] transition flex items-center gap-1 font-semibold cursor-pointer shadow-2xs"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1065,6 +1292,170 @@ export default function InventoryPage() {
                   className="h-8.5 px-5 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-md font-semibold shadow-xs transition"
                 >
                   {submitting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </ClientPortal>
+      )}
+
+      {/* MODAL: BULK DELETE CONFIRMATION */}
+      {isBulkDeleteModalOpen && (
+        <ClientPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-xl max-w-md w-full border border-[#CBD5E1] shadow-2xl p-6 text-xs space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-[#FEF2F2] border border-[#FECACA] flex items-center justify-center text-[#DC2626]">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#0F172A]">Delete Stock / Inventory</h3>
+                    <p className="text-[11px] text-[#64748B]">Remove stock in bulk, by active filter, or purge catalog</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsBulkDeleteModalOpen(false)}
+                  className="text-[#94A3B8] hover:text-[#0F172A] p-1 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Mode Selector */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-[#475569]">Select Deletion Scope</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBulkDeleteAction('SELECTED')}
+                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
+                      bulkDeleteAction === 'SELECTED'
+                        ? 'border-[#DC2626] bg-[#FEF2F2] text-[#991B1B] ring-1 ring-[#DC2626]'
+                        : 'border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#475569]'
+                    }`}
+                  >
+                    <span className="font-semibold text-xs">Selected</span>
+                    <span className="text-[11px] opacity-80 mt-1">{selectedIds.length} items</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBulkDeleteAction('FILTER')}
+                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
+                      bulkDeleteAction === 'FILTER'
+                        ? 'border-[#DC2626] bg-[#FEF2F2] text-[#991B1B] ring-1 ring-[#DC2626]'
+                        : 'border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#475569]'
+                    }`}
+                  >
+                    <span className="font-semibold text-xs">Filtered</span>
+                    <span className="text-[11px] opacity-80 mt-1">{filtered.length} items</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBulkDeleteAction('ALL')}
+                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
+                      bulkDeleteAction === 'ALL'
+                        ? 'border-[#DC2626] bg-[#FEF2F2] text-[#991B1B] ring-1 ring-[#DC2626]'
+                        : 'border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#475569]'
+                    }`}
+                  >
+                    <span className="font-semibold text-xs">Purge All</span>
+                    <span className="text-[11px] opacity-80 mt-1">{products.length} items</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Detailed Context per Scope */}
+              {bulkDeleteAction === 'SELECTED' && (
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg p-3 text-xs space-y-1.5">
+                  <div className="font-semibold text-[#0F172A] flex items-center justify-between">
+                    <span>Target: {selectedIds.length} Selected Items</span>
+                    {selectedIds.length === 0 && (
+                      <span className="text-[11px] text-[#DC2626] font-normal">None selected yet</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#64748B]">
+                    {selectedIds.length > 0 
+                      ? 'Only the items currently ticked with checkboxes will be removed from active inventory.'
+                      : 'Please check the checkboxes next to products in the table, or use the "Filtered" option.'}
+                  </p>
+                </div>
+              )}
+
+              {bulkDeleteAction === 'FILTER' && (
+                <div className="bg-[#FFFBEB] border border-[#FEF3C7] rounded-lg p-3 text-xs space-y-1.5 text-[#92400E]">
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Target: {filtered.length} Items Matching Current Filter</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    Will delete all products matching:
+                    <br />
+                    • <strong>Department:</strong> {selectedDept}
+                    {search ? <span><br />• <strong>Search term:</strong> &quot;{search}&quot;</span> : null}
+                  </p>
+                </div>
+              )}
+
+              {bulkDeleteAction === 'ALL' && (
+                <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-3.5 text-xs space-y-2.5 text-[#991B1B]">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
+                    <span>Warning: Purging Entire Catalog ({products.length} Products)</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-[#7F1D1D]">
+                    This will soft-delete all products from your catalog so you can start fresh. Historical sales and invoices remain safe.
+                  </p>
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[11px] font-semibold text-[#991B1B]">
+                      Type <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-[#FECACA] text-[#DC2626] font-bold">DELETE</span> to confirm:
+                    </label>
+                    <input
+                      type="text"
+                      value={confirmDeleteText}
+                      onChange={(e) => setConfirmDeleteText(e.target.value)}
+                      placeholder="Type DELETE"
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-[#FECACA] rounded-md font-mono text-[#0F172A] focus:border-[#DC2626] outline-hidden"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#E2E8F0]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBulkDeleteModalOpen(false);
+                    setConfirmDeleteText('');
+                  }}
+                  className="h-8.5 px-4 border border-[#CBD5E1] text-[#475569] rounded-md hover:bg-[#F1F5F9] font-medium transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteBulkDelete}
+                  disabled={
+                    bulkDeleting ||
+                    (bulkDeleteAction === 'SELECTED' && selectedIds.length === 0) ||
+                    (bulkDeleteAction === 'FILTER' && filtered.length === 0) ||
+                    (bulkDeleteAction === 'ALL' && confirmDeleteText.trim().toUpperCase() !== 'DELETE')
+                  }
+                  className="h-8.5 px-4 bg-[#DC2626] hover:bg-[#B91C1C] disabled:bg-[#FCA5A5] disabled:cursor-not-allowed text-white rounded-md font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  {bulkDeleting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>
+                    {bulkDeleting 
+                      ? 'Deleting...' 
+                      : bulkDeleteAction === 'SELECTED'
+                        ? `Delete Selected (${selectedIds.length})`
+                        : bulkDeleteAction === 'FILTER'
+                          ? `Delete Filtered (${filtered.length})`
+                          : `Purge All (${products.length})`}
+                  </span>
                 </button>
               </div>
             </div>

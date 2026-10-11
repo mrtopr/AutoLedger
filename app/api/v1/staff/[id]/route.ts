@@ -4,6 +4,9 @@ import { getAuthenticatedUser, hashPassword } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { Role } from '@prisma/client';
 
+const isUuid = (id?: string | null): boolean =>
+  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -27,7 +30,7 @@ export async function PATCH(
     const hasDb = await isPostgresAvailable();
     let updated: any = null;
 
-    if (hasDb) {
+    if (hasDb && isUuid(userId)) {
       try {
         updated = await prisma.user.update({
           where: { id: userId },
@@ -72,7 +75,7 @@ export async function DELETE(
     const userId = params.id;
     const hasDb = await isPostgresAvailable();
 
-    if (hasDb) {
+    if (hasDb && isUuid(userId)) {
       try {
         await prisma.user.delete({
           where: { id: userId },

@@ -3,6 +3,9 @@ import { getAuthenticatedUser } from '@/server/lib/auth';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
 
+const isUuid = (id?: string | null): boolean =>
+  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUser(req);
@@ -10,7 +13,7 @@ export async function GET(req: NextRequest) {
 
     if (hasDb) {
       try {
-        let tenant = auth?.tenantId 
+        let tenant = (auth?.tenantId && isUuid(auth.tenantId))
           ? await prisma.tenant.findUnique({ where: { id: auth.tenantId } })
           : await prisma.tenant.findFirst();
 
@@ -74,7 +77,7 @@ export async function PATCH(req: NextRequest) {
     if (hasDb) {
       try {
         // Find existing tenant or create first primary tenant in Neon DB
-        let existingTenant = auth?.tenantId 
+        let existingTenant = (auth?.tenantId && isUuid(auth.tenantId))
           ? await prisma.tenant.findUnique({ where: { id: auth.tenantId } })
           : await prisma.tenant.findFirst();
 

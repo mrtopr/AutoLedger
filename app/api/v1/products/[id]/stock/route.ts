@@ -4,6 +4,9 @@ import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { StockReason } from '@prisma/client';
 
+const isUuid = (id?: string | null): boolean =>
+  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -21,9 +24,9 @@ export async function POST(
 
     const delta = parseInt(qty, 10);
 
-    // 1. Try Prisma if available
+    // 1. Try Prisma if available and productId is a valid UUID
     const hasDb = await isPostgresAvailable();
-    if (hasDb) {
+    if (hasDb && isUuid(productId)) {
       try {
         const product = await prisma.product.findUnique({
           where: { id: productId },
@@ -43,7 +46,7 @@ export async function POST(
               qty: delta,
               reason: stockReason,
               unitCost: unitCostPaise ? BigInt(unitCostPaise) : null,
-              createdBy: authUser?.id || null,
+              createdBy: authUser?.id && isUuid(authUser.id) ? authUser.id : null,
             }
           });
         }
