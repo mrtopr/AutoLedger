@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { 
   isFirebaseConfigured, 
+  loadFirebaseConfig,
   initRecaptcha, 
   sendFirebasePhoneOtp, 
   verifyFirebaseOtpCode 
@@ -64,7 +65,9 @@ function LoginFormContent() {
     if (searchParams?.get('tab') === 'customer') {
       setLoginMode('CUSTOMER');
     }
-    setFirebaseActive(isFirebaseConfigured());
+    loadFirebaseConfig().then((active) => {
+      setFirebaseActive(active);
+    });
   }, [searchParams]);
 
   // Clean reCAPTCHA on unmount or tab switch
@@ -121,7 +124,8 @@ function LoginFormContent() {
     setIsSubmitting(true);
 
     try {
-      if (isFirebaseConfigured()) {
+      const isConfigured = await loadFirebaseConfig();
+      if (isConfigured) {
         // --- LIVE FIREBASE PHONE AUTH ---
         let verifier = recaptchaVerifierRef.current;
         if (!verifier) {
@@ -168,7 +172,27 @@ function LoginFormContent() {
       if (typeof window !== 'undefined' && (window as any).grecaptcha) {
         try { (window as any).grecaptcha.reset(); } catch (e) {}
       }
-      setError(err.message || 'Error sending OTP. Please verify your phone number.');
+      
+      const rawMsg = err?.message || err?.code || '';
+      let userMsg = 'Error sending OTP. Please verify your phone number.';
+
+      if (rawMsg.includes('auth/operation-not-allowed') || rawMsg.includes('admin-restricted-operation')) {
+        userMsg = 'Phone Authentication is disabled in Firebase Console. Go to Firebase Console > Authentication > Sign-in method and enable "Phone".';
+      } else if (rawMsg.includes('auth/unauthorized-domain')) {
+        userMsg = 'This domain is not authorized in Firebase. Add your domain (e.g. localhost or your vercel.app URL) to Firebase Console > Authentication > Settings > Authorized domains.';
+      } else if (rawMsg.includes('auth/quota-exceeded')) {
+        userMsg = 'Firebase SMS daily quota exceeded. Please add a test phone number (e.g. +91 7488542781 with OTP 123456) in Firebase Console > Authentication > Sign-in method > Phone numbers for testing.';
+      } else if (rawMsg.includes('auth/invalid-phone-number')) {
+        userMsg = 'Invalid phone number format. Please enter a valid 10-digit Indian mobile number.';
+      } else if (rawMsg.includes('auth/too-many-requests')) {
+        userMsg = 'Too many OTP requests. Please wait a few minutes before trying again or use a test phone number.';
+      } else if (rawMsg.includes('auth/captcha-check-failed')) {
+        userMsg = 'reCAPTCHA verification failed. Please refresh the page and try again.';
+      } else if (err?.message) {
+        userMsg = err.message;
+      }
+
+      setError(userMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -256,7 +280,20 @@ function LoginFormContent() {
       }
     } catch (err: any) {
       console.error('Verify OTP error:', err);
-      setError(err.message || 'Error verifying OTP.');
+      const rawMsg = err?.message || err?.code || '';
+      let userMsg = 'Error verifying OTP code. Please try again.';
+
+      if (rawMsg.includes('auth/invalid-verification-code')) {
+        userMsg = 'Incorrect OTP code entered. Please check the code and try again.';
+      } else if (rawMsg.includes('auth/code-expired')) {
+        userMsg = 'OTP code has expired. Please go back and request a fresh OTP.';
+      } else if (rawMsg.includes('auth/session-expired')) {
+        userMsg = 'Verification session expired. Please request a new OTP.';
+      } else if (err?.message) {
+        userMsg = err.message;
+      }
+
+      setError(userMsg);
     } finally {
       setIsSubmitting(false);
     }

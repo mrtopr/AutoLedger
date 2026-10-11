@@ -1,19 +1,74 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, Auth } from 'firebase/auth';
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
-};
+let cachedConfig: {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+} | null = null;
+
+let configFetchPromise: Promise<boolean> | null = null;
 
 /**
- * Checks if Firebase environment variables are provided
+ * Dynamically fetch or load Firebase config from the server
+ * so keys do NOT require NEXT_PUBLIC_ prefixes in .env.
+ */
+export async function loadFirebaseConfig(): Promise<boolean> {
+  // If already loaded in memory
+  if (cachedConfig?.apiKey && cachedConfig?.projectId) {
+    return true;
+  }
+
+  // Check build-time env vars if still present
+  if (
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  ) {
+    cachedConfig = {
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
+      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
+    };
+    return true;
+  }
+
+  if (typeof window === 'undefined') return false;
+
+  if (configFetchPromise) {
+    return configFetchPromise;
+  }
+
+  configFetchPromise = (async () => {
+    try {
+      const res = await fetch('/api/v1/auth/firebase-config');
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.configured && data.config) {
+        cachedConfig = data.config;
+        return true;
+      }
+    } catch (err) {
+      console.warn('Could not load Firebase configuration from server:', err);
+    }
+    return false;
+  })();
+
+  return configFetchPromise;
+}
+
+/**
+ * Checks if Firebase configuration is available
  */
 export function isFirebaseConfigured(): boolean {
+  if (cachedConfig?.apiKey && cachedConfig?.projectId) {
+    return true;
+  }
   return Boolean(
     process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
     process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
@@ -25,10 +80,22 @@ export function isFirebaseConfigured(): boolean {
  */
 export function getFirebaseApp(): FirebaseApp | null {
   if (typeof window === 'undefined') return null;
-  if (!isFirebaseConfigured()) return null;
+
+  const config = cachedConfig || {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
+  };
+
+  if (!config.apiKey || !config.projectId) {
+    return null;
+  }
 
   try {
-    return getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    return getApps().length > 0 ? getApp() : initializeApp(config);
   } catch (error) {
     console.error('Firebase initialization error:', error);
     return null;
@@ -65,7 +132,7 @@ export function initRecaptcha(containerId: string): RecaptchaVerifier | null {
     const verifier = new RecaptchaVerifier(auth, containerId, {
       size: 'invisible',
       callback: () => {
-        // reCAPTCHA solved - will proceed with submit
+        // reCAPTCHA solved
       },
       'expired-callback': () => {
         console.warn('reCAPTCHA expired. Please retry.');
@@ -92,7 +159,7 @@ export async function sendFirebasePhoneOtp(
 ): Promise<ConfirmationResult> {
   const auth = getFirebaseAuth();
   if (!auth) {
-    throw new Error('Firebase Auth is not configured. Please check your .env credentials.');
+    throw new Error('Firebase Auth is not configured. Please check your credentials.');
   }
 
   // Format to E.164 format (+91 for India)

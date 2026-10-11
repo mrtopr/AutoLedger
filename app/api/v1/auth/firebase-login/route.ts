@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '';
+    const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '';
     let verifiedPhone = '';
 
     if (apiKey) {
