@@ -602,7 +602,7 @@ class LocalStore {
       }
       if (options?.search) {
         const q = options.search.toLowerCase();
-        matches = matches && (
+        matches = matches && Boolean(
           prod.name.toLowerCase().includes(q) ||
           (prod.partNumber && prod.partNumber.toLowerCase().includes(q)) ||
           (prod.brand && prod.brand.toLowerCase().includes(q))
