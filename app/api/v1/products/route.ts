@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
     // 1. Try Prisma first if Postgres is reachable and tenantId is either absent or a valid UUID
     const hasDb = await isPostgresAvailable();
-    if (hasDb && (!authUser?.tenantId || isUuid(authUser.tenantId))) {
+    if (hasDb && (!authUser?.tenantId || isUuid(authUser?.tenantId))) {
       try {
         const products = await prisma.product.findMany({
           where: {

@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     // Resolve valid database tenant UUID if available
     let dbTenantId: string | null = null;
     if (hasDb) {
-      if (isValidUuid(authUser?.tenantId)) {
+      if (authUser?.tenantId && isValidUuid(authUser.tenantId)) {
         dbTenantId = authUser.tenantId;
       } else {
         try {

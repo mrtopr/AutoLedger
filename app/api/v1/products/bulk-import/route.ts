@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     const localSummary = localStore.bulkUpsertProducts(targetTenantId, localStorePayload);
 
     // 2. PostgreSQL bulk sync ONLY if logged-in user belongs to a valid UUID PostgreSQL tenant
-    if (isValidUuid(authUser?.tenantId)) {
+    if (authUser?.tenantId && isValidUuid(authUser.tenantId)) {
       const dbTenantId = authUser.tenantId;
       try {
         const hasDb = await Promise.race([
