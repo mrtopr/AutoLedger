@@ -3,8 +3,12 @@
 export interface OtpSession {
   otp: string;
   expiresAt: number;
-  customerId: string;
-  tenantId: string;
+  customerId?: string;
+  userId?: string;
+  role?: string;
+  name?: string;
+  phone?: string;
+  tenantId?: string;
 }
 
 const globalForOtp = globalThis as unknown as {

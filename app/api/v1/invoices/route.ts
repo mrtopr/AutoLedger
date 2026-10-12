@@ -216,30 +216,79 @@ export async function POST(req: NextRequest) {
           });
 
           // 2. If paid at counter (full or partial), post Credit Ledger Entry & Payment Record
-          if (totalPaidNow > 0n) {
-            const mappedMode = Number(upiPaidPaise) > 0 ? PaymentMode.UPI : PaymentMode.CASH;
-            const payment = await prisma.payment.create({
+          const cashAmt = BigInt(cashPaidPaise || 0);
+          const upiAmt = BigInt(upiPaidPaise || 0);
+
+          if (cashAmt > 0n) {
+            const cashPay = await prisma.payment.create({
+              data: {
+                tenantId: targetTenantId,
+                customerId,
+                amount: cashAmt,
+                mode: PaymentMode.CASH,
+                reference: `CASH-${invoiceNumber}`,
+                status: PaymentStatus.CLEARED,
+                notes: `Counter Cash Settlement for Invoice #${invoiceNumber}`,
+                createdAt: invoiceCreatedDate,
+              },
+            });
+            await prisma.paymentAllocation.create({
+              data: {
+                paymentId: cashPay.id,
+                invoiceId: invoice.id,
+                amount: cashAmt,
+                strategy: 'DIRECT_LINK',
+              },
+            });
+          }
+
+          if (upiAmt > 0n) {
+            const upiPay = await prisma.payment.create({
+              data: {
+                tenantId: targetTenantId,
+                customerId,
+                amount: upiAmt,
+                mode: PaymentMode.UPI,
+                reference: upiRef || `UPI-${invoiceNumber}`,
+                status: PaymentStatus.CLEARED,
+                notes: `Counter UPI Settlement for Invoice #${invoiceNumber}`,
+                createdAt: invoiceCreatedDate,
+              },
+            });
+            await prisma.paymentAllocation.create({
+              data: {
+                paymentId: upiPay.id,
+                invoiceId: invoice.id,
+                amount: upiAmt,
+                strategy: 'DIRECT_LINK',
+              },
+            });
+          }
+
+          if (cashAmt <= 0n && upiAmt <= 0n && totalPaidNow > 0n) {
+            const fallbackPay = await prisma.payment.create({
               data: {
                 tenantId: targetTenantId,
                 customerId,
                 amount: totalPaidNow,
-                mode: mappedMode,
-                reference: upiRef || `POS-${invoiceNumber}`,
+                mode: PaymentMode.CASH,
+                reference: `POS-${invoiceNumber}`,
                 status: PaymentStatus.CLEARED,
                 notes: `Counter Settlement for Invoice #${invoiceNumber}`,
                 createdAt: invoiceCreatedDate,
               },
             });
-
             await prisma.paymentAllocation.create({
               data: {
-                paymentId: payment.id,
+                paymentId: fallbackPay.id,
                 invoiceId: invoice.id,
                 amount: totalPaidNow,
                 strategy: 'DIRECT_LINK',
               },
             });
+          }
 
+          if (totalPaidNow > 0n) {
             await prisma.ledgerEntry.create({
               data: {
                 tenantId: targetTenantId,
@@ -248,7 +297,7 @@ export async function POST(req: NextRequest) {
                 refId: invoice.id,
                 debit: 0n,
                 credit: totalPaidNow,
-                narration: `Counter Settlement (${mappedMode}) for Invoice #${invoiceNumber}`,
+                narration: `Counter Settlement for Invoice #${invoiceNumber}`,
                 createdAt: invoiceCreatedDate,
               },
             });
@@ -289,9 +338,9 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    // Double-Entry Ledger Posting in localStore
+    // Double-Entry Ledger Posting & Payment Recording in localStore
     if (customerId) {
-      // 1. Post Debit Ledger Entry for the Invoice
+      // 1. Post Debit Ledger Entry for the Customer Invoice
       localStore.addLedgerEntry({
         tenantId: targetTenantId,
         customerId,
@@ -303,31 +352,57 @@ export async function POST(req: NextRequest) {
         date: invoiceCreatedIso.split('T')[0],
         createdAt: invoiceCreatedIso,
       });
+    }
 
-      // 2. If paid at counter (full or partial), post Credit Ledger Entry & Payment Record
-      if (totalPaidNow > 0n) {
-        const payMode = Number(upiPaidPaise) > 0 ? 'UPI' : 'CASH';
-        localStore.createPayment({
-          tenantId: targetTenantId,
-          customerId,
-          amountPaise: totalPaidNow.toString(),
-          mode: payMode,
-          referenceNumber: upiRef || `POS-${invoiceNumber}`,
-          createdAt: invoiceCreatedIso,
-        });
+    // 2. If paid at counter (full or partial), record payment in localStore
+    const cashPaiseVal = BigInt(cashPaidPaise || 0);
+    const upiPaiseVal = BigInt(upiPaidPaise || 0);
 
-        localStore.addLedgerEntry({
-          tenantId: targetTenantId,
-          customerId,
-          type: 'PAYMENT',
-          refNo: invoiceNumber,
-          narration: `Counter Settlement (${payMode}) for Invoice #${invoiceNumber}`,
-          debitPaise: '0',
-          creditPaise: totalPaidNow.toString(),
-          date: invoiceCreatedIso.split('T')[0],
-          createdAt: invoiceCreatedIso,
-        });
-      }
+    if (cashPaiseVal > 0n) {
+      localStore.createPayment({
+        tenantId: targetTenantId,
+        customerId: customerId || undefined,
+        amountPaise: cashPaiseVal.toString(),
+        mode: 'CASH',
+        referenceNumber: `CASH-${invoiceNumber}`,
+        createdAt: invoiceCreatedIso,
+      });
+    }
+
+    if (upiPaiseVal > 0n) {
+      localStore.createPayment({
+        tenantId: targetTenantId,
+        customerId: customerId || undefined,
+        amountPaise: upiPaiseVal.toString(),
+        mode: 'UPI',
+        referenceNumber: upiRef || `UPI-${invoiceNumber}`,
+        createdAt: invoiceCreatedIso,
+      });
+    }
+
+    if (cashPaiseVal <= 0n && upiPaiseVal <= 0n && totalPaidNow > 0n) {
+      localStore.createPayment({
+        tenantId: targetTenantId,
+        customerId: customerId || undefined,
+        amountPaise: totalPaidNow.toString(),
+        mode: 'CASH',
+        referenceNumber: `POS-${invoiceNumber}`,
+        createdAt: invoiceCreatedIso,
+      });
+    }
+
+    if (customerId && totalPaidNow > 0n) {
+      localStore.addLedgerEntry({
+        tenantId: targetTenantId,
+        customerId,
+        type: 'PAYMENT',
+        refNo: invoiceNumber,
+        narration: `Counter Settlement for Invoice #${invoiceNumber}`,
+        debitPaise: '0',
+        creditPaise: totalPaidNow.toString(),
+        date: invoiceCreatedIso.split('T')[0],
+        createdAt: invoiceCreatedIso,
+      });
     }
 
     return NextResponse.json({

@@ -738,11 +738,14 @@ export default function InventoryPage() {
                         <div className="font-mono tabular-nums font-semibold text-[#0F172A] text-xs">
                           {formatPaiseToRupees(BigInt(p.salePricePaise || 0))}
                         </div>
-                        {Number(p.purchasePricePaise || 0) > 0 && (
-                          <div className="text-[10px] text-[#64748B] font-mono tabular-nums">
-                            Cost: {formatPaiseToRupees(BigInt(p.purchasePricePaise))}
-                          </div>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5 text-[10px] text-[#64748B] font-mono tabular-nums">
+                          {Number(p.mrpPaise || 0) > 0 && Number(p.mrpPaise) !== Number(p.salePricePaise) && (
+                            <span>MRP: {formatPaiseToRupees(BigInt(p.mrpPaise))}</span>
+                          )}
+                          {Number(p.purchasePricePaise || 0) > 0 && Number(p.purchasePricePaise) !== Number(p.salePricePaise) && (
+                            <span>· Cost: {formatPaiseToRupees(BigInt(p.purchasePricePaise))}</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Status */}

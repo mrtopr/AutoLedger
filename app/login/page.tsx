@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useRef } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
@@ -18,15 +18,8 @@ import {
   KeyRound,
   CheckCircle2,
   Sparkles,
-  Smartphone
+  Mail
 } from 'lucide-react';
-import { 
-  isFirebaseConfigured, 
-  loadFirebaseConfig,
-  initRecaptcha, 
-  sendFirebasePhoneOtp, 
-  verifyFirebaseOtpCode 
-} from '@/app/lib/firebase';
 
 function LoginFormContent() {
   const router = useRouter();
@@ -37,8 +30,8 @@ function LoginFormContent() {
   const initialTab = searchParams?.get('tab') === 'customer' ? 'CUSTOMER' : 'DEALERSHIP';
   const [loginMode, setLoginMode] = useState<'DEALERSHIP' | 'CUSTOMER'>(initialTab);
 
-  // Dealership Auth Type: 'PASSWORD' or 'OTP'
-  const [dealershipAuthType, setDealershipAuthType] = useState<'PASSWORD' | 'OTP'>('PASSWORD');
+  // Dealership Auth Type: 'PASSWORD' or 'EMAIL_OTP'
+  const [dealershipAuthType, setDealershipAuthType] = useState<'PASSWORD' | 'EMAIL_OTP'>('PASSWORD');
 
   // Dealership Password Login State
   const [loginId, setLoginId] = useState('');
@@ -46,43 +39,27 @@ function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
-  // Phone OTP States (Shared for Dealership OTP & Customer OTP)
-  const [otpPhone, setOtpPhone] = useState('');
-  const [otpStep, setOtpStep] = useState<'PHONE' | 'OTP'>('PHONE');
+  // Email OTP States (Used by Dealership Email OTP & Customer Portal)
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpStep, setOtpStep] = useState<'EMAIL' | 'OTP'>('EMAIL');
   const [otpCode, setOtpCode] = useState('');
-  const [otpSentInfo, setOtpSentInfo] = useState<any>(null);
   const [demoOtpHint, setDemoOtpHint] = useState<string | null>(null);
-  const [confirmationResult, setConfirmationResult] = useState<any>(null);
-  const [firebaseActive, setFirebaseActive] = useState<boolean>(false);
 
   // Common submission & error state
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const recaptchaVerifierRef = useRef<any>(null);
-
   useEffect(() => {
     if (searchParams?.get('tab') === 'customer') {
       setLoginMode('CUSTOMER');
     }
-    loadFirebaseConfig().then((active) => {
-      setFirebaseActive(active);
-    });
   }, [searchParams]);
 
-  // Clean reCAPTCHA on unmount or tab switch
   const resetOtpFlow = () => {
     setError(null);
-    setOtpStep('PHONE');
+    setOtpStep('EMAIL');
     setOtpCode('');
-    setConfirmationResult(null);
     setDemoOtpHint(null);
-    if (recaptchaVerifierRef.current) {
-      try {
-        recaptchaVerifierRef.current.clear();
-      } catch (e) {}
-      recaptchaVerifierRef.current = null;
-    }
   };
 
   // ==========================================
@@ -108,192 +85,84 @@ function LoginFormContent() {
   };
 
   // ==========================================
-  // SEND MOBILE OTP (Firebase or Local Fallback)
+  // SEND EMAIL OTP (100% Free)
   // ==========================================
-  const handleSendMobileOtp = async (e: React.FormEvent) => {
+  const handleSendEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setDemoOtpHint(null);
 
-    const clean = otpPhone.replace(/[^0-9]/g, '').slice(-10);
-    if (clean.length !== 10) {
-      setError('Please enter a valid 10-digit Indian mobile number.');
+    const clean = otpEmail.trim().toLowerCase();
+    if (!clean || !clean.includes('@')) {
+      setError('Please enter a valid email address.');
       return;
     }
 
     setIsSubmitting(true);
-
     try {
-      const isConfigured = await loadFirebaseConfig();
-      if (isConfigured) {
-        // --- LIVE FIREBASE PHONE AUTH ---
-        let verifier = recaptchaVerifierRef.current;
-        if (!verifier) {
-          verifier = initRecaptcha('recaptcha-container');
-          recaptchaVerifierRef.current = verifier;
-        }
-
-        if (!verifier) {
-          throw new Error('Could not initialize reCAPTCHA verifier. Please refresh the page.');
-        }
-
-        const confirmRes = await sendFirebasePhoneOtp(clean, verifier);
-        setConfirmationResult(confirmRes);
-        setOtpStep('OTP');
-      } else {
-        // --- DEMO / FALLBACK OTP ---
-        if (loginMode === 'CUSTOMER') {
-          const res = await fetch('/api/v1/portal/auth/send-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: clean }),
-          });
-          const data = await res.json();
-          if (res.ok) {
-            setOtpSentInfo(data.customer);
-            setDemoOtpHint(data.demoOtp || '1234');
-            setOtpStep('OTP');
-          } else {
-            setError(data.error || 'Failed to send OTP.');
-          }
-        } else {
-          // Dealership Staff OTP demo
-          setDemoOtpHint('1234');
-          setOtpStep('OTP');
-        }
+      const res = await fetch('/api/v1/auth/email-otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: clean, mode: loginMode }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to send verification email.');
+        return;
       }
+      setDemoOtpHint(data.demoOtp || null);
+      setOtpStep('OTP');
     } catch (err: any) {
-      console.error('Send OTP error:', err);
-      // Reset reCAPTCHA on failure so user can retry immediately
-      if (recaptchaVerifierRef.current) {
-        try { recaptchaVerifierRef.current.clear(); } catch (e) {}
-        recaptchaVerifierRef.current = null;
-      }
-      if (typeof window !== 'undefined' && (window as any).grecaptcha) {
-        try { (window as any).grecaptcha.reset(); } catch (e) {}
-      }
-      
-      const rawMsg = err?.message || err?.code || '';
-      let userMsg = 'Error sending OTP. Please verify your phone number.';
-
-      if (rawMsg.includes('auth/operation-not-allowed') || rawMsg.includes('admin-restricted-operation')) {
-        userMsg = 'Phone Authentication is disabled in Firebase Console. Go to Firebase Console > Authentication > Sign-in method and enable "Phone".';
-      } else if (rawMsg.includes('auth/unauthorized-domain')) {
-        userMsg = 'This domain is not authorized in Firebase. Add your domain (e.g. localhost or your vercel.app URL) to Firebase Console > Authentication > Settings > Authorized domains.';
-      } else if (rawMsg.includes('auth/quota-exceeded')) {
-        userMsg = 'Firebase SMS daily quota exceeded. Please add a test phone number (e.g. +91 7488542781 with OTP 123456) in Firebase Console > Authentication > Sign-in method > Phone numbers for testing.';
-      } else if (rawMsg.includes('auth/invalid-phone-number')) {
-        userMsg = 'Invalid phone number format. Please enter a valid 10-digit Indian mobile number.';
-      } else if (rawMsg.includes('auth/too-many-requests')) {
-        userMsg = 'Too many OTP requests. Please wait a few minutes before trying again or use a test phone number.';
-      } else if (rawMsg.includes('auth/captcha-check-failed')) {
-        userMsg = 'reCAPTCHA verification failed. Please refresh the page and try again.';
-      } else if (err?.message) {
-        userMsg = err.message;
-      }
-
-      setError(userMsg);
+      console.error('Send email OTP error:', err);
+      setError(err.message || 'Error sending email verification code.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   // ==========================================
-  // VERIFY MOBILE OTP
+  // VERIFY EMAIL OTP
   // ==========================================
-  const handleVerifyMobileOtp = async (e: React.FormEvent) => {
+  const handleVerifyEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const clean = otpPhone.replace(/[^0-9]/g, '').slice(-10);
+    const clean = otpEmail.trim().toLowerCase();
     if (!otpCode.trim()) {
-      setError('Please enter the verification code.');
+      setError('Please enter the 6-digit verification code.');
       return;
     }
 
     setIsSubmitting(true);
-
     try {
-      if (isFirebaseConfigured() && confirmationResult) {
-        // --- 1. Verify code with Firebase ---
-        const { idToken } = await verifyFirebaseOtpCode(confirmationResult, otpCode);
+      const res = await fetch('/api/v1/auth/email-otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: clean,
+          otp: otpCode.trim(),
+          mode: loginMode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Invalid verification code.');
+        return;
+      }
 
-        // --- 2. Send Firebase ID token to backend for session cookie creation ---
-        const res = await fetch('/api/v1/auth/firebase-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            idToken,
-            phone: clean,
-            mode: loginMode,
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error || 'Authentication failed.');
-          return;
+      if (loginMode === 'CUSTOMER') {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('autoledger_customer_token', data.token);
+          localStorage.setItem('autoledger_customer_phone', data.customer?.phone || clean);
         }
-
-        if (loginMode === 'CUSTOMER') {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('autoledger_customer_token', data.token);
-            localStorage.setItem('autoledger_customer_phone', clean);
-          }
-          router.push('/portal');
-        } else {
-          await refreshAuth();
-          router.push('/');
-        }
+        router.push('/portal');
       } else {
-        // --- Fallback / Demo OTP Verification ---
-        if (loginMode === 'CUSTOMER') {
-          const res = await fetch('/api/v1/portal/auth/verify-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: clean, otp: otpCode.trim() }),
-          });
-          const data = await res.json();
-          if (res.ok && data.token) {
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('autoledger_customer_token', data.token);
-              localStorage.setItem('autoledger_customer_phone', clean);
-            }
-            router.push('/portal');
-          } else {
-            setError(data.error || 'Invalid OTP code.');
-          }
-        } else {
-          // Staff demo verify
-          if (otpCode.trim() === '1234') {
-            // Log in as default owner
-            const res = await login(clean, 'admin123');
-            if (res.success) {
-              router.push('/');
-            } else {
-              setError('Could not authenticate demo staff member. Please use password login.');
-            }
-          } else {
-            setError('Invalid OTP code. Please enter 1234.');
-          }
-        }
+        await refreshAuth();
+        router.push('/');
       }
     } catch (err: any) {
-      console.error('Verify OTP error:', err);
-      const rawMsg = err?.message || err?.code || '';
-      let userMsg = 'Error verifying OTP code. Please try again.';
-
-      if (rawMsg.includes('auth/invalid-verification-code')) {
-        userMsg = 'Incorrect OTP code entered. Please check the code and try again.';
-      } else if (rawMsg.includes('auth/code-expired')) {
-        userMsg = 'OTP code has expired. Please go back and request a fresh OTP.';
-      } else if (rawMsg.includes('auth/session-expired')) {
-        userMsg = 'Verification session expired. Please request a new OTP.';
-      } else if (err?.message) {
-        userMsg = err.message;
-      }
-
-      setError(userMsg);
+      console.error('Verify email OTP error:', err);
+      setError(err.message || 'Error verifying code.');
     } finally {
       setIsSubmitting(false);
     }
@@ -301,10 +170,6 @@ function LoginFormContent() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-8">
-      
-      {/* Invisible Firebase reCAPTCHA container */}
-      <div id="recaptcha-container"></div>
-
       {/* Outer Container */}
       <div className="w-full max-w-4xl bg-gradient-to-r from-[#B91C1C] via-[#DC2626] to-[#EA580C] rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[540px]">
         
@@ -399,7 +264,7 @@ function LoginFormContent() {
 
             <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[10px] text-emerald-700 font-bold">
               <ShieldCheck className="w-3 h-3 text-emerald-600" />
-              <span>Firebase Verified</span>
+              <span>Zero-Cost Verified</span>
             </div>
           </div>
 
@@ -411,13 +276,13 @@ function LoginFormContent() {
             <p className="text-xs text-slate-500 mt-0.5">
               {loginMode === 'DEALERSHIP'
                 ? 'Access your wholesale ledger, billing counter, and inventory.'
-                : 'Log in with your registered mobile phone to view your balance and bills.'}
+                : 'Log in with your registered email to view your balance and bills.'}
             </p>
           </div>
 
-          {/* Sub-mode toggle for Dealership (Password vs OTP) */}
+          {/* Sub-mode toggle for Dealership */}
           {loginMode === 'DEALERSHIP' && (
-            <div className="flex items-center gap-2 pt-1 pb-1">
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-1">
               <button
                 type="button"
                 onClick={() => {
@@ -435,17 +300,17 @@ function LoginFormContent() {
               <button
                 type="button"
                 onClick={() => {
-                  setDealershipAuthType('OTP');
+                  setDealershipAuthType('EMAIL_OTP');
                   resetOtpFlow();
                 }}
                 className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                  dealershipAuthType === 'OTP'
+                  dealershipAuthType === 'EMAIL_OTP'
                     ? 'bg-[#B91C1C] text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>Mobile OTP (Firebase)</span>
+                <Mail className="w-3.5 h-3.5" />
+                <span>Email OTP</span>
               </button>
             </div>
           )}
@@ -473,29 +338,37 @@ function LoginFormContent() {
                     type="text"
                     required
                     autoFocus
-                    autoComplete="username"
                     value={loginId}
                     onChange={(e) => setLoginId(e.target.value)}
-                    placeholder="e.g. 9822012345 or owner@business.com"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    placeholder="e.g. 7488542781 or krsachin7488@gmail.com"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Password or Terminal PIN *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">Password *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDealershipAuthType('EMAIL_OTP');
+                      resetOtpFlow();
+                    }}
+                    className="text-[11px] font-semibold text-[#C81E1E] hover:underline"
+                  >
+                    Forgot? Use Email OTP
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
-                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter account password or PIN"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                    placeholder="Enter your account password"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
                   />
                   <button
                     type="button"
@@ -549,59 +422,55 @@ function LoginFormContent() {
           )}
 
           {/* ======================================================== */}
-          {/* MOBILE OTP FLOW (Used by Dealership OTP & Customer Portal) */}
+          {/* EMAIL OTP FLOW (Used by Dealership & Customer)            */}
           {/* ======================================================== */}
-          {((loginMode === 'DEALERSHIP' && dealershipAuthType === 'OTP') || loginMode === 'CUSTOMER') && (
+          {((loginMode === 'DEALERSHIP' && dealershipAuthType === 'EMAIL_OTP') || loginMode === 'CUSTOMER') && (
             <div className="my-auto pt-2 space-y-4">
-              
-              {otpStep === 'PHONE' ? (
-                <form onSubmit={handleSendMobileOtp} className="space-y-4">
+              {otpStep === 'EMAIL' ? (
+                <form onSubmit={handleSendEmailOtp} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Registered Mobile Number *
+                      Registered Email Address *
                     </label>
                     <div className="relative">
-                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
-                        +91
-                      </div>
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input
-                        type="tel"
-                        maxLength={10}
+                        type="email"
                         required
                         autoFocus
-                        value={otpPhone}
-                        onChange={(e) => setOtpPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="Enter 10-digit mobile (e.g. 9822100001)"
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-12 pr-4 py-2.5 text-xs font-mono font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
+                        value={otpEmail}
+                        onChange={(e) => setOtpEmail(e.target.value)}
+                        placeholder={loginMode === 'DEALERSHIP' ? 'e.g. krsachin7488@gmail.com' : 'Enter registered email'}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
                       />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-amber-500" />
                       <span>
-                        {firebaseActive 
-                          ? 'Firebase SMS OTP will be sent to your number.'
-                          : 'Enter your 10-digit mobile number for instant verification.'}
+                        6-digit verification code will be sent to your email.
                       </span>
                     </p>
                   </div>
 
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                     <span className="text-[11px] text-slate-500">
-                      {firebaseActive ? 'Google reCAPTCHA Protected' : 'Fast Demo Mode Active'}
+                      Zero Carrier Charges
                     </span>
                     <button
                       type="submit"
-                      disabled={isSubmitting || otpPhone.length < 10}
-                      className="px-7 py-2.5 bg-[#B91C1C] hover:bg-[#991B1B] disabled:opacity-50 text-white font-bold rounded-full text-xs shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                      disabled={isSubmitting || !otpEmail.includes('@')}
+                      className={`px-7 py-2.5 disabled:opacity-50 text-white font-bold rounded-full text-xs shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer ${
+                        loginMode === 'CUSTOMER' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-[#B91C1C] hover:bg-[#991B1B]'
+                      }`}
                     >
                       {isSubmitting ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Sending OTP...</span>
+                          <span>Sending Code...</span>
                         </>
                       ) : (
                         <>
-                          <span>Send OTP Code</span>
+                          <span>Send Email OTP</span>
                           <ArrowRight className="w-4 h-4" />
                         </>
                       )}
@@ -609,21 +478,10 @@ function LoginFormContent() {
                   </div>
                 </form>
               ) : (
-                <form onSubmit={handleVerifyMobileOtp} className="space-y-4">
-                  {/* Customer or Account Badge */}
-                  {otpSentInfo && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <div className="font-bold text-emerald-900">{otpSentInfo.shopName}</div>
-                        <div className="text-[11px] text-emerald-700">{otpSentInfo.dealership}</div>
-                      </div>
-                      <span className="text-[10px] font-mono text-emerald-600 font-semibold">+91 {otpPhone}</span>
-                    </div>
-                  )}
-
+                <form onSubmit={handleVerifyEmailOtp} className="space-y-4">
                   {demoOtpHint && (
                     <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 flex items-center justify-between font-mono">
-                      <span>Demo Verification Code:</span>
+                      <span>Instant Verification Code:</span>
                       <span className="font-bold bg-white px-2 py-0.5 rounded border border-blue-300 tracking-wider">
                         {demoOtpHint}
                       </span>
@@ -632,7 +490,7 @@ function LoginFormContent() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Enter Verification Code (OTP) *
+                      Enter 6-Digit Verification Code *
                     </label>
                     <div className="relative">
                       <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -643,12 +501,12 @@ function LoginFormContent() {
                         autoFocus
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder={confirmationResult ? "6-digit OTP from SMS" : "1234"}
+                        placeholder={demoOtpHint || "123456"}
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-base font-mono font-bold tracking-widest text-slate-900 placeholder-slate-400 focus:bg-white focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition text-center"
                       />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1.5 text-center">
-                      Sent to +91 {otpPhone}
+                      Sent to {otpEmail}
                     </p>
                   </div>
 
@@ -658,13 +516,15 @@ function LoginFormContent() {
                       onClick={resetOtpFlow}
                       className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer"
                     >
-                      ← Change Phone
+                      ← Change Email
                     </button>
 
                     <button
                       type="submit"
                       disabled={isSubmitting || !otpCode}
-                      className="px-7 py-2.5 bg-[#B91C1C] hover:bg-[#991B1B] disabled:opacity-50 text-white font-bold rounded-full text-xs shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                      className={`px-7 py-2.5 disabled:opacity-50 text-white font-bold rounded-full text-xs shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer ${
+                        loginMode === 'CUSTOMER' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-[#B91C1C] hover:bg-[#991B1B]'
+                      }`}
                     >
                       {isSubmitting ? (
                         <>
@@ -681,7 +541,6 @@ function LoginFormContent() {
                   </div>
                 </form>
               )}
-
             </div>
           )}
 

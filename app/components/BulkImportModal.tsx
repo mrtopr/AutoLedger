@@ -47,6 +47,7 @@ export type TargetField =
   | 'COST_PRICE' 
   | 'MRP' 
   | 'STOCK_QTY' 
+  | 'AMOUNT'
   | 'UNIT' 
   | 'GST_RATE' 
   | 'HSN_CODE' 
@@ -195,10 +196,11 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
     const h = (header ? String(header) : '').toLowerCase();
     if (h.includes('name') || h.includes('desc') || h.includes('item') || h.includes('particular')) return 'NAME';
     if (h.includes('part') || h.includes('sku') || h.includes('code') || h.includes('oem')) return 'PART_NUMBER';
-    if (h.includes('qty') || h.includes('quantity') || h.includes('stock') || h.includes('balance') || h.includes('closing')) return 'STOCK_QTY';
+    if (h.includes('qty') || h.includes('quantity') || h.includes('stock') || h.includes('balance') || h.includes('closing') || h.includes('pack')) return 'STOCK_QTY';
     if (h.includes('unit') || h.includes('uom') || h.includes('pkg')) return 'UNIT';
-    if (h.includes('mrp') || h.includes('retail') || h.includes('maxretail')) return 'MRP';
+    if (h.includes('mrp') || h.includes('retail') || h.includes('maxretail') || h.includes('list price')) return 'MRP';
     if (h.includes('cost') || h.includes('purchase') || h.includes('buy') || h.includes('cp') || h.includes('dp')) return 'COST_PRICE';
+    if (h.includes('amount') || h.includes('value') || h.includes('total') || h.includes('val')) return 'AMOUNT';
     if (h.includes('rate') || h.includes('sale') || h.includes('price') || h.includes('sp') || h.includes('net') || h.includes('wholesale')) return 'SALE_PRICE';
     if (h.includes('brand') || h.includes('make') || h.includes('company') || h.includes('mfg')) return 'BRAND';
     if (h.includes('category') || h.includes('cat') || h.includes('dept') || h.includes('group')) return 'CATEGORY';
@@ -449,6 +451,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
     const saleCol = columnMappings.find(m => m.targetField === 'SALE_PRICE');
     const mrpCol = columnMappings.find(m => m.targetField === 'MRP');
     const costCol = columnMappings.find(m => m.targetField === 'COST_PRICE');
+    const amountCol = columnMappings.find(m => m.targetField === 'AMOUNT');
     const stockCol = columnMappings.find(m => m.targetField === 'STOCK_QTY');
     const partCol = columnMappings.find(m => m.targetField === 'PART_NUMBER');
     const brandCol = columnMappings.find(m => m.targetField === 'BRAND');
@@ -469,10 +472,39 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
       const name = (row[nameCol.colIndex] || '').trim();
       if (!name) continue;
 
-      const salePrice = saleCol ? cleanNum(row[saleCol.colIndex], '') : '';
-      const mrp = mrpCol ? cleanNum(row[mrpCol.colIndex], '') : salePrice;
-      const costPrice = costCol ? cleanNum(row[costCol.colIndex], '') : salePrice;
-      const stock = stockCol ? parseInt(cleanNum(row[stockCol.colIndex], '0'), 10) || 0 : 0;
+      let salePriceNum = saleCol ? parseFloat(cleanNum(row[saleCol.colIndex], '0')) || 0 : 0;
+      let mrpNum = mrpCol ? parseFloat(cleanNum(row[mrpCol.colIndex], '0')) || 0 : 0;
+      let costPriceNum = costCol ? parseFloat(cleanNum(row[costCol.colIndex], '0')) || 0 : 0;
+      let amountNum = amountCol ? parseFloat(cleanNum(row[amountCol.colIndex], '0')) || 0 : 0;
+      let stock = stockCol ? parseInt(cleanNum(row[stockCol.colIndex], '0'), 10) || 0 : 0;
+
+      // Mathematical consistency & reconciliation:
+      if (salePriceNum <= 0 && amountNum > 0 && stock > 0) {
+        salePriceNum = Math.round((amountNum / stock) * 100) / 100;
+      } else if (stock <= 0 && amountNum > 0 && salePriceNum > 0) {
+        stock = Math.round(amountNum / salePriceNum);
+      } else if (amountNum <= 0 && salePriceNum > 0 && stock > 0) {
+        amountNum = Math.round(salePriceNum * stock * 100) / 100;
+      }
+
+      if (mrpNum <= 0 && salePriceNum > 0) {
+        mrpNum = Math.round(salePriceNum * 1.25);
+      } else if (mrpNum > 0 && salePriceNum > mrpNum) {
+        const temp = mrpNum;
+        mrpNum = salePriceNum;
+        salePriceNum = temp;
+        amountNum = Math.round(salePriceNum * stock * 100) / 100;
+      }
+
+      if (costPriceNum <= 0 && salePriceNum > 0) {
+        costPriceNum = salePriceNum;
+      }
+
+      const salePrice = salePriceNum > 0 ? salePriceNum.toFixed(2) : '';
+      const mrp = mrpNum > 0 ? mrpNum.toFixed(2) : salePrice;
+      const costPrice = costPriceNum > 0 ? costPriceNum.toFixed(2) : salePrice;
+      const amountRupees = amountNum > 0 ? amountNum.toFixed(2) : (salePriceNum > 0 && stock > 0 ? (salePriceNum * stock).toFixed(2) : '');
+
       const brand = brandCol ? (row[brandCol.colIndex] || defaultBrand).trim() : defaultBrand;
       const cat = catCol ? (row[catCol.colIndex] || defaultCategory).trim() : defaultCategory;
       const unit = unitCol ? (row[unitCol.colIndex] || 'pcs').trim() : 'pcs';
@@ -498,6 +530,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
         stockQty: stock,
         reorderLevel: 5,
         models: ['Universal / Multi-Fit'],
+        amountRupees,
         isValid: Boolean(name && name.length > 1),
         isUnpriced,
         warnings: isUnpriced ? ['Unpriced item'] : [],
@@ -532,7 +565,31 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
         if (!isNaN(q) && !isNaN(p) && p > 0) {
           updated.amountRupees = (q * p).toFixed(2);
         }
+        if (field === 'salePriceRupees') {
+          // Keep MRP at least equal to Rate
+          const currentMrp = parseFloat(r.mrpRupees || '0');
+          if (isNaN(currentMrp) || currentMrp < p) {
+            updated.mrpRupees = p > 0 ? (p * 1.25).toFixed(2) : '';
+          }
+          if (!r.purchasePriceRupees || parseFloat(r.purchasePriceRupees) === parseFloat(r.salePriceRupees || '0')) {
+            updated.purchasePriceRupees = val;
+          }
+        }
       }
+
+      // If user directly edits amount, recalculate rate if quantity exists
+      if (field === 'amountRupees') {
+        const amt = parseFloat(val || '0');
+        if (!isNaN(amt) && amt > 0 && r.stockQty > 0) {
+          const newRate = (amt / r.stockQty).toFixed(2);
+          updated.salePriceRupees = newRate;
+          const currentMrp = parseFloat(r.mrpRupees || '0');
+          if (isNaN(currentMrp) || currentMrp < parseFloat(newRate)) {
+            updated.mrpRupees = (parseFloat(newRate) * 1.25).toFixed(2);
+          }
+        }
+      }
+
       return updated;
     }));
   };
@@ -695,7 +752,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
   const unpricedCount = parsedRows.filter(r => r.isUnpriced).length;
   const includedCount = parsedRows.filter(r => r.isIncluded).length;
   const totalUnits = parsedRows.filter(r => r.isIncluded).reduce((sum, r) => sum + r.stockQty, 0);
-  const totalValuation = parsedRows.filter(r => r.isIncluded).reduce((sum, r) => sum + (Number(r.salePriceRupees || 0) * r.stockQty), 0);
+  const totalValuation = parsedRows.filter(r => r.isIncluded).reduce((sum, r) => sum + (Number(r.amountRupees) || (Number(r.salePriceRupees || 0) * r.stockQty)), 0);
 
   if (!isOpen) return null;
 
@@ -935,10 +992,11 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
                         className="w-full h-7 text-xs bg-slate-50 border border-slate-300 rounded-md px-2 font-medium"
                       >
                         <option value="NAME">Product Name / Particulars</option>
-                        <option value="STOCK_QTY">Quantity</option>
+                        <option value="STOCK_QTY">Quantity / Stock</option>
+                        <option value="MRP">MRP / List Price (₹)</option>
                         <option value="SALE_PRICE">Selling Rate (₹)</option>
+                        <option value="AMOUNT">Total Amount / Value (₹)</option>
                         <option value="COST_PRICE">Purchase / Cost Price (₹)</option>
-                        <option value="MRP">MRP (₹)</option>
                         <option value="PART_NUMBER">Part / SKU Number</option>
                         <option value="BRAND">Brand / Make</option>
                         <option value="CATEGORY">Category</option>
@@ -1277,7 +1335,8 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
                             <th className="py-2.5 px-2 min-w-[160px]">Model</th>
                             <th className="py-2.5 px-2 text-center w-16">Stock</th>
                             <th className="py-2.5 px-2 text-center w-14">Unit</th>
-                            <th className="py-2.5 px-2 text-right w-24">Rate (₹)</th>
+                            <th className="py-2.5 px-2 text-right w-22">MRP / Price (₹)</th>
+                            <th className="py-2.5 px-2 text-right w-22">Rate (₹)</th>
                             <th className="py-2.5 px-2 text-right w-24">Amount (₹)</th>
                             <th className="py-2.5 px-2 text-center w-12">Remove</th>
                           </tr>
@@ -1406,21 +1465,33 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
                                 />
                               </td>
 
+                              {/* MRP / Price (Editable) */}
+                              <td className="py-1.5 px-2 text-right">
+                                <input
+                                  type="text"
+                                  value={row.mrpRupees || ''}
+                                  placeholder={row.isUnpriced ? '—' : '0.00'}
+                                  onChange={(e) => handleUpdateRowCell(row.id, 'mrpRupees', e.target.value)}
+                                  className="w-18 text-right text-xs font-mono text-slate-700 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition tabular-nums"
+                                  title="Maximum Retail Price (Printed / MRP)"
+                                />
+                              </td>
+
                               {/* Rate (Editable) */}
                               <td className="py-1.5 px-2 text-right">
                                 <input
                                   type="text"
-                                  value={row.salePriceRupees}
+                                  value={row.salePriceRupees || ''}
                                   placeholder={row.isUnpriced ? '—' : '0.00'}
                                   onChange={(e) => {
                                     const v = e.target.value;
                                     handleUpdateRowCell(row.id, 'salePriceRupees', v);
-                                    handleUpdateRowCell(row.id, 'purchasePriceRupees', v);
                                     if (parseFloat(v) > 0) {
                                       handleUpdateRowCell(row.id, 'isUnpriced', false);
                                     }
                                   }}
                                   className="w-18 text-right text-xs font-bold font-mono text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition tabular-nums"
+                                  title="Wholesale / Selling Rate"
                                 />
                               </td>
 
@@ -1431,7 +1502,8 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
                                   value={row.amountRupees || ''}
                                   placeholder={row.isUnpriced ? '—' : '0.00'}
                                   onChange={(e) => handleUpdateRowCell(row.id, 'amountRupees', e.target.value)}
-                                  className="w-18 text-right text-xs font-mono text-slate-600 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition tabular-nums"
+                                  className="w-20 text-right text-xs font-mono font-semibold text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100/50 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1.5 py-0.5 outline-hidden transition tabular-nums"
+                                  title="Total Value (Stock × Rate)"
                                 />
                               </td>
 
@@ -1450,7 +1522,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
 
                           {paginatedRows.length === 0 && (
                             <tr>
-                              <td colSpan={11} className="py-12 text-center text-xs text-slate-500">
+                              <td colSpan={12} className="py-12 text-center text-xs text-slate-500">
                                 No items match your active filter or search criteria.
                               </td>
                             </tr>

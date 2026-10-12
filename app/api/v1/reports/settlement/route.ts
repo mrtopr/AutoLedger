@@ -101,10 +101,37 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        // Check if any invoices had paidNow that were not captured in payments
+        const paidInvoiceNumbers = new Set<string>();
+        for (const p of todayPayments) {
+          for (const inv of todayInvoices) {
+            if (p.reference && p.reference.includes(inv.number)) {
+              paidInvoiceNumbers.add(inv.number);
+            }
+          }
+        }
+        for (const inv of todayInvoices) {
+          if (!paidInvoiceNumbers.has(inv.number) && inv.paidNow > 0n) {
+            cashCollected += inv.paidNow;
+          }
+        }
+
+        let newUdhaar = 0n;
+        for (const inv of todayInvoices) {
+          const bal = inv.balanceDue || (inv.grandTotal > inv.paidNow ? inv.grandTotal - inv.paidNow : 0n);
+          newUdhaar += bal;
+        }
+
+        // If day was already settled, honor the locked figures
+        if (existingSettlement) {
+          cashCollected = BigInt(existingSettlement.cashSalesPaise || '0');
+          upiCollected = BigInt(existingSettlement.upiTotalPaise || '0');
+          bankCollected = BigInt(existingSettlement.bankTotalPaise || '0');
+        }
+
         const grossProfit = totalBilled > totalCogs ? totalBilled - totalCogs : 0n;
         const marginPct = totalBilled > 0n ? Number((grossProfit * 100n) / totalBilled) : 0;
         const totalCollected = cashCollected + upiCollected + bankCollected;
-        const newUdhaar = totalBilled > totalCollected ? totalBilled - totalCollected : 0n;
 
         return NextResponse.json({
           success: true,
@@ -195,11 +222,44 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Check if any invoices had paidNow that were not captured in payments
+    const paidInvoiceNumbers = new Set<string>();
+    for (const p of localPays) {
+      for (const inv of localInvs) {
+        if (p.referenceNumber && p.referenceNumber.includes(inv.invoiceNumber)) {
+          paidInvoiceNumbers.add(inv.invoiceNumber);
+        }
+      }
+    }
+    for (const inv of localInvs) {
+      if (!paidInvoiceNumbers.has(inv.invoiceNumber)) {
+        const paid = BigInt(inv.paidNowPaise || '0');
+        if (paid > 0n) {
+          cashCollected += paid;
+        }
+      }
+    }
+
+    let newUdhaar = 0n;
+    for (const inv of localInvs) {
+      const gTotal = BigInt(inv.grandTotalPaise || '0');
+      const paid = BigInt(inv.paidNowPaise || '0');
+      if (gTotal > paid) {
+        newUdhaar += (gTotal - paid);
+      }
+    }
+
+    // If day was already settled, honor the locked figures
+    if (existingSettlement) {
+      cashCollected = BigInt(existingSettlement.cashSalesPaise || '0');
+      upiCollected = BigInt(existingSettlement.upiTotalPaise || '0');
+      bankCollected = BigInt(existingSettlement.bankTotalPaise || '0');
+    }
+
     const totalCollected = cashCollected + upiCollected + bankCollected;
     const totalCogs = (totalBilled * 75n) / 100n;
     const grossProfit = totalBilled > totalCogs ? totalBilled - totalCogs : 0n;
     const marginPct = totalBilled > 0n ? Number((grossProfit * 100n) / totalBilled) : 0;
-    const newUdhaar = totalBilled > totalCollected ? totalBilled - totalCollected : 0n;
 
     return NextResponse.json({
       success: true,
@@ -301,5 +361,28 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Error saving cash settlement:', error);
     return NextResponse.json({ error: error.message || 'Failed to save cash settlement' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const authUser = await getAuthenticatedUser(req);
+    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-royal-1';
+    const { searchParams } = new URL(req.url);
+    const idOrDate = searchParams.get('id') || searchParams.get('date');
+
+    if (!idOrDate) {
+      return NextResponse.json({ error: 'ID or date is required for deletion' }, { status: 400 });
+    }
+
+    const deleted = localStore.deleteCashSettlement(idOrDate, targetTenantId);
+    return NextResponse.json({
+      success: true,
+      deleted,
+      message: deleted ? 'Settlement record deleted and register re-opened' : 'No settlement found to delete',
+    });
+  } catch (error: any) {
+    console.error('Error deleting cash settlement:', error);
+    return NextResponse.json({ error: error.message || 'Failed to delete cash settlement' }, { status: 500 });
   }
 }

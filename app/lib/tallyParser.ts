@@ -207,15 +207,41 @@ export function parseTallyQuantity(str: string): { qty: number; unit: string } {
 }
 
 /**
- * Parses numeric rate from strings like "180.70", "180.70/PCS", "₹ 180.70"
+ * Parses numeric rate or monetary amount from strings like "180.70", "180.70/PCS", "₹ 180.70", "1,490.50".
+ * Carefully ignores alphanumeric codes like part numbers / SKUs (e.g. "CAS-20W40", "LED-H4-35W").
  */
 export function parseTallyRate(str: string): number {
   if (!str) return 0;
-  const clean = str.replace(/[₹Rs./\s]/g, ' ').trim();
-  const match = clean.match(/(-?[0-9,.]+)/);
+  const trimmed = String(str).trim();
+  if (!trimmed) return 0;
+
+  // Alphanumeric SKU/part numbers like "CAS-20W40", "BS-ACT-01", "LED-H4-35W", "BLT-ACT-99" must not be parsed as rates
+  if (/[a-z]/i.test(trimmed) && /[0-9]/.test(trimmed) && /[-_]/.test(trimmed)) {
+    return 0;
+  }
+
+  // Strip known currency and unit abbreviations
+  const withoutTokens = trimmed
+    .replace(/[₹]|Rs\.?|INR/gi, '')
+    .replace(/\/\s*(pcs|nos|pkt|set|box|mtr|ltr|kg|unit|no|pkts|sets|boxes|mtrs|ltrs|kgs)/gi, '')
+    .trim();
+
+  // If there are words with 3+ letters left, this is descriptive text (e.g. "Castrol", "Brakes"), not a number
+  if (/[a-z]{3,}/i.test(withoutTokens)) {
+    return 0;
+  }
+
+  const clean = withoutTokens
+    .replace(/[^0-9,.-]/g, '')
+    .trim();
+
+  if (!clean || clean === '-' || clean === '.') return 0;
+
+  const match = clean.match(/^(-?[0-9,]+(\.[0-9]+)?)/);
   if (!match) return 0;
   const numStr = match[1].replace(/,/g, '');
-  return parseFloat(numStr) || 0;
+  const val = parseFloat(numStr);
+  return isNaN(val) ? 0 : val;
 }
 
 /**
@@ -361,7 +387,7 @@ export function dissectItemDescription(
 }
 
 /**
- * Master parser for Tally Stock Summary tables
+ * Master parser for Tally Stock Summary tables & CSV/Excel sheets
  */
 export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResult {
   if (!inputRows || inputRows.length < 2) {
@@ -383,13 +409,20 @@ export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResul
   let tableHeaderRowIndex = -1;
   let particularsCol = -1;
   let qtyCol = -1;
+  let mrpCol = -1;
   let rateCol = -1;
+  let costCol = -1;
   let valueCol = -1;
+  let partNoCol = -1;
+  let brandCol = -1;
+  let categoryCol = -1;
+  let gstCol = -1;
+  let hsnCol = -1;
+  let unitCol = -1;
   let companyTitle = '';
   let dateRange = '';
 
-  // 1. Multi-tier scan for Tally Table Headers
-  // In Tally sheets, "Particulars" is often in Row 7, while "Quantity", "Rate", "Value" are in Row 8 or 9
+  // 1. Multi-tier scan for Table Headers
   for (let r = 0; r < Math.min(rawRows.length, 20); r++) {
     const rowRaw = rawRows[r] || [];
     const row = Array.from(rowRaw, c => (c ? String(c) : '').toLowerCase().trim());
@@ -406,62 +439,140 @@ export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResul
       if (dateCell) dateRange = dateCell;
     }
 
-    // Check for particulars column
-    const pIdx = row.findIndex(c => Boolean(c) && typeof c === 'string' && (c.includes('particular') || c.includes('item name') || c.includes('description')));
-    if (pIdx >= 0 && particularsCol === -1) {
-      particularsCol = pIdx;
+    // Check if this row looks like a header row
+    const hasHeaderKeywords = row.some(c => 
+      c.includes('particular') || c.includes('item') || c.includes('qty') || 
+      c.includes('quantity') || c.includes('rate') || c.includes('price') || 
+      c.includes('mrp') || c.includes('value') || c.includes('amount') || c.includes('part')
+    );
+
+    if (hasHeaderKeywords) {
       tableHeaderRowIndex = Math.max(tableHeaderRowIndex, r);
-    }
 
-    // Check for quantity column
-    const qIdx = row.findIndex(c => Boolean(c) && typeof c === 'string' && (c.includes('quantity') || c.includes('qty') || (c.includes('closing') && !c.includes('value'))));
-    if (qIdx >= 0 && qtyCol === -1) {
-      qtyCol = qIdx;
-      tableHeaderRowIndex = Math.max(tableHeaderRowIndex, r);
-    }
+      for (let c = 0; c < row.length; c++) {
+        const h = row[c] || '';
+        if (!h) continue;
 
-    // Check for rate column
-    const rIdx = row.findIndex(c => Boolean(c) && typeof c === 'string' && (c.includes('rate') || c.includes('price')));
-    if (rIdx >= 0 && rateCol === -1) {
-      rateCol = rIdx;
-      tableHeaderRowIndex = Math.max(tableHeaderRowIndex, r);
-    }
+        // 1. Particulars / Name
+        if ((h.includes('particular') || h.includes('item name') || h.includes('description') || h === 'item' || h === 'item description' || h === 'name' || h.includes('product')) && particularsCol === -1) {
+          particularsCol = c;
+        }
 
-    // Check for value/amount column
-    const vIdx = row.findIndex(c => Boolean(c) && typeof c === 'string' && (c.includes('value') || c.includes('amount')));
-    if (vIdx >= 0 && valueCol === -1) {
-      valueCol = vIdx;
-      tableHeaderRowIndex = Math.max(tableHeaderRowIndex, r);
-    }
-  }
-
-  // Fallback defaults if explicit headers were partially named or absent
-  if (particularsCol === -1) particularsCol = 0;
-  if (qtyCol === -1 && rateCol !== -1 && rateCol > 0) qtyCol = rateCol - 1;
-  if (qtyCol !== -1 && rateCol === -1) rateCol = qtyCol + 1;
-  if (rateCol !== -1 && valueCol === -1) valueCol = rateCol + 1;
-
-  // If still unfound, inspect first few data rows to infer column positions
-  if (qtyCol === -1 || rateCol === -1 || valueCol === -1) {
-    for (let r = Math.max(0, tableHeaderRowIndex); r < Math.min(rawRows.length, 15); r++) {
-      const row = rawRows[r];
-      for (let c = 1; c < row.length; c++) {
-        const val = row[c] || '';
-        if (qtyCol === -1 && /[0-9]+\s*(nos|pcs|set|ltr|pkt)?/i.test(val)) {
+        // 2. Quantity (Specific quantity column - do not match plain "closing" unless it says qty)
+        if (h.includes('quantity') || h === 'qty' || h.includes('pack / qty') || h.includes('closing qty') || h.includes('stock qty') || h.includes('balance qty') || h === 'closing quantity') {
           qtyCol = c;
-        } else if (rateCol === -1 && /[0-9.]+\/[a-z]+/i.test(val)) {
+        }
+
+        // 3. MRP / Retail Price
+        if ((h.includes('mrp') || h.includes('retail') || h.includes('maxretail') || h.includes('list price')) && mrpCol === -1) {
+          mrpCol = c;
+        }
+
+        // 4. Rate (Wholesale / Selling Rate)
+        if (h.includes('net rate') || h.includes('wholesale') || h.includes('sale rate') || h.includes('billing rate') || h.includes('unit rate') || h.includes('selling price') || h.includes('sale price') || h === 'rate' || h.includes('rate (inr)') || h.includes('rate (₹)') || h.includes('rate/unit') || h === 'closing rate') {
           rateCol = c;
-        } else if (valueCol === -1 && /[0-9,.]+/.test(val)) {
+        }
+
+        // 5. Cost / Purchase Price
+        if ((h.includes('cost') || h.includes('purchase') || h.includes('buy rate') || h.includes('cost price') || h === 'cp') && costCol === -1) {
+          costCol = c;
+        }
+
+        // 6. Value / Total Amount
+        if (h.includes('value') || h.includes('amount') || h.includes('total val') || h.includes('net amount') || h === 'val' || h === 'closing value') {
           valueCol = c;
+        }
+
+        // 7. Part Number / SKU
+        if ((h.includes('part no') || h.includes('part number') || h === 'part' || h.includes('sku') || h.includes('item code') || h === 'partno') && partNoCol === -1) {
+          partNoCol = c;
+        }
+
+        // 8. Brand / Make
+        if ((h.includes('brand') || h.includes('make') || h.includes('mfg')) && brandCol === -1) {
+          brandCol = c;
+        }
+
+        // 9. Category
+        if ((h.includes('category') || h === 'cat' || h.includes('dept')) && categoryCol === -1) {
+          categoryCol = c;
+        }
+
+        // 10. GST %
+        if ((h.includes('gst') || h.includes('tax')) && gstCol === -1) {
+          gstCol = c;
+        }
+
+        // 11. HSN
+        if ((h.includes('hsn') || h.includes('sac')) && hsnCol === -1) {
+          hsnCol = c;
+        }
+
+        // 12. Unit
+        if ((h.includes('unit') || h.includes('uom') || h.includes('pkg')) && unitCol === -1) {
+          unitCol = c;
         }
       }
     }
   }
 
-  // Ensure default fallback offsets
+  // Handle generic 'Price' column if Rate or MRP was not explicitly resolved:
+  for (let r = 0; r <= Math.max(0, tableHeaderRowIndex); r++) {
+    const row = Array.from(rawRows[r] || [], c => (c ? String(c) : '').toLowerCase().trim());
+    for (let c = 0; c < row.length; c++) {
+      const h = row[c] || '';
+      if (h.includes('price')) {
+        if (mrpCol === -1 && rateCol !== -1 && rateCol !== c) {
+          // If rateCol is already assigned to a Rate column, this Price column is MRP
+          mrpCol = c;
+        } else if (rateCol === -1 && mrpCol !== c) {
+          // If rateCol is not assigned, Price is Rate
+          rateCol = c;
+        }
+      }
+    }
+  }
+
+  // Fallback defaults if explicit headers were partially named or absent
+  if (particularsCol === -1) particularsCol = 0;
+
+  // Infer column positions from sample data rows if still unfound
+  if (qtyCol === -1 || rateCol === -1) {
+    for (let r = Math.max(0, tableHeaderRowIndex); r < Math.min(rawRows.length, 15); r++) {
+      const row = rawRows[r];
+      for (let c = 1; c < row.length; c++) {
+        const val = row[c] || '';
+        if (qtyCol === -1 && /^[0-9]+\s*(nos|pcs|set|ltr|pkt)$/i.test(val.trim())) {
+          qtyCol = c;
+        } else if (rateCol === -1 && /^[0-9.]+\/[a-z]+$/i.test(val.trim())) {
+          rateCol = c;
+        }
+      }
+    }
+  }
+
+  // Safe fallback offsets
+  if (qtyCol === -1 && rateCol !== -1 && rateCol > 1) qtyCol = rateCol - 1;
   if (qtyCol === -1) qtyCol = 1;
-  if (rateCol === -1) rateCol = 2;
-  if (valueCol === -1) valueCol = 3;
+  if (rateCol === -1) rateCol = qtyCol + 1;
+
+  // Verify if candidate value column is actually numeric and consistent with Qty * Rate
+  if (valueCol === -1 && rateCol !== -1) {
+    const candidateCol = rateCol + 1;
+    let matchesAmount = 0;
+    for (let r = Math.max(0, tableHeaderRowIndex + 1); r < Math.min(rawRows.length, tableHeaderRowIndex + 6); r++) {
+      const row = rawRows[r] || [];
+      const testVal = parseTallyRate(row[candidateCol] || '');
+      const testQty = parseTallyQuantity(row[qtyCol] || '').qty;
+      const testRate = parseTallyRate(row[rateCol] || '');
+      if (testVal > 0 && testQty > 0 && testRate > 0 && Math.abs(testVal - (testQty * testRate)) < 1.0) {
+        matchesAmount++;
+      }
+    }
+    if (matchesAmount >= 1) {
+      valueCol = candidateCol;
+    }
+  }
 
   const items: TallyParsedItem[] = [];
   const groupsFound: string[] = [];
@@ -488,8 +599,15 @@ export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResul
     }
 
     const rawQtyStr = qtyCol >= 0 && row[qtyCol] ? row[qtyCol].trim() : '';
+    const rawMrpStr = mrpCol >= 0 && row[mrpCol] ? row[mrpCol].trim() : '';
     const rawRateStr = rateCol >= 0 && row[rateCol] ? row[rateCol].trim() : '';
+    const rawCostStr = costCol >= 0 && row[costCol] ? row[costCol].trim() : '';
     const rawValueStr = valueCol >= 0 && row[valueCol] ? row[valueCol].trim() : '';
+    const rawPartNoStr = partNoCol >= 0 && row[partNoCol] ? row[partNoCol].trim() : '';
+    const rawBrandStr = brandCol >= 0 && row[brandCol] ? row[brandCol].trim() : '';
+    const rawCatStr = categoryCol >= 0 && row[categoryCol] ? row[categoryCol].trim() : '';
+    const rawGstStr = gstCol >= 0 && row[gstCol] ? row[gstCol].trim() : '';
+    const rawHsnStr = hsnCol >= 0 && row[hsnCol] ? row[hsnCol].trim() : '';
 
     // A. CHECK IF GROUP HEADING (e.g. "ACCURA", "AS")
     if (isTallyGroupHeading(rawParticulars, rawQtyStr, rawRateStr, rawValueStr)) {
@@ -501,31 +619,64 @@ export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResul
     }
 
     // B. PROCESS STOCK ITEM ROW
-    const { qty, unit } = parseTallyQuantity(rawQtyStr);
+    let { qty, unit } = parseTallyQuantity(rawQtyStr);
+    let mrp = parseTallyRate(rawMrpStr);
     let rate = parseTallyRate(rawRateStr);
-    let amount = parseTallyRate(rawValueStr);
+    let cost = parseTallyRate(rawCostStr);
+    let amount = valueCol >= 0 ? parseTallyRate(rawValueStr) : 0;
 
-    // If rate is missing but value & qty exist: calculate rate = amount / qty
+    // Mathematical reconciliation:
+    // 1. Rate from Amount & Qty if rate is missing
     if (rate <= 0 && amount > 0 && qty > 0) {
       rate = Math.round((amount / qty) * 100) / 100;
-    } else if (amount <= 0 && rate > 0 && qty !== 0) {
+    }
+    // 2. Qty from Amount & Rate if qty is missing
+    else if (qty <= 0 && amount > 0 && rate > 0) {
+      qty = Math.round(amount / rate);
+    }
+    // 3. Amount from Rate & Qty
+    const expectedAmount = Math.round(rate * qty * 100) / 100;
+    if (rate > 0 && qty !== 0) {
+      if (amount <= 0 || Math.abs(amount - expectedAmount) > 1.0) {
+        amount = expectedAmount;
+      }
+    }
+
+    // 4. Reconcile MRP (Price)
+    if (mrp <= 0 && rate > 0) {
+      mrp = Math.round(rate * 1.25);
+    } else if (mrp > 0 && rate > mrp) {
+      // Swapped columns protection: If selling rate is higher than MRP, swap them
+      const temp = mrp;
+      mrp = rate;
+      rate = temp;
       amount = Math.round(rate * qty * 100) / 100;
     }
 
+    // 5. Reconcile Cost (Purchase Price)
+    if (cost <= 0) {
+      cost = rate;
+    }
+
     // Check if Rate and Quantity are missing in the sheet
-    // As per user requirement: Add to inventory without assigning rate or qty (to be assigned at billing)
     const isUnpriced = (rate <= 0 && amount <= 0 && (!rawRateStr || !rawRateStr.trim())) && (qty === 0 && !rawQtyStr);
 
-    const { cleanName, brand, category, subcategory, models, hsnCode, gstRateBp } = dissectItemDescription(
+    const { cleanName, brand: detectedBrand, category: detectedCat, subcategory, models, hsnCode: detectedHsn, gstRateBp: detectedGst } = dissectItemDescription(
       rawParticulars, 
       currentGroup
     );
 
-    const brandPrefix = (brand.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'TL').toUpperCase();
-    const partNumber = `TL-${brandPrefix}-${(items.length + 1).toString().padStart(4, '0')}`;
+    const finalBrand = rawBrandStr || detectedBrand;
+    const finalCat = rawCatStr || detectedCat;
+    const finalHsn = rawHsnStr || detectedHsn;
+    const finalGst = rawGstStr ? (parseFloat(rawGstStr) || 18) * 100 : detectedGst;
+
+    const brandPrefix = (finalBrand.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'TL').toUpperCase();
+    const partNumber = rawPartNoStr || `TL-${brandPrefix}-${(items.length + 1).toString().padStart(4, '0')}`;
     const rateRupeesStr = rate > 0 ? rate.toFixed(2) : '';
-    const mrpRupeesStr = rate > 0 ? Math.round(rate * 1.25).toString() : '';
-    const amountRupeesStr = amount !== 0 ? amount.toFixed(2) : '';
+    const mrpRupeesStr = mrp > 0 ? mrp.toFixed(2) : '';
+    const purchasePriceRupeesStr = cost > 0 ? cost.toFixed(2) : rateRupeesStr;
+    const amountRupeesStr = amount !== 0 ? amount.toFixed(2) : (rate > 0 && qty !== 0 ? (rate * qty).toFixed(2) : '');
 
     const warnings: string[] = [];
     if (isUnpriced) {
@@ -538,19 +689,19 @@ export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResul
     items.push({
       name: cleanName,
       partNumber,
-      brand,
-      category,
+      brand: finalBrand,
+      category: finalCat,
       subcategory,
       models,
       unit: unit || 'pcs',
       stockQty: isUnpriced ? 0 : qty,
       salePriceRupees: rateRupeesStr,
       mrpRupees: mrpRupeesStr,
-      purchasePriceRupees: rateRupeesStr,
+      purchasePriceRupees: purchasePriceRupeesStr,
       amountRupees: amountRupeesStr,
       groupHeading: currentGroup || 'General Inventory',
-      hsnCode,
-      gstRateBp,
+      hsnCode: finalHsn,
+      gstRateBp: finalGst,
       isValid: Boolean(cleanName && cleanName.length > 1),
       isUnpriced,
       warnings,

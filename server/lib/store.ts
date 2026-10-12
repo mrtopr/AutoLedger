@@ -938,6 +938,22 @@ class LocalStore {
     this.save();
     return newRecord;
   }
+  deleteCashSettlement(idOrDate: string, tenantId?: string): boolean {
+    this.data.cashSettlements = this.data.cashSettlements || [];
+    const beforeLen = this.data.cashSettlements.length;
+    this.data.cashSettlements = this.data.cashSettlements.filter((s) => {
+      const match = (s.id === idOrDate || s.date === idOrDate);
+      if (tenantId) {
+        return !(match && s.tenantId === tenantId);
+      }
+      return !match;
+    });
+    const deleted = beforeLen > this.data.cashSettlements.length;
+    if (deleted) {
+      this.save();
+    }
+    return deleted;
+  }
 }
 
 // Global singleton instance
@@ -948,7 +964,8 @@ if (
   typeof globalStore._localStore.cancelInvoice !== 'function' ||
   typeof globalStore._localStore.getCustomerByPhone !== 'function' ||
   typeof globalStore._localStore.getTenant !== 'function' ||
-  typeof globalStore._localStore.saveCashSettlement !== 'function'
+  typeof globalStore._localStore.saveCashSettlement !== 'function' ||
+  typeof globalStore._localStore.deleteCashSettlement !== 'function'
 ) {
   globalStore._localStore = new LocalStore();
 } else {

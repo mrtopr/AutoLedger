@@ -24,7 +24,11 @@ import {
   ChevronDown,
   ChevronUp,
   FileCheck2,
-  Check
+  Check,
+  Trash2,
+  Plus,
+  Minus,
+  Unlock,
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
 
@@ -78,20 +82,71 @@ interface SavedSettlement {
 }
 
 const DENOMINATIONS = [
-  { value: 500, label: '₹500 Note', isCoin: false },
-  { value: 200, label: '₹200 Note', isCoin: false },
-  { value: 100, label: '₹100 Note', isCoin: false },
-  { value: 50, label: '₹50 Note', isCoin: false },
-  { value: 20, label: '₹20 Note', isCoin: false },
-  { value: 10, label: '₹10 Note', isCoin: false },
-  { value: 5, label: '₹5 (Note / Coin)', isCoin: true },
-  { value: 2, label: '₹2 Coin', isCoin: true },
-  { value: 1, label: '₹1 Coin', isCoin: true },
+  { 
+    value: 2000, 
+    label: '₹2000 Note', 
+    badgeColor: 'bg-purple-50 text-purple-800 border-purple-200', 
+    dotColor: 'bg-purple-600',
+    quickSteps: [1, 5, 10] 
+  },
+  { 
+    value: 500, 
+    label: '₹500 Note', 
+    badgeColor: 'bg-emerald-50 text-emerald-800 border-emerald-200', 
+    dotColor: 'bg-emerald-600',
+    quickSteps: [1, 5, 10] 
+  },
+  { 
+    value: 200, 
+    label: '₹200 Note', 
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200', 
+    dotColor: 'bg-amber-500',
+    quickSteps: [1, 5, 10] 
+  },
+  { 
+    value: 100, 
+    label: '₹100 Note', 
+    badgeColor: 'bg-blue-50 text-blue-800 border-blue-200', 
+    dotColor: 'bg-blue-500',
+    quickSteps: [1, 5, 10] 
+  },
 ];
+
+// Safe BigInt parser to prevent runtime SyntaxError crashes on invalid or empty strings
+function safeBigInt(val: string | number | null | undefined): bigint {
+  if (val === null || val === undefined || val === '') return 0n;
+  if (typeof val === 'number') {
+    return BigInt(Math.round(val));
+  }
+  try {
+    const s = String(val).trim();
+    if (s.includes('.')) {
+      const num = parseFloat(s);
+      return isNaN(num) ? 0n : BigInt(Math.round(num));
+    }
+    return BigInt(s);
+  } catch {
+    return 0n;
+  }
+}
+
+function getTodayDateStr(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+interface ExpenseItem {
+  id: string;
+  amountRupees: string;
+  note: string;
+}
 
 export default function DayEndSettlementPage() {
   const { user, tenant } = useAuth();
-  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr);
   const [summary, setSummary] = useState<SettlementSummary | null>(null);
   const [onlineTxs, setOnlineTxs] = useState<OnlineTransaction[]>([]);
   const [savedSettlement, setSavedSettlement] = useState<SavedSettlement | null>(null);
@@ -102,12 +157,13 @@ export default function DayEndSettlementPage() {
 
   // Form State
   const [openingFloatRupees, setOpeningFloatRupees] = useState<string>('0.00');
-  const [cashExpensesRupees, setCashExpensesRupees] = useState<string>('0.00');
-  const [cashExpenseNote, setCashExpenseNote] = useState<string>('');
+  const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([
+    { id: '1', amountRupees: '', note: '' },
+  ]);
   const [noteCounts, setNoteCounts] = useState<Record<number, number>>({
-    500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0,
+    2000: 0, 500: 0, 200: 0, 100: 0,
   });
-  const [coinsTotalRupees, setCoinsTotalRupees] = useState<string>('0.00');
+  const [coinsTotalRupees, setCoinsTotalRupees] = useState<string>('');
   const [retainedFloatRupees, setRetainedFloatRupees] = useState<string>('2000.00');
   const [remarks, setRemarks] = useState<string>('');
   const [upiVerified, setUpiVerified] = useState<boolean>(false);
@@ -116,9 +172,54 @@ export default function DayEndSettlementPage() {
 
   // References for keyboard navigation across note inputs
   const inputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const coinsInputRef = useRef<HTMLInputElement | null>(null);
 
   const isOwner = user?.role === 'OWNER';
   const isManager = user?.role === 'MANAGER';
+
+  const addExpenseItem = () => {
+    setExpenseItems((prev) => [
+      ...prev,
+      { id: `exp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, amountRupees: '', note: '' },
+    ]);
+  };
+
+  const removeExpenseItem = (id: string) => {
+    setExpenseItems((prev) => {
+      const remaining = prev.filter((it) => it.id !== id);
+      return remaining.length > 0 ? remaining : [{ id: '1', amountRupees: '', note: '' }];
+    });
+  };
+
+  const updateExpenseItem = (id: string, field: 'amountRupees' | 'note', val: string) => {
+    setExpenseItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, [field]: val } : it))
+    );
+  };
+
+  const handleDeleteSettlement = async (dateToDelete?: string, idToDelete?: string) => {
+    const targetDate = dateToDelete || selectedDate;
+    if (!window.confirm(`Are you sure you want to delete the settlement for ${targetDate} and re-open the cash register?`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const query = idToDelete ? `id=${idToDelete}` : `date=${targetDate}`;
+      const res = await fetch(`/api/v1/reports/settlement?${query}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSuccessMsg(`Settlement for ${targetDate} deleted. Register re-opened.`);
+        await fetchSettlementData(selectedDate);
+      } else {
+        alert(json.error || 'Failed to delete settlement');
+      }
+    } catch (err: any) {
+      console.error('Delete settlement error:', err);
+      alert('Failed to delete settlement');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchSettlementData = async (dateStr: string) => {
     try {
@@ -135,29 +236,76 @@ export default function DayEndSettlementPage() {
         if (json.savedSettlement) {
           // Populate from existing saved record
           const ss: SavedSettlement = json.savedSettlement;
-          setOpeningFloatRupees((Number(ss.openingFloatPaise) / 100).toFixed(2));
-          setCashExpensesRupees((Number(ss.cashExpensesPaise) / 100).toFixed(2));
-          setRetainedFloatRupees((Number(ss.retainedFloatPaise) / 100).toFixed(2));
-          setRemarks(ss.notes || '');
-          setUpiVerified(Boolean(ss.upiVerified));
-          if (ss.denominations) {
-            setNoteCounts(ss.denominations as Record<number, number>);
+          setOpeningFloatRupees((Number(ss.openingFloatPaise || '0') / 100).toFixed(2));
+          setRetainedFloatRupees((Number(ss.retainedFloatPaise || '0') / 100).toFixed(2));
+          
+          if (ss.notes) {
+            if (ss.notes.includes(' | Cash Exp: ')) {
+              const parts = ss.notes.split(' | Cash Exp: ');
+              setRemarks(parts[0] || '');
+              const expStr = parts[1] || '';
+              if (expStr.includes(', ')) {
+                const subItems = expStr.split(', ').map((str, idx) => {
+                  const m = str.match(/^(.*?):\s*₹?(.*)$/);
+                  return {
+                    id: String(idx + 1),
+                    note: m ? m[1].trim() : str.trim(),
+                    amountRupees: m ? m[2].trim() : '',
+                  };
+                });
+                setExpenseItems(subItems.length > 0 ? subItems : [{ id: '1', amountRupees: (Number(ss.cashExpensesPaise || '0') / 100).toFixed(2), note: expStr }]);
+              } else {
+                const m = expStr.match(/^(.*?):\s*₹?(.*)$/);
+                setExpenseItems([{
+                  id: '1',
+                  note: m ? m[1].trim() : expStr.trim(),
+                  amountRupees: m ? m[2].trim() : (Number(ss.cashExpensesPaise || '0') / 100).toFixed(2),
+                }]);
+              }
+            } else {
+              setRemarks(ss.notes);
+              const expVal = (Number(ss.cashExpensesPaise || '0') / 100).toFixed(2);
+              setExpenseItems([{ id: '1', amountRupees: Number(expVal) > 0 ? expVal : '', note: '' }]);
+            }
+          } else {
+            setRemarks('');
+            const expVal = (Number(ss.cashExpensesPaise || '0') / 100).toFixed(2);
+            setExpenseItems([{ id: '1', amountRupees: Number(expVal) > 0 ? expVal : '', note: '' }]);
           }
+          
+          setUpiVerified(Boolean(ss.upiVerified));
+
+          let notesTotalPaise = 0n;
+          if (ss.denominations) {
+            const counts: Record<number, number> = { 2000: 0, 500: 0, 200: 0, 100: 0 };
+            for (const d of [2000, 500, 200, 100]) {
+              const countVal = Number(ss.denominations[d] || 0);
+              counts[d] = isNaN(countVal) ? 0 : countVal;
+              notesTotalPaise += BigInt(d) * 100n * BigInt(counts[d]);
+            }
+            setNoteCounts(counts);
+          } else {
+            setNoteCounts({ 2000: 0, 500: 0, 200: 0, 100: 0 });
+          }
+
+          // Restore loose change/coins from countedCashPaise minus note sum
+          const countedTotal = safeBigInt(ss.countedCashPaise);
+          const remainingCoins = countedTotal > notesTotalPaise ? countedTotal - notesTotalPaise : 0n;
+          setCoinsTotalRupees(remainingCoins > 0n ? (Number(remainingCoins) / 100).toFixed(2) : '');
         } else {
           // Initialize defaults
           const initOpening = json.summary?.openingFloatPaise 
             ? (Number(json.summary.openingFloatPaise) / 100).toFixed(2) 
             : '0.00';
           setOpeningFloatRupees(initOpening);
-          setCashExpensesRupees('0.00');
-          setCashExpenseNote('');
+          setExpenseItems([{ id: '1', amountRupees: '', note: '' }]);
           setRetainedFloatRupees('2000.00');
           setRemarks('');
           setUpiVerified(false);
           setNoteCounts({
-            500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0,
+            2000: 0, 500: 0, 200: 0, 100: 0,
           });
-          setCoinsTotalRupees('0.00');
+          setCoinsTotalRupees('');
         }
       }
     } catch (err) {
@@ -173,8 +321,26 @@ export default function DayEndSettlementPage() {
 
   // Real-time Calculations
   const openingFloatPaise = parseRupeesToPaise(openingFloatRupees);
-  const cashCollectedPaise = BigInt(summary?.cashCollectedPaise || '0');
-  const cashExpensesPaise = parseRupeesToPaise(cashExpensesRupees);
+  const cashCollectedPaise = savedSettlement 
+    ? safeBigInt(savedSettlement.cashSalesPaise) 
+    : safeBigInt(summary?.cashCollectedPaise);
+  const upiCollectedPaise = savedSettlement 
+    ? safeBigInt(savedSettlement.upiTotalPaise) 
+    : safeBigInt(summary?.upiCollectedPaise);
+  const bankCollectedPaise = savedSettlement 
+    ? safeBigInt(savedSettlement.bankTotalPaise) 
+    : safeBigInt(summary?.bankCollectedPaise);
+  
+  // Aggregate all itemized expenses
+  let cashExpensesPaise = 0n;
+  for (const it of expenseItems) {
+    cashExpensesPaise += parseRupeesToPaise(it.amountRupees);
+  }
+  const cashExpensesRupees = (Number(cashExpensesPaise) / 100).toFixed(2);
+  const cashExpenseSummary = expenseItems
+    .filter((it) => parseRupeesToPaise(it.amountRupees) > 0n || it.note.trim())
+    .map((it) => `${it.note || 'Expense'}: ₹${it.amountRupees || '0'}`)
+    .join(', ');
 
   // System Expected Cash = Opening Float + Cash In - Cash Out
   const systemExpectedCashPaise = openingFloatPaise + cashCollectedPaise - cashExpensesPaise;
@@ -214,7 +380,18 @@ export default function DayEndSettlementPage() {
     }));
   };
 
-  // Keyboard navigation: Enter jumps to next denomination
+  const incrementNote = (val: number, delta: number) => {
+    setNoteCounts((prev) => ({
+      ...prev,
+      [val]: Math.max(0, (prev[val] || 0) + delta),
+    }));
+  };
+
+  const setToday = () => {
+    setSelectedDate(getTodayDateStr());
+  };
+
+  // Keyboard navigation: Enter jumps to next denomination, and from last note to loose change
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === 'Enter' || e.key === 'ArrowDown') {
       e.preventDefault();
@@ -222,6 +399,9 @@ export default function DayEndSettlementPage() {
       if (nextDenom && inputRefs.current[nextDenom.value]) {
         inputRefs.current[nextDenom.value]?.focus();
         inputRefs.current[nextDenom.value]?.select();
+      } else if (coinsInputRef.current) {
+        coinsInputRef.current.focus();
+        coinsInputRef.current.select();
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -236,10 +416,11 @@ export default function DayEndSettlementPage() {
   // Quick action: Autofill note breakdown matching expected cash (convenience shortcut)
   const autofillExpected = () => {
     let remaining = Number(systemExpectedCashPaise) / 100;
+    if (remaining <= 0) return;
     const newCounts: Record<number, number> = {
-      500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0,
+      2000: 0, 500: 0, 200: 0, 100: 0,
     };
-    for (const d of [500, 200, 100, 50, 20, 10, 5, 2, 1]) {
+    for (const d of [2000, 500, 200, 100]) {
       if (remaining >= d) {
         const count = Math.floor(remaining / d);
         newCounts[d] = count;
@@ -247,7 +428,7 @@ export default function DayEndSettlementPage() {
       }
     }
     setNoteCounts(newCounts);
-    setCoinsTotalRupees(remaining > 0 ? remaining.toFixed(2) : '0.00');
+    setCoinsTotalRupees(remaining > 0 ? remaining.toFixed(2) : '');
   };
 
   const handleSaveSettlement = async () => {
@@ -258,7 +439,7 @@ export default function DayEndSettlementPage() {
       const payload = {
         date: selectedDate,
         openingFloatPaise: openingFloatPaise.toString(),
-        cashSalesPaise: summary?.cashCollectedPaise || '0',
+        cashSalesPaise: cashCollectedPaise.toString(),
         cashReceiptsPaise: '0',
         cashExpensesPaise: cashExpensesPaise.toString(),
         expectedCashPaise: systemExpectedCashPaise.toString(),
@@ -267,10 +448,10 @@ export default function DayEndSettlementPage() {
         differencePaise: differencePaise.toString(),
         retainedFloatPaise: retainedFloatPaise.toString(),
         withdrawnPaise: withdrawnPaise.toString(),
-        upiTotalPaise: summary?.upiCollectedPaise || '0',
-        bankTotalPaise: summary?.bankCollectedPaise || '0',
+        upiTotalPaise: upiCollectedPaise.toString(),
+        bankTotalPaise: bankCollectedPaise.toString(),
         upiVerified,
-        notes: remarks + (cashExpenseNote ? ` | Cash Exp: ${cashExpenseNote}` : ''),
+        notes: remarks + (cashExpenseSummary ? ` | Cash Exp: ${cashExpenseSummary}` : ''),
         status: tallyStatus,
       };
 
@@ -317,7 +498,7 @@ export default function DayEndSettlementPage() {
     );
   }
 
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const isToday = selectedDate === getTodayDateStr();
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto pb-16">
@@ -363,23 +544,33 @@ export default function DayEndSettlementPage() {
             <div className="w-7 h-7 rounded-lg bg-red-50 text-[#C81E1E] flex items-center justify-center border border-red-100 shrink-0">
               <Calculator className="w-4 h-4" />
             </div>
-            <span>Day-End Cash & UPI Reconciliation</span>
+            <span>Day-End Register & Till Reconciliation</span>
           </h1>
           <p className="text-xs text-[#64748B] mt-0.5 pl-9">
-            Verify every note in the drawer down to the penny, and cross-check UPI/Bank collections with your phone.
+            Tally notes in drawer, verify UPI/QR Soundbox payments, and securely close the day's cash register.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {/* Date Picker */}
-          <div className="flex items-center gap-1.5 bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg px-2.5 py-1 text-xs font-medium text-[#334155]">
-            <Calendar className="w-3.5 h-3.5 text-[#64748B]" />
+          {/* Date Picker + Today Shortcut */}
+          <div className="flex items-center gap-1.5 bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg p-1 text-xs font-medium text-[#334155]">
+            <Calendar className="w-3.5 h-3.5 text-[#64748B] ml-1.5" />
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent border-none text-xs font-bold text-[#0F172A] focus:outline-hidden"
+              className="bg-transparent border-none text-xs font-bold text-[#0F172A] focus:outline-hidden px-1"
             />
+            {!isToday && (
+              <button
+                type="button"
+                onClick={setToday}
+                className="px-2 py-0.5 text-[10px] font-bold bg-white text-[#2563EB] hover:bg-blue-50 border border-blue-200 rounded transition"
+                title="Jump to Today"
+              >
+                Today
+              </button>
+            )}
           </div>
 
           <button
@@ -398,14 +589,28 @@ export default function DayEndSettlementPage() {
             <Printer className="w-3.5 h-3.5" />
             <span>Print Day Slip</span>
           </button>
+
+          {savedSettlement && (
+            <button
+              onClick={() => handleDeleteSettlement()}
+              className="h-8 px-2.5 bg-red-50 hover:bg-red-100 text-[#C81E1E] text-xs font-semibold rounded-lg border border-red-200 transition inline-flex items-center gap-1.5 shadow-2xs"
+              title="Delete this settlement record and re-open the cash register"
+            >
+              <Unlock className="w-3.5 h-3.5 text-[#C81E1E]" />
+              <span>Re-Open / Delete Till</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Success Notification */}
       {successMsg && (
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-xs font-medium text-green-800 flex items-center justify-between">
-          <span>{successMsg}</span>
-          <button onClick={() => setSuccessMsg(null)} className="text-green-600 font-bold hover:underline">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+          <button onClick={() => setSuccessMsg(null)} className="text-green-700 font-bold hover:underline text-xs">
             Dismiss
           </button>
         </div>
@@ -460,18 +665,18 @@ export default function DayEndSettlementPage() {
                           {s.status}
                         </span>
                       </td>
-                      <td className="p-2 font-mono font-semibold">{formatPaiseToRupees(BigInt(s.countedCashPaise))}</td>
-                      <td className="p-2 font-mono text-[#64748B]">{formatPaiseToRupees(BigInt(s.expectedCashPaise))}</td>
+                      <td className="p-2 font-mono font-semibold">{formatPaiseToRupees(safeBigInt(s.countedCashPaise))}</td>
+                      <td className="p-2 font-mono text-[#64748B]">{formatPaiseToRupees(safeBigInt(s.expectedCashPaise))}</td>
                       <td className="p-2 font-mono font-bold">
-                        {s.differencePaise === '0' ? (
+                        {safeBigInt(s.differencePaise) === 0n ? (
                           <span className="text-green-600">₹0.00</span>
                         ) : (
-                          <span className={BigInt(s.differencePaise) < 0n ? 'text-red-600' : 'text-amber-600'}>
-                            {formatPaiseToRupees(BigInt(s.differencePaise))}
+                          <span className={safeBigInt(s.differencePaise) < 0n ? 'text-red-600' : 'text-amber-600'}>
+                            {formatPaiseToRupees(safeBigInt(s.differencePaise))}
                           </span>
                         )}
                       </td>
-                      <td className="p-2 font-mono text-[#64748B]">{formatPaiseToRupees(BigInt(s.retainedFloatPaise))}</td>
+                      <td className="p-2 font-mono text-[#64748B]">{formatPaiseToRupees(safeBigInt(s.retainedFloatPaise))}</td>
                       <td className="p-2">
                         {s.upiVerified ? (
                           <span className="text-green-600 font-bold flex items-center gap-1">
@@ -483,15 +688,24 @@ export default function DayEndSettlementPage() {
                       </td>
                       <td className="p-2 text-[#475569]">{s.closedByName || 'Owner'}</td>
                       <td className="p-2 text-right">
-                        <button
-                          onClick={() => {
-                            setSelectedDate(s.date);
-                            setShowHistory(false);
-                          }}
-                          className="text-[#2563EB] hover:underline font-semibold"
-                        >
-                          View / Load
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedDate(s.date);
+                              setShowHistory(false);
+                            }}
+                            className="text-[#2563EB] hover:underline font-semibold"
+                          >
+                            View / Load
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSettlement(s.date, s.id)}
+                            className="p-1 text-[#94A3B8] hover:text-red-600 hover:bg-red-50 rounded transition"
+                            title={`Delete settlement for ${s.date}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -502,52 +716,437 @@ export default function DayEndSettlementPage() {
         </div>
       )}
 
-      {/* Today's High-Level Financial Snapshot */}
+      {/* ========================================================================= */}
+      {/* 4-CARD EXECUTIVE SUMMARY BAR                                             */}
+      {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Total Invoiced */}
-        <div className="bg-white border border-[#E2E8F0] p-3.5 rounded-xl shadow-2xs">
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block">Total Billed Today</span>
-          <div className="mt-1 text-lg font-bold text-[#0F172A] font-mono tabular-nums">
-            {formatPaiseToRupees(BigInt(summary?.totalBilledPaise || '0'))}
+        {/* Total Billed Today */}
+        <div className="bg-white border border-[#E2E8F0] p-3.5 rounded-xl shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block">
+              1. Total Sales Billed
+            </span>
+            <div className="mt-1 text-lg font-bold text-[#0F172A] font-mono tabular-nums">
+              {formatPaiseToRupees(safeBigInt(summary?.totalBilledPaise))}
+            </div>
+            <div className="mt-0.5 text-[11px] text-[#64748B]">{summary?.invoicesCount || 0} bills issued today</div>
           </div>
-          <div className="mt-0.5 text-[11px] text-[#64748B]">{summary?.invoicesCount || 0} bills issued</div>
+          <div className="w-9 h-9 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0">
+            <Receipt className="w-4 h-4" />
+          </div>
         </div>
 
-        {/* Total Collections Received */}
-        <div className="bg-white border border-[#E2E8F0] p-3.5 rounded-xl shadow-2xs">
-          <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider block">Total Payments Received</span>
-          <div className="mt-1 text-lg font-bold text-green-700 font-mono tabular-nums">
-            {formatPaiseToRupees(BigInt(summary?.totalCollectedPaise || '0'))}
+        {/* Expected Cash in Drawer */}
+        <div className="bg-white border border-[#E2E8F0] p-3.5 rounded-xl shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">
+              2. Expected in Drawer
+            </span>
+            <div className="mt-1 text-lg font-bold text-[#0F172A] font-mono tabular-nums">
+              {formatPaiseToRupees(systemExpectedCashPaise)}
+            </div>
+            <div className="mt-0.5 text-[11px] text-[#64748B]">Opening + Cash In - Expenses</div>
           </div>
-          <div className="mt-0.5 text-[11px] text-[#64748B]">Cash + UPI + Bank credits</div>
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+            <Banknote className="w-4 h-4" />
+          </div>
         </div>
 
-        {/* Cash Collected */}
-        <div className="bg-white border border-[#E2E8F0] p-3.5 rounded-xl shadow-2xs">
-          <span className="text-[10px] font-bold text-[#334155] uppercase tracking-wider block">Cash Inflows Today</span>
-          <div className="mt-1 text-lg font-bold text-[#0F172A] font-mono tabular-nums">
-            {formatPaiseToRupees(BigInt(summary?.cashCollectedPaise || '0'))}
+        {/* Digital Money Collected */}
+        <div className="bg-white border border-[#E2E8F0] p-3.5 rounded-xl shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">
+              3. Digital (UPI / Bank)
+            </span>
+            <div className="mt-1 text-lg font-bold text-blue-700 font-mono tabular-nums">
+              {formatPaiseToRupees(upiCollectedPaise + bankCollectedPaise)}
+            </div>
+            <div className="mt-0.5 text-[11px] flex items-center gap-1.5">
+              <span className="text-[#64748B]">{onlineTxs.length} online transfers</span>
+              <span>•</span>
+              <span className={upiVerified ? 'text-green-600 font-semibold' : 'text-amber-600 font-semibold'}>
+                {upiVerified ? 'Verified' : 'Unverified'}
+              </span>
+            </div>
           </div>
-          <div className="mt-0.5 text-[11px] text-[#64748B]">Cash collected at counter</div>
+          <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
+            <Smartphone className="w-4 h-4" />
+          </div>
         </div>
 
-        {/* Online (UPI + Bank) Collected */}
-        <div className="bg-white border border-[#E2E8F0] p-3.5 rounded-xl shadow-2xs">
-          <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Digital / Online Collections</span>
-          <div className="mt-1 text-lg font-bold text-blue-700 font-mono tabular-nums">
-            {formatPaiseToRupees(BigInt(summary?.upiCollectedPaise || '0') + BigInt(summary?.bankCollectedPaise || '0'))}
+        {/* Live Discrepancy / Till Verdict */}
+        <div className={`p-3.5 rounded-xl border flex items-center justify-between shadow-2xs transition ${
+          tallyStatus === 'BALANCED'
+            ? 'bg-green-50/70 border-green-200 text-green-950'
+            : tallyStatus === 'SHORT'
+            ? 'bg-red-50/70 border-red-200 text-red-950'
+            : 'bg-amber-50/70 border-amber-200 text-amber-950'
+        }`}>
+          <div>
+            <div className="flex items-center gap-1.5">
+              {tallyStatus === 'BALANCED' && <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />}
+              {tallyStatus === 'SHORT' && <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+              {tallyStatus === 'EXCESS' && <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                {tallyStatus === 'BALANCED' ? 'TILL BALANCED' : tallyStatus === 'SHORT' ? 'CASH SHORTAGE' : 'CASH EXCESS'}
+              </span>
+            </div>
+            <div className={`mt-1 text-lg font-bold font-mono tabular-nums ${
+              tallyStatus === 'BALANCED' ? 'text-green-700' : tallyStatus === 'SHORT' ? 'text-red-700' : 'text-amber-700'
+            }`}>
+              {differencePaise === 0n ? '₹0.00' : formatPaiseToRupees(differencePaise)}
+            </div>
+            <div className="mt-0.5 text-[11px] opacity-80">
+              Counted: {formatPaiseToRupees(totalPhysicalCashPaise)}
+            </div>
           </div>
-          <div className="mt-0.5 text-[11px] text-[#64748B]">{onlineTxs.length} online transfers</div>
+          <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
+            tallyStatus === 'BALANCED'
+              ? 'bg-green-100 text-green-700 border-green-300'
+              : tallyStatus === 'SHORT'
+              ? 'bg-red-100 text-red-700 border-red-300'
+              : 'bg-amber-100 text-amber-700 border-amber-300'
+          }`}>
+            <Calculator className="w-4 h-4" />
+          </div>
         </div>
       </div>
 
-      {/* Main 2-Column Split: SECTION 1 (Online/UPI) & SECTION 2 (Physical Cash Drawer) */}
+      {/* ========================================================================= */}
+      {/* MAIN 2-COLUMN SPLIT: REGISTER TALLY (7) vs DIGITAL & SAFE HANDOVER (5)   */}
+      {/* ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         
         {/* ========================================================================= */}
-        {/* SECTION 1: ONLINE / UPI / BANK CONFIRMATION CARD (4 Cols on desktop)    */}
+        {/* COLUMN 1: PHYSICAL CASH DRAWER & NOTE COUNTER (7 Cols on desktop)        */}
+        {/* ========================================================================= */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 shadow-2xs space-y-4">
+            
+            {/* Header: Cash Drawer Tally */}
+            <div className="border-b border-[#E2E8F0] pb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100">
+                  <Banknote className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
+                    Physical Cash Register Tally
+                  </h2>
+                  <p className="text-[10px] text-[#64748B]">Count physical ₹2000, ₹500, ₹200, ₹100 notes & loose change</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={autofillExpected}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg border border-blue-200 transition"
+                  title="Autofill note breakdown to match expected cash"
+                >
+                  Quick Match
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNoteCounts({ 2000: 0, 500: 0, 200: 0, 100: 0 });
+                    setCoinsTotalRupees('');
+                  }}
+                  className="p-1 text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 rounded-lg border border-transparent hover:border-slate-200"
+                  title="Reset note counts"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Arithmetic Formula Row: Opening + Cash Sales - Cash Out */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block">
+                Register Cash Equation
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-[#F8FAFC] p-3 rounded-xl border border-[#E2E8F0] text-xs">
+                <div>
+                  <label className="text-[10px] font-bold text-[#475569] uppercase block">
+                    1. Opening Float (₹)
+                  </label>
+                  <input
+                    type="text"
+                    value={openingFloatRupees}
+                    onChange={(e) => setOpeningFloatRupees(e.target.value)}
+                    placeholder="0.00"
+                    className="mt-1 w-full h-8 px-2.5 bg-white border border-[#CBD5E1] rounded-lg text-xs font-bold font-mono text-[#0F172A] focus:border-[#C81E1E] focus:outline-hidden"
+                  />
+                  <span className="text-[9px] text-[#94A3B8] block mt-0.5">Kept from yesterday</span>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-[#475569] uppercase block">
+                    2. Cash Sales In (₹)
+                  </label>
+                  <div className="mt-1 h-8 px-2.5 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold font-mono text-emerald-700 flex items-center">
+                    + {formatPaiseToRupees(cashCollectedPaise)}
+                  </div>
+                  <span className="text-[9px] text-[#94A3B8] block mt-0.5">Billed cash at counter</span>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-[#475569] uppercase block">
+                    3. Cash Out / Expenses (₹)
+                  </label>
+                  <div className="mt-1 h-8 px-2.5 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold font-mono text-red-600 flex items-center justify-between">
+                    <span>- {formatPaiseToRupees(cashExpensesPaise)}</span>
+                    <span className="text-[10px] font-normal text-[#64748B]">{expenseItems.length} item{expenseItems.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <span className="text-[9px] text-[#94A3B8] block mt-0.5">Petty cash paid out today</span>
+                </div>
+              </div>
+
+              {/* Itemized Cash Expenses List */}
+              <div className="bg-[#FFF5F5] border border-[#FED7D7] rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#991B1B]">
+                    <span>Petty Cash Expenses / Payouts</span>
+                    <span className="text-[10px] font-mono font-semibold bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-200">
+                      - {formatPaiseToRupees(cashExpensesPaise)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addExpenseItem}
+                    className="px-2 py-1 text-[11px] font-bold bg-white text-[#C81E1E] hover:bg-red-50 border border-red-200 rounded-lg shadow-2xs transition inline-flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Expense</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  {expenseItems.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2">
+                      <div className="relative w-28 sm:w-32 shrink-0">
+                        <span className="absolute left-2 top-1.5 text-xs font-bold text-[#94A3B8]">₹</span>
+                        <input
+                          type="text"
+                          value={item.amountRupees}
+                          onChange={(e) => updateExpenseItem(item.id, 'amountRupees', e.target.value)}
+                          placeholder="0.00"
+                          className="w-full h-7 pl-5 pr-2 bg-white border border-[#CBD5E1] rounded-md text-xs font-bold font-mono text-red-600 focus:border-[#C81E1E] focus:outline-hidden"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        value={item.note}
+                        onChange={(e) => updateExpenseItem(item.id, 'note', e.target.value)}
+                        placeholder="Reason (e.g. Chai, Courier, Petrol, Cleaning)"
+                        className="flex-1 h-7 px-2.5 bg-white border border-[#CBD5E1] rounded-md text-xs text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#C81E1E] focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeExpenseItem(item.id)}
+                        className="w-7 h-7 flex items-center justify-center text-[#94A3B8] hover:text-red-600 hover:bg-white rounded-md transition border border-transparent hover:border-red-200"
+                        title="Delete expense"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Total Expected Target Banner */}
+              <div className="p-2.5 rounded-lg bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-between text-xs">
+                <span className="font-bold text-[#1E3A8A] flex items-center gap-1.5">
+                  <span>🎯 System Target Cash in Register:</span>
+                </span>
+                <span className="text-sm font-bold font-mono text-[#1E3A8A] tabular-nums">
+                  {formatPaiseToRupees(systemExpectedCashPaise)}
+                </span>
+              </div>
+            </div>
+
+            {/* POS-Grade Denomination Note Counter */}
+            <div className="border border-[#E2E8F0] rounded-xl overflow-hidden shadow-2xs">
+              <div className="bg-[#F8FAFC] px-3.5 py-2 border-b border-[#E2E8F0] flex items-center justify-between text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                <span>Note Denomination</span>
+                <span className="text-center pr-12">Note Count</span>
+                <span>Subtotal (₹)</span>
+              </div>
+
+              <div className="divide-y divide-[#E2E8F0]">
+                {DENOMINATIONS.map((d, idx) => {
+                  const count = noteCounts[d.value] || 0;
+                  const subtotalPaise = BigInt(d.value) * 100n * BigInt(count);
+                  return (
+                    <div key={d.value} className="p-2.5 sm:px-3.5 sm:py-2.5 flex items-center justify-between hover:bg-slate-50/70 transition">
+                      
+                      {/* Left: Note badge & label */}
+                      <div className="flex items-center gap-2.5 min-w-[120px]">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono border ${d.badgeColor}`}>
+                          ₹{d.value}
+                        </span>
+                        <span className="text-xs font-semibold text-[#0F172A] hidden sm:inline">Note</span>
+                      </div>
+
+                      {/* Center: Steppers & Input */}
+                      <div className="flex items-center gap-1 sm:gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => incrementNote(d.value, -1)}
+                          disabled={count <= 0}
+                          className="w-7 h-8 flex items-center justify-center bg-white hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed text-[#475569] border border-[#CBD5E1] rounded-lg transition"
+                          title="Subtract 1 note"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+
+                        <input
+                          ref={(el) => { inputRefs.current[d.value] = el; }}
+                          type="text"
+                          inputMode="numeric"
+                          value={noteCounts[d.value] === 0 ? '' : noteCounts[d.value]}
+                          placeholder="0"
+                          onChange={(e) => handleNoteCountChange(d.value, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, idx)}
+                          className="w-16 sm:w-20 h-8 text-center font-mono font-bold text-xs bg-white border border-[#CBD5E1] rounded-lg focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] shadow-2xs transition"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => incrementNote(d.value, 1)}
+                          className="w-7 h-8 flex items-center justify-center bg-white hover:bg-slate-100 text-[#475569] border border-[#CBD5E1] rounded-lg transition"
+                          title="Add 1 note"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+
+                        <div className="hidden sm:flex items-center gap-1">
+                          {[5, 10].map((step) => (
+                            <button
+                              key={step}
+                              type="button"
+                              onClick={() => incrementNote(d.value, step)}
+                              className="px-1.5 py-1 text-[10px] font-semibold bg-white text-[#475569] hover:bg-slate-100 border border-[#CBD5E1] rounded transition"
+                              title={`Add ${step} notes`}
+                            >
+                              +{step}
+                            </button>
+                          ))}
+                        </div>
+
+                        {count > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleNoteCountChange(d.value, '0')}
+                            className="p-1 text-[#94A3B8] hover:text-red-500 rounded transition"
+                            title="Clear this denomination to 0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Right: Subtotal */}
+                      <div className="font-mono font-bold text-xs sm:text-sm text-[#0F172A] tabular-nums text-right min-w-[90px]">
+                        {formatPaiseToRupees(subtotalPaise)}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Loose Change & Small Currency (< ₹100) */}
+                <div className="p-2.5 sm:px-3.5 sm:py-2.5 bg-[#F8FAFC]/80 flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-[120px]">
+                    <Coins className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-xs text-[#0F172A] block">Loose Change & Coins</span>
+                      <span className="text-[10px] text-[#64748B] block">Smaller notes (&lt; ₹100) &amp; coins (₹)</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      ref={coinsInputRef}
+                      type="text"
+                      value={coinsTotalRupees}
+                      placeholder="0.00"
+                      onChange={(e) => setCoinsTotalRupees(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const lastDenom = DENOMINATIONS[DENOMINATIONS.length - 1];
+                          if (lastDenom && inputRefs.current[lastDenom.value]) {
+                            inputRefs.current[lastDenom.value]?.focus();
+                            inputRefs.current[lastDenom.value]?.select();
+                          }
+                        }
+                      }}
+                      className="w-20 sm:w-24 h-8 text-center font-mono font-bold text-xs bg-white border border-[#CBD5E1] rounded-lg focus:border-[#C81E1E] focus:outline-hidden shadow-2xs transition"
+                    />
+                    {coinsTotalRupees && coinsTotalRupees !== '0' && coinsTotalRupees !== '0.00' && (
+                      <button
+                        type="button"
+                        onClick={() => setCoinsTotalRupees('')}
+                        className="p-1 text-[#94A3B8] hover:text-red-500 rounded transition"
+                        title="Clear loose change"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="font-mono font-bold text-xs sm:text-sm text-[#0F172A] tabular-nums text-right min-w-[90px]">
+                    {formatPaiseToRupees(coinsPaise)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Physical Cash Counted Bar */}
+              <div className="bg-[#0F172A] text-white px-3.5 py-3 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider block">Total Physical Cash Counted</span>
+                  <span className="text-[10px] text-slate-300">Sum of notes + loose change</span>
+                </div>
+                <span className="font-mono text-base font-bold tabular-nums text-emerald-300">
+                  {formatPaiseToRupees(totalPhysicalCashPaise)}
+                </span>
+              </div>
+            </div>
+
+            {/* Detailed Discrepancy Insight Banner */}
+            <div className={`p-3.5 rounded-xl border flex items-start gap-3 text-xs ${
+              tallyStatus === 'BALANCED'
+                ? 'bg-green-50 border-green-200 text-green-900'
+                : tallyStatus === 'SHORT'
+                ? 'bg-red-50 border-red-200 text-red-900'
+                : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}>
+              {tallyStatus === 'BALANCED' && <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />}
+              {tallyStatus === 'SHORT' && <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />}
+              {tallyStatus === 'EXCESS' && <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+              <div>
+                <div className="font-bold text-xs">
+                  {tallyStatus === 'BALANCED' && '✅ All Cash Accounted For — Zero Variance'}
+                  {tallyStatus === 'SHORT' && `⚠️ Cash Shortage of ${formatPaiseToRupees(differencePaise * -1n)}`}
+                  {tallyStatus === 'EXCESS' && `⚠️ Cash Excess of ${formatPaiseToRupees(differencePaise)}`}
+                </div>
+                <p className="text-[11px] opacity-90 mt-0.5">
+                  {tallyStatus === 'BALANCED' && 'Physical cash matches the expected drawer balance exactly.'}
+                  {tallyStatus === 'SHORT' && 'Physical drawer has less cash than expected. Please check if any cash expenses (chai/petrol/courier) or customer change was unentered.'}
+                  {tallyStatus === 'EXCESS' && 'Physical cash is higher than expected. Check if an unrecorded cash sale or extra deposit occurred.'}
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* COLUMN 2: DIGITAL RECONCILIATION & SAFE DEPOSIT (5 Cols on desktop)      */}
         {/* ========================================================================= */}
         <div className="lg:col-span-5 space-y-4">
+          
+          {/* Card 1: Online & Digital Money Verification */}
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-2xs space-y-3.5">
             <div className="border-b border-[#E2E8F0] pb-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -556,9 +1155,9 @@ export default function DayEndSettlementPage() {
                 </div>
                 <div>
                   <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
-                    Online & UPI Collections
+                    Digital & Online Collections
                   </h2>
-                  <p className="text-[10px] text-[#64748B]">Verify on PhonePe / GPay / NetBanking</p>
+                  <p className="text-[10px] text-[#64748B]">Verify against Soundbox & Bank App</p>
                 </div>
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
@@ -566,26 +1165,26 @@ export default function DayEndSettlementPage() {
               </span>
             </div>
 
-            {/* UPI Summary Box */}
-            <div className="p-3 bg-gradient-to-br from-[#F8FAFC] to-[#EFF6FF] rounded-lg border border-[#DBEAFE] space-y-2">
+            {/* UPI & Bank Breakdown Box */}
+            <div className="p-3 bg-gradient-to-br from-[#F8FAFC] to-[#EFF6FF] rounded-xl border border-[#DBEAFE] space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
                   <span className="text-xs font-semibold text-[#1E3A8A]">UPI / QR Collections:</span>
                 </div>
                 <span className="text-base font-bold font-mono text-blue-700 tabular-nums">
-                  {formatPaiseToRupees(BigInt(summary?.upiCollectedPaise || '0'))}
+                  {formatPaiseToRupees(upiCollectedPaise)}
                 </span>
               </div>
 
-              {Number(summary?.bankCollectedPaise || 0) > 0 && (
+              {Number(bankCollectedPaise) > 0 && (
                 <div className="flex items-center justify-between pt-1 border-t border-blue-200/50 text-xs">
                   <div className="flex items-center gap-2">
                     <Landmark className="w-3.5 h-3.5 text-indigo-600" />
                     <span className="font-semibold text-indigo-900">Bank Transfer / NEFT:</span>
                   </div>
                   <span className="font-bold font-mono text-indigo-700 tabular-nums">
-                    {formatPaiseToRupees(BigInt(summary?.bankCollectedPaise || '0'))}
+                    {formatPaiseToRupees(bankCollectedPaise)}
                   </span>
                 </div>
               )}
@@ -593,13 +1192,13 @@ export default function DayEndSettlementPage() {
               <div className="pt-2 border-t border-blue-200 flex items-center justify-between text-xs">
                 <span className="font-bold text-[#1E293B]">Total Digital Money:</span>
                 <span className="font-bold font-mono text-[#0F172A]">
-                  {formatPaiseToRupees(BigInt(summary?.upiCollectedPaise || '0') + BigInt(summary?.bankCollectedPaise || '0'))}
+                  {formatPaiseToRupees(upiCollectedPaise + bankCollectedPaise)}
                 </span>
               </div>
             </div>
 
             {/* Owner Verification Checkbox */}
-            <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition select-none ${
+            <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
               upiVerified 
                 ? 'bg-green-50 border-green-300 text-green-900' 
                 : 'bg-slate-50 border-[#CBD5E1] text-[#334155] hover:bg-slate-100'
@@ -612,15 +1211,15 @@ export default function DayEndSettlementPage() {
               />
               <div className="text-xs">
                 <span className="font-bold block">
-                  {upiVerified ? '✅ UPI & Bank Statement Verified' : 'Check against PhonePe / GPay App'}
+                  {upiVerified ? '✅ UPI & Bank Statement Verified' : 'Check PhonePe / Soundbox App'}
                 </span>
                 <span className="text-[11px] text-[#64748B] block mt-0.5">
-                  I confirm the ₹{((Number(summary?.upiCollectedPaise || 0) + Number(summary?.bankCollectedPaise || 0)) / 100).toLocaleString('en-IN')} matches my UPI Soundbox & bank account credits.
+                  I confirm the ₹{((Number(summary?.upiCollectedPaise || 0) + Number(summary?.bankCollectedPaise || 0)) / 100).toLocaleString('en-IN')} matches my Soundbox announcement & bank credits.
                 </span>
               </div>
             </label>
 
-            {/* Expandable Online Transactions List */}
+            {/* Expandable Online Transactions Drawer */}
             <div className="pt-1">
               <button
                 type="button"
@@ -647,7 +1246,7 @@ export default function DayEndSettlementPage() {
                           </div>
                         </div>
                         <div className="font-mono font-bold text-[#0F172A] shrink-0">
-                          {formatPaiseToRupees(BigInt(tx.amountPaise))}
+                          {formatPaiseToRupees(safeBigInt(tx.amountPaise))}
                         </div>
                       </div>
                     ))
@@ -657,273 +1256,75 @@ export default function DayEndSettlementPage() {
             </div>
           </div>
 
-          {/* New Udhaar / Credit Given Notice */}
+          {/* New Khata Extended Notice */}
           {Number(summary?.newCreditGivenPaise || 0) > 0 && (
             <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl p-3 text-xs text-[#92400E] flex items-start gap-2.5">
               <Split className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">New Khata (Credit) Extended Today: </span>
-                <span className="font-mono font-bold">{formatPaiseToRupees(BigInt(summary?.newCreditGivenPaise || '0'))}</span>
+                <span className="font-mono font-bold">{formatPaiseToRupees(safeBigInt(summary?.newCreditGivenPaise))}</span>
                 <p className="text-[11px] text-[#B45309] mt-0.5">
-                  Customers bought items on credit. This amount is recorded in debtor ledgers and is not expected in the cash drawer.
+                  Recorded in customer Khata ledgers. Not expected in today's cash drawer.
                 </p>
               </div>
             </div>
           )}
-        </div>
 
-        {/* ========================================================================= */}
-        {/* SECTION 2: PHYSICAL CASH DRAWER & DENOMINATION GRID (7 Cols on desktop) */}
-        {/* ========================================================================= */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 shadow-2xs space-y-4">
-            
-            {/* Header with Title & Quick Autofill */}
-            <div className="border-b border-[#E2E8F0] pb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-green-50 text-green-600 flex items-center justify-center border border-green-100">
-                  <Banknote className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
-                    Physical Cash Drawer Tally
-                  </h2>
-                  <p className="text-[10px] text-[#64748B]">Enter note counts to track every penny</p>
-                </div>
+          {/* Card 2: Cash Handover, Float Allocation & Register Lock */}
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-2xs space-y-3.5">
+            <div className="border-b border-[#E2E8F0] pb-2.5 flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-100">
+                <ShieldCheck className="w-3.5 h-3.5" />
               </div>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={autofillExpected}
-                  className="px-2 py-1 text-[11px] font-semibold text-[#2563EB] hover:bg-blue-50 rounded border border-blue-200 transition"
-                  title="Autofill note counts to match expected cash"
-                >
-                  Quick Match
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNoteCounts({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
-                    setCoinsTotalRupees('0.00');
-                  }}
-                  className="p-1 text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 rounded"
-                  title="Reset counts"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
+              <div>
+                <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
+                  Safe Deposit & Day Closing
+                </h2>
+                <p className="text-[10px] text-[#64748B]">Set tomorrow's float and record bank withdrawal</p>
               </div>
             </div>
 
-            {/* Formula Row: Opening Float + Cash In - Cash Out = Expected Cash */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0] text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label className="text-[10px] font-bold text-[#64748B] uppercase block">
-                  1. Opening Float (₹)
+                <label className="text-[11px] text-[#475569] font-medium block">
+                  Keep for Tomorrow's Float (₹)
                 </label>
                 <input
                   type="text"
-                  value={openingFloatRupees}
-                  onChange={(e) => setOpeningFloatRupees(e.target.value)}
-                  placeholder="0.00"
-                  className="mt-1 w-full h-8 px-2.5 bg-white border border-[#CBD5E1] rounded text-xs font-bold font-mono text-[#0F172A] focus:border-red-500 focus:outline-hidden"
+                  value={retainedFloatRupees}
+                  onChange={(e) => setRetainedFloatRupees(e.target.value)}
+                  placeholder="2000.00"
+                  className="mt-1 w-full h-8 px-2.5 bg-white border border-[#CBD5E1] rounded-lg text-xs font-bold font-mono text-[#0F172A] focus:border-[#C81E1E] focus:outline-hidden"
                 />
-                <span className="text-[9px] text-[#94A3B8]">Kept from yesterday</span>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-[#64748B] uppercase block">
-                  2. Cash Sales In (₹)
-                </label>
-                <div className="mt-1 h-8 px-2.5 bg-white border border-[#E2E8F0] rounded text-xs font-bold font-mono text-green-700 flex items-center">
-                  + {formatPaiseToRupees(cashCollectedPaise)}
-                </div>
-                <span className="text-[9px] text-[#94A3B8]">Billed at counter</span>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-[#64748B] uppercase block">
-                  3. Cash Expenses Out (₹)
-                </label>
-                <input
-                  type="text"
-                  value={cashExpensesRupees}
-                  onChange={(e) => setCashExpensesRupees(e.target.value)}
-                  placeholder="0.00"
-                  className="mt-1 w-full h-8 px-2.5 bg-white border border-[#CBD5E1] rounded text-xs font-bold font-mono text-red-600 focus:border-red-500 focus:outline-hidden"
-                />
-                <input
-                  type="text"
-                  value={cashExpenseNote}
-                  onChange={(e) => setCashExpenseNote(e.target.value)}
-                  placeholder="Chai / Courier / Petrol"
-                  className="mt-1 w-full h-6 px-1.5 bg-transparent border-b border-dashed border-[#CBD5E1] text-[10px] text-[#475569] placeholder:text-[#94A3B8] focus:outline-hidden"
-                />
-              </div>
-            </div>
-
-            {/* Total Expected Drawer Balance Banner */}
-            <div className="p-3 rounded-lg bg-[#F1F5F9] border border-[#CBD5E1] flex items-center justify-between text-xs">
-              <div>
-                <span className="font-bold text-[#334155] block">🎯 System Expected Cash in Register:</span>
-                <span className="text-[10px] text-[#64748B]">Opening + Cash Sales - Cash Out</span>
-              </div>
-              <span className="text-base font-bold font-mono text-[#0F172A] tabular-nums">
-                {formatPaiseToRupees(systemExpectedCashPaise)}
-              </span>
-            </div>
-
-            {/* Denomination Input Table */}
-            <div className="border border-[#E2E8F0] rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-[#F8FAFC] text-[#64748B] font-bold uppercase text-[10px] border-b border-[#E2E8F0]">
-                  <tr>
-                    <th className="py-2 px-3 text-left">Denomination</th>
-                    <th className="py-2 px-3 text-center w-28">Note Count</th>
-                    <th className="py-2 px-3 text-right">Subtotal (₹)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E2E8F0]">
-                  {DENOMINATIONS.map((d, idx) => {
-                    const count = noteCounts[d.value] || 0;
-                    const subtotalPaise = BigInt(d.value) * 100n * BigInt(count);
-                    return (
-                      <tr key={d.value} className="hover:bg-[#F8FAFC]/60 transition">
-                        <td className="py-1.5 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${d.isCoin ? 'bg-amber-400' : 'bg-green-500'}`} />
-                          <span>{d.label}</span>
-                        </td>
-                        <td className="py-1.5 px-3 text-center">
-                          <input
-                            ref={(el) => { inputRefs.current[d.value] = el; }}
-                            type="text"
-                            inputMode="numeric"
-                            value={noteCounts[d.value] === 0 ? '' : noteCounts[d.value]}
-                            placeholder="0"
-                            onChange={(e) => handleNoteCountChange(d.value, e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, idx)}
-                            className="w-20 h-7 text-center font-mono font-bold text-xs bg-[#F8F9FA] hover:bg-white focus:bg-white border border-[#CBD5E1] rounded focus:border-[#C81E1E] focus:outline-hidden focus:ring-1 focus:ring-[#C81E1E] transition"
-                          />
-                        </td>
-                        <td className="py-1.5 px-3 text-right font-mono font-bold text-[#0F172A] tabular-nums">
-                          {formatPaiseToRupees(subtotalPaise)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {/* Loose Coins Row */}
-                  <tr className="bg-[#F8FAFC]/80">
-                    <td className="py-1.5 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                      <Coins className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Loose Change / Coins (₹)</span>
-                    </td>
-                    <td className="py-1.5 px-3 text-center">
-                      <input
-                        type="text"
-                        value={coinsTotalRupees === '0.00' ? '' : coinsTotalRupees}
-                        placeholder="0.00"
-                        onChange={(e) => setCoinsTotalRupees(e.target.value)}
-                        className="w-20 h-7 text-center font-mono font-bold text-xs bg-white border border-[#CBD5E1] rounded focus:border-[#C81E1E] focus:outline-hidden transition"
-                      />
-                    </td>
-                    <td className="py-1.5 px-3 text-right font-mono font-bold text-[#0F172A] tabular-nums">
-                      {formatPaiseToRupees(coinsPaise)}
-                    </td>
-                  </tr>
-                </tbody>
-                <tfoot className="bg-[#0F172A] text-white font-bold border-t-2 border-[#1E293B]">
-                  <tr>
-                    <td colSpan={2} className="py-2.5 px-3 text-xs uppercase tracking-wider">
-                      TOTAL PHYSICAL CASH COUNTED
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-sm tabular-nums text-green-300">
-                      {formatPaiseToRupees(totalPhysicalCashPaise)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            {/* LIVE DISCREPANCY / VARIANCE STATUS CARD */}
-            <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold ${
-              tallyStatus === 'BALANCED'
-                ? 'bg-green-50 border-green-300 text-green-900'
-                : tallyStatus === 'SHORT'
-                ? 'bg-red-50 border-red-300 text-red-900'
-                : 'bg-amber-50 border-amber-300 text-amber-900'
-            }`}>
-              <div className="flex items-center gap-2">
-                {tallyStatus === 'BALANCED' && <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />}
-                {tallyStatus === 'SHORT' && <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />}
-                {tallyStatus === 'EXCESS' && <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />}
-                <div>
-                  <div className="font-bold text-sm">
-                    {tallyStatus === 'BALANCED' && '✅ Cash Balanced. All money accounted for!'}
-                    {tallyStatus === 'SHORT' && `⚠️ Cash Shortage by ${formatPaiseToRupees(differencePaise * -1n)}`}
-                    {tallyStatus === 'EXCESS' && `⚠️ Cash Excess by ${formatPaiseToRupees(differencePaise)}`}
-                  </div>
-                  <div className="text-[11px] font-normal opacity-90">
-                    {tallyStatus === 'BALANCED' && 'Physical drawer count exactly matches system sales.'}
-                    {tallyStatus === 'SHORT' && 'Counted cash is less than expected. Please verify unentered expenses or missing change.'}
-                    {tallyStatus === 'EXCESS' && 'Counted cash is greater than expected. Check if an invoice or payment was missed.'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="font-mono text-base font-bold tabular-nums shrink-0">
-                {differencePaise === 0n ? '₹0.00 Difference' : formatPaiseToRupees(differencePaise)}
-              </div>
-            </div>
-
-            {/* Cash Handover & Float Allocation */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5 text-xs">
-              <span className="font-bold text-[#0F172A] block uppercase text-[10px] tracking-wider">
-                💼 End-of-Day Cash Handover & Float Allocation
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-[#475569] font-medium block">
-                    Keep for Tomorrow's Opening Float (₹)
-                  </label>
-                  <input
-                    type="text"
-                    value={retainedFloatRupees}
-                    onChange={(e) => setRetainedFloatRupees(e.target.value)}
-                    placeholder="2000.00"
-                    className="mt-1 w-full h-8 px-2.5 bg-white border border-[#CBD5E1] rounded text-xs font-bold font-mono text-[#0F172A] focus:border-[#C81E1E] focus:outline-hidden"
-                  />
-                  <span className="text-[10px] text-[#94A3B8]">Small change left in register for tomorrow</span>
-                </div>
-
-                <div>
-                  <label className="text-[11px] text-[#475569] font-medium block">
-                    Cash Withdrawn (Bank Deposit / Safe) (₹)
-                  </label>
-                  <div className="mt-1 h-8 px-2.5 bg-white border border-[#CBD5E1] rounded text-xs font-bold font-mono text-[#0F172A] flex items-center">
-                    {formatPaiseToRupees(withdrawnPaise)}
-                  </div>
-                  <span className="text-[10px] text-[#94A3B8]">Taken home or deposited into bank</span>
-                </div>
+                <span className="text-[9px] text-[#94A3B8] block mt-0.5">Change left in register</span>
               </div>
 
               <div>
                 <label className="text-[11px] text-[#475569] font-medium block">
-                  Owner Remarks / Handover Notes
+                  Cash to Safe / Bank (₹)
                 </label>
-                <input
-                  type="text"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="e.g., All notes checked, ₹35,000 deposited in safe by Rajesh."
-                  className="mt-1 w-full h-8 px-2.5 bg-white border border-[#CBD5E1] rounded text-xs text-[#0F172A] focus:border-[#C81E1E] focus:outline-hidden"
-                />
+                <div className="mt-1 h-8 px-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-xs font-bold font-mono text-[#0F172A] flex items-center">
+                  {formatPaiseToRupees(withdrawnPaise)}
+                </div>
+                <span className="text-[9px] text-[#94A3B8] block mt-0.5">Withdrawn for safe/home</span>
               </div>
             </div>
 
-            {/* Action Button: Close & Reconcile Day */}
-            <div className="pt-2">
+            <div>
+              <label className="text-[11px] text-[#475569] font-medium block">
+                Closing Remarks / Staff Handover Notes
+              </label>
+              <input
+                type="text"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="e.g. ₹35,000 kept in safe by Rajesh, all notes verified."
+                className="mt-1 w-full h-8 px-2.5 bg-white border border-[#CBD5E1] rounded-lg text-xs text-[#0F172A] focus:border-[#C81E1E] focus:outline-hidden"
+              />
+            </div>
+
+            {/* Action Button: Confirm & Lock Day-End Settlement */}
+            <div className="pt-1">
               <button
                 type="button"
                 onClick={handleSaveSettlement}
@@ -938,7 +1339,7 @@ export default function DayEndSettlementPage() {
                     <span>
                       {savedSettlement 
                         ? 'Update & Re-Lock Day-End Settlement' 
-                        : 'Confirm & Close Cash Register for Today'}
+                        : 'Confirm & Lock Day-End Settlement'}
                     </span>
                   </>
                 )}
@@ -949,8 +1350,8 @@ export default function DayEndSettlementPage() {
                 </p>
               )}
             </div>
-
           </div>
+
         </div>
       </div>
 
@@ -972,19 +1373,19 @@ export default function DayEndSettlementPage() {
           </div>
           <div className="flex justify-between font-bold">
             <span>Total Sales Billed:</span>
-            <span>{formatPaiseToRupees(BigInt(summary?.totalBilledPaise || '0'))}</span>
+            <span>{formatPaiseToRupees(safeBigInt(summary?.totalBilledPaise))}</span>
           </div>
           <div className="flex justify-between">
             <span>UPI / QR Collected:</span>
-            <span>{formatPaiseToRupees(BigInt(summary?.upiCollectedPaise || '0'))}</span>
+            <span>{formatPaiseToRupees(upiCollectedPaise)}</span>
           </div>
           <div className="flex justify-between">
             <span>Bank Transfers:</span>
-            <span>{formatPaiseToRupees(BigInt(summary?.bankCollectedPaise || '0'))}</span>
+            <span>{formatPaiseToRupees(bankCollectedPaise)}</span>
           </div>
           <div className="flex justify-between">
             <span>New Credit (Udhaar):</span>
-            <span>{formatPaiseToRupees(BigInt(summary?.newCreditGivenPaise || '0'))}</span>
+            <span>{formatPaiseToRupees(safeBigInt(summary?.newCreditGivenPaise))}</span>
           </div>
         </div>
 
@@ -1002,6 +1403,11 @@ export default function DayEndSettlementPage() {
             <span>Cash Expenses Out:</span>
             <span>- {formatPaiseToRupees(cashExpensesPaise)}</span>
           </div>
+          {cashExpenseSummary && (
+            <div className="text-[9px] text-gray-700 italic pl-2">
+              Expenses: {cashExpenseSummary}
+            </div>
+          )}
           <div className="flex justify-between font-bold">
             <span>Expected Cash:</span>
             <span>{formatPaiseToRupees(systemExpectedCashPaise)}</span>
@@ -1028,10 +1434,10 @@ export default function DayEndSettlementPage() {
               </div>
             );
           })}
-          {Number(coinsTotalRupees) > 0 && (
+          {coinsPaise > 0n && (
             <div className="flex justify-between">
-              <span>Loose Coins:</span>
-              <span>₹{coinsTotalRupees}</span>
+              <span>Loose Change / Coins:</span>
+              <span>{formatPaiseToRupees(coinsPaise)}</span>
             </div>
           )}
         </div>

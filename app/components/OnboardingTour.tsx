@@ -2,18 +2,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Sparkles, 
-  ArrowRight, 
-  ArrowLeft, 
-  X, 
-  CheckCircle2, 
-  Receipt, 
-  Search, 
-  Users, 
-  Boxes, 
-  BarChart3, 
-  Landmark, 
+import {
+  Sparkles,
+  ArrowRight,
+  ArrowLeft,
+  X,
+  CheckCircle2,
+  Receipt,
+  Search,
+  Users,
+  Boxes,
+  BarChart3,
+  Landmark,
   Zap,
   ExternalLink
 } from 'lucide-react';
@@ -210,7 +210,7 @@ export default function OnboardingTour() {
 
   if (targetRect) {
     const isSidebarItem = targetRect.left < 280 && targetRect.top > 50;
-    
+
     if (isSidebarItem) {
       // Position strictly to the right of the sidebar
       placement = 'right';
@@ -232,7 +232,7 @@ export default function OnboardingTour() {
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-[999] pointer-events-auto select-none">
-        
+
         {/* 1. True SVG Cutout Spotlight (Transparent hole over active element) */}
         <svg className="fixed inset-0 w-full h-full pointer-events-none transition-all duration-300">
           <defs>
@@ -274,10 +274,9 @@ export default function OnboardingTour() {
         )}
 
         {/* 3. Non-Overlapping Walkthrough Card */}
-        <div 
-          className={`z-[1001] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.22)] overflow-visible transition-all duration-200 ${
-            placement === 'center' ? 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-in zoom-in-95' : 'fixed animate-in fade-in-50'
-          }`}
+        <div
+          className={`z-[1001] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.22)] overflow-visible transition-all duration-200 ${placement === 'center' ? 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-in zoom-in-95' : 'fixed animate-in fade-in-50'
+            }`}
           style={placement !== 'center' ? {
             width: `${cardWidth}px`,
             top: `${cardTop}px`,
@@ -286,10 +285,10 @@ export default function OnboardingTour() {
             width: `${cardWidth}px`,
           }}
         >
-          
+
           {/* Crisp Arrow pointing UP (when card is below target) */}
           {placement === 'bottom' && (
-            <div 
+            <div
               className="absolute -top-[9px] w-4 h-4 bg-white border-t border-l border-[#E2E8F0] rotate-45 transform pointer-events-none shadow-[-2px_-2px_4px_rgba(0,0,0,0.03)]"
               style={{ left: `${arrowLeft - 8}px` }}
             />
@@ -297,7 +296,7 @@ export default function OnboardingTour() {
 
           {/* Crisp Arrow pointing LEFT (when card is to right of sidebar) */}
           {placement === 'right' && (
-            <div 
+            <div
               className="absolute -left-[9px] w-4 h-4 bg-white border-b border-l border-[#E2E8F0] rotate-45 transform pointer-events-none shadow-[-2px_2px_4px_rgba(0,0,0,0.03)]"
               style={{ top: `${arrowTop - 8}px` }}
             />
@@ -352,13 +351,12 @@ export default function OnboardingTour() {
                 <button
                   key={idx}
                   onClick={() => setCurrentStepIdx(idx)}
-                  className={`h-1.5 rounded-full transition-all ${
-                    idx === currentStepIdx
+                  className={`h-1.5 rounded-full transition-all ${idx === currentStepIdx
                       ? 'w-4 bg-[#C81E1E]'
                       : idx < currentStepIdx
-                      ? 'w-1.5 bg-[#94A3B8]'
-                      : 'w-1.5 bg-[#CBD5E1]'
-                  }`}
+                        ? 'w-1.5 bg-[#94A3B8]'
+                        : 'w-1.5 bg-[#CBD5E1]'
+                    }`}
                   title={`Step ${idx + 1}`}
                 />
               ))}
