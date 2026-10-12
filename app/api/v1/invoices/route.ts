@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { calculateInvoiceTax, LineItemInput } from '@/server/lib/tax';
 import { InvoiceStatus, InvoiceType, LedgerEntryType, PaymentMode, PaymentStatus } from '@prisma/client';
+import { postInvoiceGLEntries } from '@/server/lib/gl';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -315,6 +316,23 @@ export async function POST(req: NextRequest) {
               data: { status: runningBal <= customer.creditLimit ? 'GREEN' : 'YELLOW' },
             });
           }
+
+          // 4. Auto-post to Double-Entry General Ledger (Tally GL Parity)
+          await postInvoiceGLEntries({
+            tenantId: targetTenantId,
+            invoiceId: invoice.id,
+            invoiceNumber,
+            entryDate: invoiceCreatedDate,
+            grandTotal: taxSummary.grandTotal,
+            taxableValue: taxSummary.taxableValue,
+            cgst: taxSummary.cgst,
+            sgst: taxSummary.sgst,
+            igst: taxSummary.igst,
+            cashAmt,
+            upiAmt,
+            creditAmt: balanceOnCredit,
+            createdBy: authUser?.id,
+          });
         }
       } catch (dbErr) {
         console.warn('Postgres unavailable for invoice create, using localStore fallback', dbErr);

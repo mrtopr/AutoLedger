@@ -105,13 +105,13 @@ export async function GET(req: NextRequest) {
         const paidInvoiceNumbers = new Set<string>();
         for (const p of todayPayments) {
           for (const inv of todayInvoices) {
-            if (p.reference && p.reference.includes(inv.number)) {
+            if (inv.number && p.reference && p.reference.includes(inv.number)) {
               paidInvoiceNumbers.add(inv.number);
             }
           }
         }
         for (const inv of todayInvoices) {
-          if (!paidInvoiceNumbers.has(inv.number) && inv.paidNow > 0n) {
+          if (inv.number && !paidInvoiceNumbers.has(inv.number) && inv.paidNow > 0n) {
             cashCollected += inv.paidNow;
           }
         }

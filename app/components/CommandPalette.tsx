@@ -30,6 +30,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import ClientPortal from './ClientPortal';
 import InvoicePreviewModal, { InvoicePreviewData } from './InvoicePreviewModal';
 import { formatPaiseToRupees } from '@/server/lib/tax';
+import { searchTallyItems } from '@/app/lib/tallySearch';
 
 interface CommandItem {
   id: string;
@@ -369,14 +370,8 @@ export default function CommandPalette() {
       return name.includes(q) || shop.includes(q) || phone.includes(q) || gstin.includes(q);
     });
 
-    // 3. Matched Products (Match name, part number, category)
-    const matchedProducts = products.filter((p) => {
-      const name = (p.name || '').toLowerCase();
-      const partNum = (p.partNumber || '').toLowerCase();
-      const cat = (p.category || '').toLowerCase();
-
-      return name.includes(q) || partNum.includes(q) || cat.includes(q);
-    });
+    // 3. Matched Products (Tally Multi-Token Engine)
+    const matchedProducts = searchTallyItems(products, q, 25);
 
     // 4. Matched Commands
     const matchedCommands = defaultCommands.filter((cmd) =>

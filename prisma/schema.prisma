@@ -116,6 +116,7 @@ model Tenant {
   invoices            Invoice[]
   payments            Payment[]
   creditNotes         CreditNote[]
+  debitNotes          DebitNote[]
   ledgerEntries       LedgerEntry[]
   promises            Promise[]
   messageTemplates    MessageTemplate[]
@@ -126,6 +127,12 @@ model Tenant {
   auditLogs           AuditLog[]
   shareLinks          ShareLink[]
   stockMovements      StockMovement[]
+  accounts            Account[]
+  glEntries           GLEntry[]
+  journalVouchers     JournalVoucher[]
+  bankStatements      BankStatement[]
+  purchaseOrders      PurchaseOrder[]
+  goodsReceipts       GoodsReceipt[]
 
   @@map("tenants")
 }
@@ -265,15 +272,21 @@ model StockMovement {
 }
 
 model Supplier {
-  id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  name      String
-  phone     String?
-  gstin     String?
-  address   String?
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  name       String
+  phone      String?
+  gstin      String?
+  address    String?
+  email      String?
+  creditDays Int      @default(30) @map("credit_days")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  debitNotes     DebitNote[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
 
   @@map("suppliers")
 }
@@ -640,6 +653,213 @@ model AuditLog {
 
   @@index([tenantId, entity, entityId])
   @@map("audit_log")
+}
+
+// ─── MILESTONE 1: ACCOUNTING CORE ────────────────────────────────────────────
+
+model Account {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  code        String                           // e.g. "1001", "4001"
+  name        String                           // e.g. "Cash in Hand", "Sales"
+  groupName   String   @map("group_name")      // Capital, Loans, Fixed Assets, Current Assets, Current Liabilities, Income, Expense
+  subGroup    String?  @map("sub_group")       // e.g. "Sundry Debtors", "Indirect Income"
+  openingDr   BigInt   @default(0) @map("opening_dr")  // Paise
+  openingCr   BigInt   @default(0) @map("opening_cr")  // Paise
+  isSystem    Boolean  @default(false) @map("is_system")  // System-generated, not deletable
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  glEntries GLEntry[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, groupName])
+  @@map("accounts")
+}
+
+model GLEntry {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  accountId   String   @map("account_id") @db.Uuid
+  debit       BigInt   @default(0)  // Paise
+  credit      BigInt   @default(0)  // Paise
+  narration   String?
+  refType     String?  @map("ref_type")   // INVOICE, PAYMENT, CREDIT_NOTE, JOURNAL, DEBIT_NOTE
+  refId       String?  @map("ref_id") @db.Uuid
+  entryDate   DateTime @map("entry_date") @db.Date
+  voucherId   String?  @map("voucher_id") @db.Uuid  // links to JournalVoucher if from journal
+  createdBy   String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, accountId, entryDate])
+  @@index([tenantId, refType, refId])
+  @@map("gl_entries")
+}
+
+model JournalVoucher {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  number      String   // e.g. JV/2026-27/0001
+  voucherDate DateTime @map("voucher_date") @db.Date
+  narration   String?
+  isBalanced  Boolean  @default(false) @map("is_balanced")  // DR == CR validation
+  createdBy   String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lines  JournalLine[]
+
+  @@unique([tenantId, number])
+  @@map("journal_vouchers")
+}
+
+model JournalLine {
+  id         String   @id @default(uuid()) @db.Uuid
+  voucherId  String   @map("voucher_id") @db.Uuid
+  accountId  String   @map("account_id") @db.Uuid
+  debit      BigInt   @default(0)  // Paise
+  credit     BigInt   @default(0)  // Paise
+  narration  String?
+
+  voucher JournalVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  @@map("journal_lines")
+}
+
+model DebitNote {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  supplierId String   @map("supplier_id") @db.Uuid
+  number     String
+  reason     String?
+  amount     BigInt   // Paise
+  items      Json?    // Array of {name, qty, rate, amount}
+  restock    Boolean  @default(true)  // Restore stock on debit note
+  createdBy  String?  @map("created_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@map("debit_notes")
+}
+
+model BankStatement {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  accountId        String?  @map("account_id") @db.Uuid  // Links to Account (Bank type)
+  txnDate          DateTime @map("txn_date") @db.Date
+  description      String?
+  debit            BigInt   @default(0)  // Money out (paise)
+  credit           BigInt   @default(0)  // Money in (paise)
+  balance          BigInt   @default(0)  // Running balance (paise)
+  refNumber        String?  @map("ref_number")  // Cheque/UTR/NEFT ref
+  isReconciled     Boolean  @default(false) @map("is_reconciled")
+  matchedPaymentId String?  @map("matched_payment_id") @db.Uuid
+  importedAt       DateTime @default(now()) @map("imported_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, txnDate])
+  @@index([tenantId, isReconciled])
+  @@map("bank_statements")
+}
+
+// ─── MILESTONE 2: PURCHASE & PROCUREMENT ─────────────────────────────────────
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @map("tenant_id") @db.Uuid
+  supplierId  String              @map("supplier_id") @db.Uuid
+  number      String              // e.g. PO/2026-27/0001
+  status      PurchaseOrderStatus @default(DRAFT)
+  orderDate   DateTime            @map("order_date") @db.Date
+  expectedBy  DateTime?           @map("expected_by") @db.Date
+  notes       String?
+  subtotal    BigInt              @default(0)  // Paise
+  taxTotal    BigInt              @default(0) @map("tax_total")  // Paise
+  grandTotal  BigInt              @default(0) @map("grand_total")  // Paise
+  createdBy   String?             @map("created_by") @db.Uuid
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  items    PurchaseItem[]
+  grns     GoodsReceipt[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, supplierId])
+  @@map("purchase_orders")
+}
+
+model PurchaseItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  poId         String   @map("po_id") @db.Uuid
+  productId    String?  @map("product_id") @db.Uuid
+  description  String
+  qtyOrdered   Decimal  @map("qty_ordered") @db.Decimal(12, 3)
+  qtyReceived  Decimal  @default(0) @map("qty_received") @db.Decimal(12, 3)
+  unit         String   @default("pcs")
+  rate         BigInt   // Paise per unit
+  gstRateBp    Int      @default(0) @map("gst_rate_bp")
+  taxableValue BigInt   @default(0) @map("taxable_value")
+  taxAmount    BigInt   @default(0) @map("tax_amount")
+  lineTotal    BigInt   @default(0) @map("line_total")
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_items")
+}
+
+model GoodsReceipt {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  poId        String?  @map("po_id") @db.Uuid
+  supplierId  String   @map("supplier_id") @db.Uuid
+  number      String   // e.g. GRN/2026-27/0001
+  receiptDate DateTime @map("receipt_date") @db.Date
+  notes       String?
+  totalAmount BigInt   @default(0) @map("total_amount")
+  createdBy   String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder? @relation(fields: [poId], references: [id])
+  lines         GRNLine[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, supplierId])
+  @@map("goods_receipts")
+}
+
+model GRNLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  grnId       String   @map("grn_id") @db.Uuid
+  productId   String?  @map("product_id") @db.Uuid
+  description String?
+  qtyReceived Decimal  @map("qty_received") @db.Decimal(12, 3)
+  unitCost    BigInt   @map("unit_cost")  // Paise
+  lineTotal   BigInt   @default(0) @map("line_total")
+
+  grn GoodsReceipt @relation(fields: [grnId], references: [id], onDelete: Cascade)
+
+  @@map("grn_lines")
 }
 
 model BackupRun {

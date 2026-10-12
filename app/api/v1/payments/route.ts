@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { allocatePayment, OpenInvoice, ManualAllocationLine } from '@/server/lib/allocation';
 import { LedgerEntryType, PaymentMode, PaymentStatus } from '@prisma/client';
+import { postPaymentGLEntries } from '@/server/lib/gl';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -228,9 +229,20 @@ export async function POST(req: NextRequest) {
           });
 
           createdPaymentId = payment.id;
+
+          // Double-Entry General Ledger (Tally GL Parity)
+          await postPaymentGLEntries({
+            tenantId: customer.tenantId,
+            paymentId: payment.id,
+            amount: amt,
+            mode,
+            reference: ref,
+            entryDate: payment.createdAt,
+            createdBy: authUser?.id || null,
+          });
         }
       } catch (dbErr) {
-        console.warn('Postgres unavailable for payment create, using localStore fallback');
+        console.warn('Postgres unavailable for payment create, using localStore fallback', dbErr);
       }
     }
 
