@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const savedSettlement = localStore.getCashSettlementByDate(targetDate, targetTenantId);
 
     // 2. Fetch invoices for this date from localStore (and DB if available)
-    let allInvoices = localStore.getInvoices(targetTenantId) || [];
+    let allInvoices: any[] = localStore.getInvoices(targetTenantId) || [];
     const hasDb = await isPostgresAvailable();
     if (hasDb) {
       try {
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
         if (dbInvoices.length > 0) {
           allInvoices = dbInvoices.map((inv: any) => ({
             id: inv.id,
+            tenantId: inv.tenantId || targetTenantId,
             invoiceNumber: inv.number,
             customerId: inv.customerId,
             customerName: inv.customer?.name || inv.customer?.shopName || 'Walk-in Retail',
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
             grandTotalPaise: inv.grandTotal.toString(),
             paidNowPaise: (inv.paidNow || 0n).toString(),
             creditBalancePaise: (inv.balanceDue || 0n).toString(),
+            items: inv.items || [],
             createdAt: inv.createdAt ? inv.createdAt.toISOString() : new Date().toISOString(),
           }));
         }
