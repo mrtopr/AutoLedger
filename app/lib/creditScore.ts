@@ -7,10 +7,17 @@
  * 4. Relationship tenure & on-time payment track record (15% weight)
  */
 
+export interface CreditScoreDriver {
+  text: string;
+  type: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+}
+
 export interface CreditScoreResult {
   score: number; // 300 to 900
   rating: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'HIGH_RISK';
   label: string;
+  ratingLabel: string;
+  color: 'emerald' | 'blue' | 'amber' | 'rose';
   colorClass: string;
   badgeBg: string;
   badgeText: string;
@@ -19,6 +26,7 @@ export interface CreditScoreResult {
     positive: string[];
     negative: string[];
   };
+  drivers: CreditScoreDriver[];
 }
 
 export interface CustomerCreditInput {
@@ -120,17 +128,28 @@ export function calculateCustomerCreditScore(input: CustomerCreditInput): Credit
   // Clamp score between 300 and 900
   score = Math.max(300, Math.min(900, Math.round(score)));
 
+  const drivers: CreditScoreDriver[] = [
+    ...positive.map((text) => ({ text, type: 'POSITIVE' as const })),
+    ...negative.map((text) => ({ text, type: 'NEGATIVE' as const })),
+  ];
+  if (drivers.length === 0) {
+    drivers.push({ text: 'Standard transaction profile', type: 'NEUTRAL' as const });
+  }
+
   // Rating Bands
   if (score >= 750) {
     return {
       score,
       rating: 'EXCELLENT',
+      color: 'emerald',
+      ratingLabel: 'Prime (Low Risk)',
       label: 'Prime (Low Risk)',
       colorClass: 'text-emerald-700',
       badgeBg: 'bg-emerald-50 border-emerald-200',
       badgeText: 'text-emerald-700',
       utilizationPct,
       factors: { positive, negative },
+      drivers,
     };
   }
 
@@ -138,12 +157,15 @@ export function calculateCustomerCreditScore(input: CustomerCreditInput): Credit
     return {
       score,
       rating: 'GOOD',
+      color: 'blue',
+      ratingLabel: 'Good (Healthy)',
       label: 'Good (Healthy)',
       colorClass: 'text-blue-700',
       badgeBg: 'bg-blue-50 border-blue-200',
       badgeText: 'text-blue-700',
       utilizationPct,
       factors: { positive, negative },
+      drivers,
     };
   }
 
@@ -151,23 +173,29 @@ export function calculateCustomerCreditScore(input: CustomerCreditInput): Credit
     return {
       score,
       rating: 'FAIR',
+      color: 'amber',
+      ratingLabel: 'Fair (Watchlist)',
       label: 'Fair (Watchlist)',
       colorClass: 'text-amber-700',
       badgeBg: 'bg-amber-50 border-amber-200',
       badgeText: 'text-amber-700',
       utilizationPct,
       factors: { positive, negative },
+      drivers,
     };
   }
 
   return {
     score,
     rating: 'HIGH_RISK',
+    color: 'rose',
+    ratingLabel: 'High Risk (Overdue / Restrict)',
     label: 'High Risk (Overdue / Restrict)',
     colorClass: 'text-rose-700',
     badgeBg: 'bg-rose-50 border-rose-200',
     badgeText: 'text-rose-700',
     utilizationPct,
     factors: { positive, negative },
+    drivers,
   };
 }
