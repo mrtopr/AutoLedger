@@ -63,6 +63,9 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     fetchInvoices();
+    const handleFocus = () => fetchInvoices();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const handleCancelInvoice = async () => {
@@ -257,6 +260,7 @@ export default function InvoicesPage() {
             className="h-8 px-3 bg-white hover:bg-[#F8F9FA] text-[#475569] hover:text-[#0F172A] rounded-md border border-[#CBD5E1] text-xs font-medium transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
             title="Refresh Invoices"
           >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C81E1E]" /> : <Clock className="w-3.5 h-3.5 text-[#64748B]" />}
             <span>Refresh</span>
           </button>
 
@@ -386,6 +390,9 @@ export default function InvoicesPage() {
                   const formattedDate = inv.createdAt
                     ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                     : 'Today';
+                  const formattedTime = inv.createdAt
+                    ? new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                    : '';
 
                   return (
                     <tr key={inv.id} className={`transition-colors group ${isCancelled ? 'bg-[#FFF1F2]/40 opacity-75' : 'hover:bg-[#F8F9FA]'}`}>
@@ -431,8 +438,14 @@ export default function InvoicesPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono text-[#64748B] text-[11px]">
-                        {formattedDate}
+                      <td className="py-3 px-4 text-right font-mono text-[11px]">
+                        <div className="text-[#0F172A] font-semibold">{formattedDate}</div>
+                        {formattedTime && (
+                          <div className="text-[10px] text-[#64748B] flex items-center justify-end gap-1 mt-0.5">
+                            <Clock className="w-2.5 h-2.5 text-slate-400" />
+                            <span>{formattedTime}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">

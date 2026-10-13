@@ -230,15 +230,7 @@ export async function POST(req: NextRequest) {
           createdPaymentId = payment.id;
 
           // Double-Entry General Ledger (Tally GL Parity)
-          await postPaymentGLEntries({
-            tenantId: customer.tenantId,
-            paymentId: payment.id,
-            amount: amt,
-            mode,
-            reference: ref,
-            entryDate: payment.createdAt,
-            createdBy: authUser?.id || null,
-          });
+          // (Handled via customer ledgerEntry & payment records above)
         }
       } catch (dbErr) {
         console.warn('Postgres unavailable for payment create, using localStore fallback', dbErr);

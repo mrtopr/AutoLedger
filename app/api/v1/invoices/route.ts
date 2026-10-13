@@ -81,12 +81,12 @@ export async function GET(req: NextRequest) {
           id: inv.id,
           invoiceNumber: inv.invoiceNumber,
           customerId: inv.customerId,
-          customerName: cust?.name || 'Walk-in Customer',
-          customerShop: cust?.shopName || 'Walk-in Customer',
-          customerPhone: cust?.phone || '',
-          customerGstin: cust?.gstin || null,
+          customerName: cust?.name || inv.customerName || 'Walk-in Customer',
+          customerShop: cust?.shopName || inv.customerName || 'Walk-in Customer',
+          customerPhone: cust?.phone || inv.customerPhone || '',
+          customerGstin: cust?.gstin || inv.customerGstin || null,
           customerAddress: cust?.address || '',
-          status: inv.status || 'ISSUED',
+          status: inv.status || (BigInt(inv.creditBalancePaise || '0') === 0n ? 'PAID' : 'ISSUED'),
           cancelReason: inv.cancelReason || null,
           grandTotalPaise: inv.grandTotalPaise,
           paidNowPaise: inv.paidNowPaise,
@@ -121,6 +121,9 @@ export async function POST(req: NextRequest) {
       upiPaidPaise = 0,
       upiRef,
       invoiceDate,
+      customerName,
+      customerPhone,
+      customerGstin,
     } = body;
 
     if (!items || items.length === 0) {
@@ -129,13 +132,12 @@ export async function POST(req: NextRequest) {
 
     const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
 
-    // Parse custom invoice date if provided
+    // Parse custom invoice date and retain real-time timestamp
     let invoiceCreatedDate = new Date();
     if (invoiceDate && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate)) {
-      const parsed = new Date(`${invoiceDate}T12:00:00.000Z`);
-      if (!isNaN(parsed.getTime())) {
-        invoiceCreatedDate = parsed;
-      }
+      const now = new Date();
+      const [year, month, day] = invoiceDate.split('-').map(Number);
+      invoiceCreatedDate = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
     }
     const invoiceCreatedIso = invoiceCreatedDate.toISOString();
 
@@ -328,7 +330,11 @@ export async function POST(req: NextRequest) {
     const localInvoice = localStore.createInvoice({
       tenantId: targetTenantId,
       customerId: customerId || undefined,
+      customerName: customerName || undefined,
+      customerPhone: customerPhone || undefined,
+      customerGstin: customerGstin || undefined,
       invoiceNumber,
+      status: balanceOnCredit === 0n ? 'PAID' : 'ISSUED',
       grandTotalPaise: taxSummary.grandTotal.toString(),
       paidNowPaise: totalPaidNow.toString(),
       creditBalancePaise: balanceOnCredit.toString(),

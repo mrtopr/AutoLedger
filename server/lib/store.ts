@@ -88,6 +88,9 @@ export interface LocalInvoice {
   id: string;
   tenantId: string;
   customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerGstin?: string;
   invoiceNumber: string;
   status?: string;
   cancelReason?: string;
