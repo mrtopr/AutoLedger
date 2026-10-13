@@ -63,12 +63,19 @@ export async function getAuthenticatedUser(req: NextRequest | Request) {
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.userId);
   const hasDb = await isPostgresAvailable();
-  if (hasDb && isUuid) {
+  if (hasDb) {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
-        include: { tenant: true },
-      });
+      const user = isUuid
+        ? await prisma.user.findUnique({
+            where: { id: payload.userId },
+            include: { tenant: true },
+          })
+        : (payload.phone
+            ? await prisma.user.findFirst({
+                where: { phone: payload.phone },
+                include: { tenant: true },
+              })
+            : null);
 
       if (user && user.isActive) {
         return {

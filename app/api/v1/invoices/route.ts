@@ -21,10 +21,18 @@ export async function GET(req: NextRequest) {
     let invoices: any[] = [];
     let dbSuccess = false;
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(targetTenantId)) {
+    let effectiveTenantId = isUuid(targetTenantId) ? targetTenantId : null;
+    if (!effectiveTenantId && hasDb) {
+      try {
+        const foundTenant = await prisma.tenant.findFirst({ select: { id: true } });
+        if (foundTenant) effectiveTenantId = foundTenant.id;
+      } catch {}
+    }
+
+    if (hasDb && effectiveTenantId) {
       try {
         const dbInvoices = await prisma.invoice.findMany({
-          where: { tenantId: targetTenantId },
+          where: { tenantId: effectiveTenantId },
           include: { customer: true, items: true, allocations: { include: { payment: true } } },
           orderBy: { createdAt: 'desc' },
         });
@@ -160,12 +168,34 @@ export async function POST(req: NextRequest) {
     // 2. Try Prisma first if DB available
     let dbInvoice: any = null;
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(targetTenantId)) {
+    let dbTenantId = isUuid(targetTenantId) ? targetTenantId : null;
+    if (!dbTenantId && hasDb) {
+      try {
+        const found = await prisma.tenant.findFirst({ select: { id: true } });
+        if (found) dbTenantId = found.id;
+      } catch {}
+    }
+
+    let dbCustomerId = (customerId && isUuid(customerId)) ? customerId : null;
+    if (!dbCustomerId && customerId && hasDb && dbTenantId) {
+      try {
+        const localCust = localStore.getCustomerById(customerId);
+        if (localCust?.phone) {
+          const found = await prisma.customer.findFirst({
+            where: { tenantId: dbTenantId, phone: localCust.phone },
+            select: { id: true }
+          });
+          if (found) dbCustomerId = found.id;
+        }
+      } catch {}
+    }
+
+    if (hasDb && dbTenantId) {
       try {
         const invoice = await prisma.invoice.create({
           data: {
-            tenantId: targetTenantId,
-            customerId: customerId || null,
+            tenantId: dbTenantId,
+            customerId: dbCustomerId,
             invoiceType: InvoiceType.TAX_INVOICE,
             number: invoiceNumber,
             seriesCode: 'INV',
@@ -184,7 +214,7 @@ export async function POST(req: NextRequest) {
             createdAt: invoiceCreatedDate,
             items: {
               create: items.map((it: any) => ({
-                productId: it.productId || null,
+                productId: (it.productId && isUuid(it.productId)) ? it.productId : null,
                 description: it.name || 'Part',
                 hsnCode: it.hsnCode || '8714',
                 gstRateBp: it.gstRateBp || 1800,
@@ -202,12 +232,12 @@ export async function POST(req: NextRequest) {
         dbInvoice = invoice;
 
         // Double-Entry Ledger Posting in Postgres
-        if (customerId && isUuid(customerId)) {
+        if (dbCustomerId) {
           // 1. Post Debit Ledger Entry for the Invoice
           await prisma.ledgerEntry.create({
             data: {
-              tenantId: targetTenantId,
-              customerId,
+              tenantId: dbTenantId,
+              customerId: dbCustomerId,
               entryType: LedgerEntryType.INVOICE,
               refId: invoice.id,
               debit: taxSummary.grandTotal,
@@ -224,8 +254,8 @@ export async function POST(req: NextRequest) {
           if (cashAmt > 0n) {
             const cashPay = await prisma.payment.create({
               data: {
-                tenantId: targetTenantId,
-                customerId,
+                tenantId: dbTenantId,
+                customerId: dbCustomerId,
                 amount: cashAmt,
                 mode: PaymentMode.CASH,
                 reference: `CASH-${invoiceNumber}`,
@@ -247,8 +277,8 @@ export async function POST(req: NextRequest) {
           if (upiAmt > 0n) {
             const upiPay = await prisma.payment.create({
               data: {
-                tenantId: targetTenantId,
-                customerId,
+                tenantId: dbTenantId,
+                customerId: dbCustomerId,
                 amount: upiAmt,
                 mode: PaymentMode.UPI,
                 reference: upiRef || `UPI-${invoiceNumber}`,
@@ -270,8 +300,8 @@ export async function POST(req: NextRequest) {
           if (cashAmt <= 0n && upiAmt <= 0n && totalPaidNow > 0n) {
             const fallbackPay = await prisma.payment.create({
               data: {
-                tenantId: targetTenantId,
-                customerId,
+                tenantId: dbTenantId,
+                customerId: dbCustomerId,
                 amount: totalPaidNow,
                 mode: PaymentMode.CASH,
                 reference: `POS-${invoiceNumber}`,
@@ -293,8 +323,8 @@ export async function POST(req: NextRequest) {
           if (totalPaidNow > 0n) {
             await prisma.ledgerEntry.create({
               data: {
-                tenantId: targetTenantId,
-                customerId,
+                tenantId: dbTenantId,
+                customerId: dbCustomerId,
                 entryType: LedgerEntryType.PAYMENT,
                 refId: invoice.id,
                 debit: 0n,
@@ -307,22 +337,19 @@ export async function POST(req: NextRequest) {
 
           // 3. Re-calculate customer balance and update credit health status
           const customer = await prisma.customer.findUnique({
-            where: { id: customerId },
+            where: { id: dbCustomerId },
             include: { ledgerEntries: { select: { debit: true, credit: true } } },
           });
           if (customer) {
             const runningBal = customer.ledgerEntries.reduce((sum, e) => sum + e.debit - e.credit, 0n);
             await prisma.customer.update({
-              where: { id: customerId },
+              where: { id: dbCustomerId },
               data: { status: runningBal <= customer.creditLimit ? 'GREEN' : 'YELLOW' },
             });
           }
-
-          // 4. Double-Entry General Ledger auto-posting
-          // (Handled via customer ledgerEntry & payment records above)
         }
-      } catch (dbErr) {
-        console.warn('Postgres unavailable for invoice create, using localStore fallback', dbErr);
+      } catch (dbErr: any) {
+        console.warn('Postgres unavailable for invoice create, using localStore fallback', dbErr?.message);
       }
     }
 

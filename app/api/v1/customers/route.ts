@@ -19,11 +19,19 @@ export async function GET(req: NextRequest) {
 
     // 1. Try Prisma first if Postgres is available
     const hasDb = await isPostgresAvailable();
-    if (hasDb && (!authUser?.tenantId || isUuid(authUser?.tenantId))) {
+    let effectiveTenantId = isUuid(authUser?.tenantId) ? (authUser?.tenantId as string) : null;
+    if (!effectiveTenantId && hasDb) {
+      try {
+        const first = await prisma.tenant.findFirst({ select: { id: true } });
+        if (first) effectiveTenantId = first.id;
+      } catch {}
+    }
+
+    if (hasDb && effectiveTenantId) {
       try {
         const customers = await prisma.customer.findMany({
           where: {
-            ...(authUser?.tenantId && isUuid(authUser.tenantId) ? { tenantId: authUser.tenantId } : {}),
+            tenantId: effectiveTenantId,
             isActive: true,
             ...(query ? {
               OR: [
@@ -153,19 +161,34 @@ export async function POST(req: NextRequest) {
 
     // 1. Try Prisma if available
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(targetTenantId)) {
+    let dbTenantId = isUuid(targetTenantId) ? targetTenantId : null;
+    if (!dbTenantId && hasDb) {
+      try {
+        const first = await prisma.tenant.findFirst({ select: { id: true } });
+        if (first) dbTenantId = first.id;
+      } catch {}
+    }
+
+    let cType: CustomerType = CustomerType.GARAGE;
+    if (customerType === 'RETAILER' || customerType === 'DISTRIBUTOR' || customerType === 'WHOLESALER') {
+      cType = CustomerType.RETAILER;
+    } else if (customerType === 'WALK_IN') {
+      cType = CustomerType.WALK_IN;
+    }
+
+    if (hasDb && dbTenantId) {
       try {
         const customer = await prisma.customer.create({
           data: {
-            tenantId: targetTenantId,
+            tenantId: dbTenantId,
             name: name || shopName,
             shopName: shopName || name,
             phone,
             address: address || null,
             gstin: gstin || null,
-            creditLimit: BigInt(creditLimitPaise),
+            creditLimit: BigInt(creditLimitPaise || 5000000),
             paymentTermsDays: parseInt(paymentTermsDays, 10) || 15,
-            customerType: customerType as CustomerType,
+            customerType: cType,
             status: CreditStatus.GREEN,
             isActive: true,
           }
@@ -174,7 +197,7 @@ export async function POST(req: NextRequest) {
         if (initialBalPaise > 0n) {
           await prisma.ledgerEntry.create({
             data: {
-              tenantId: targetTenantId,
+              tenantId: dbTenantId,
               customerId: customer.id,
               entryType: 'ADJUSTMENT' as any,
               debit: isDueBal ? initialBalPaise : 0n,

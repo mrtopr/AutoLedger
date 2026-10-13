@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { queueCloudSync } from '@/server/lib/cloudSync';
+import { prisma } from '@/server/lib/prisma';
 
 export interface BulkImportItem {
   name: string;
@@ -76,8 +77,15 @@ export async function POST(req: NextRequest) {
     const localSummary = localStore.bulkUpsertProducts(targetTenantId, localStorePayload);
 
     // 2. Background cloud synchronization: queue non-blocking sync with automatic retries
-    if (authUser?.tenantId && isValidUuid(authUser.tenantId)) {
-      queueCloudSync(authUser.tenantId, items, authUser.id);
+    let syncTenantId = authUser?.tenantId && isValidUuid(authUser.tenantId) ? authUser.tenantId : null;
+    if (!syncTenantId) {
+      try {
+        const found = await prisma.tenant.findFirst({ select: { id: true } });
+        if (found) syncTenantId = found.id;
+      } catch {}
+    }
+    if (syncTenantId) {
+      queueCloudSync(syncTenantId, items, (authUser?.id && isValidUuid(authUser.id)) ? authUser.id : null);
     }
 
     return NextResponse.json({

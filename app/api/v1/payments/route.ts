@@ -17,10 +17,17 @@ export async function GET(req: NextRequest) {
 
     let payments: any[] = [];
     const hasDb = await isPostgresAvailable();
-
-    if (hasDb && isUuid(targetTenantId) && (!customerId || isUuid(customerId))) {
+    let effectiveTenantId = isUuid(targetTenantId) ? targetTenantId : null;
+    if (!effectiveTenantId && hasDb) {
       try {
-        const whereClause: any = { tenantId: targetTenantId };
+        const found = await prisma.tenant.findFirst({ select: { id: true } });
+        if (found) effectiveTenantId = found.id;
+      } catch {}
+    }
+
+    if (hasDb && effectiveTenantId && (!customerId || isUuid(customerId))) {
+      try {
+        const whereClause: any = { tenantId: effectiveTenantId };
         if (customerId) {
           whereClause.customerId = customerId;
         }
@@ -131,17 +138,31 @@ export async function POST(req: NextRequest) {
     let unallocatedAdvance = amt;
 
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(customerId)) {
+    let dbCustomerId = isUuid(customerId) ? customerId : null;
+    if (!dbCustomerId && hasDb) {
+      try {
+        const localCust = localStore.getCustomerById(customerId);
+        if (localCust?.phone) {
+          const found = await prisma.customer.findFirst({
+            where: { phone: localCust.phone },
+            select: { id: true }
+          });
+          if (found) dbCustomerId = found.id;
+        }
+      } catch {}
+    }
+
+    if (hasDb && dbCustomerId) {
       try {
         const customer = await prisma.customer.findUnique({
-          where: { id: customerId },
+          where: { id: dbCustomerId },
         });
 
         if (customer) {
           // Fetch open invoices with positive balance
           const openInvoices = await prisma.invoice.findMany({
             where: {
-              customerId,
+              customerId: dbCustomerId,
               tenantId: customer.tenantId,
               balanceDue: { gt: 0n },
             },
@@ -181,7 +202,7 @@ export async function POST(req: NextRequest) {
                 reference: ref,
                 status: PaymentStatus.CLEARED,
                 notes: notes || null,
-                receivedBy: authUser?.id || null,
+                receivedBy: (authUser?.id && isUuid(authUser.id)) ? authUser.id : null,
               },
             });
 

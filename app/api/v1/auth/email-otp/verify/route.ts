@@ -65,6 +65,30 @@ export async function POST(req: NextRequest) {
 
       if (!user) {
         user = localStore.findUser(rawEmail);
+        if (user && hasDb) {
+          try {
+            const targetTenantId = (user.tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.tenantId))
+              ? user.tenantId
+              : (await prisma.tenant.findFirst({ select: { id: true } }))?.id;
+            if (targetTenantId) {
+              const synced = await prisma.user.create({
+                data: {
+                  tenantId: targetTenantId,
+                  name: user.name,
+                  phone: user.phone,
+                  email: user.email || null,
+                  password: user.password || null,
+                  role: (user.role as any) || 'COUNTER_STAFF',
+                  isActive: true,
+                },
+                include: { tenant: true },
+              });
+              user = synced;
+            }
+          } catch (syncErr) {
+            console.warn('Auto-sync user during email OTP verify failed:', syncErr);
+          }
+        }
       }
 
       if (!user) {

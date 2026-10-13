@@ -39,6 +39,30 @@ export async function POST(req: NextRequest) {
     // 2. If not found in Prisma or DB offline, check localStore
     if (!user) {
       user = localStore.findUser(cleanLoginId);
+      if (user && hasDb) {
+        try {
+          const targetTenantId = (user.tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.tenantId))
+            ? user.tenantId
+            : (await prisma.tenant.findFirst({ select: { id: true } }))?.id;
+          if (targetTenantId) {
+            const syncedUser = await prisma.user.create({
+              data: {
+                tenantId: targetTenantId,
+                name: user.name,
+                phone: user.phone,
+                email: user.email || null,
+                password: user.password || null,
+                role: (user.role as any) || 'COUNTER_STAFF',
+                isActive: true,
+              },
+              include: { tenant: true },
+            });
+            user = syncedUser;
+          }
+        } catch (syncErr) {
+          console.warn('Auto-sync user to DB failed during login:', syncErr);
+        }
+      }
     }
 
     if (!user) {
