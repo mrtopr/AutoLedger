@@ -2,15 +2,15 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/app/context/LanguageContext';
-import { 
-  Search, 
-  Plus, 
-  RefreshCw, 
-  CheckCircle2, 
-  X, 
-  Edit2, 
-  Trash2, 
-  Check, 
+import {
+  Search,
+  Plus,
+  RefreshCw,
+  CheckCircle2,
+  X,
+  Edit2,
+  Trash2,
+  Check,
   AlertCircle,
   Package,
   FileSpreadsheet,
@@ -166,16 +166,16 @@ export default function InventoryPage() {
   const filtered = useMemo(() => {
     return products.filter((p) => {
       const matchDept = selectedDept === 'All Departments' || p.category === selectedDept;
-      
+
       let matchStatus = true;
       if (statusFilter === 'LOW') matchStatus = p.stockQty > 0 && p.stockQty <= p.reorderLevel;
       else if (statusFilter === 'OUT') matchStatus = p.stockQty <= 0;
       else if (statusFilter === 'HEALTHY') matchStatus = p.stockQty > p.reorderLevel;
 
       const q = search.trim().toLowerCase();
-      const matchSearch = !q || 
-        p.name.toLowerCase().includes(q) || 
-        p.partNumber.toLowerCase().includes(q) || 
+      const matchSearch = !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.partNumber.toLowerCase().includes(q) ||
         p.brand.toLowerCase().includes(q) ||
         (p.models && p.models.some((m) => m.toLowerCase().includes(q)));
 
@@ -196,13 +196,13 @@ export default function InventoryPage() {
 
   // Selection Handlers
   const handleToggleSelect = (id: string) => {
-    setSelectedIds((prev) => 
+    setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  const isAllCurrentPageSelected = 
-    paginatedProducts.length > 0 && 
+  const isAllCurrentPageSelected =
+    paginatedProducts.length > 0 &&
     paginatedProducts.every((p) => selectedIds.includes(p.id));
 
   const handleToggleSelectAllPage = () => {
@@ -408,11 +408,10 @@ export default function InventoryPage() {
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-medium flex items-center gap-2 ${
-          toast.type === 'success' 
-            ? 'bg-[#0F172A] text-white border-[#334155]' 
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-medium flex items-center gap-2 ${toast.type === 'success'
+            ? 'bg-[#0F172A] text-white border-[#334155]'
             : 'bg-[#991B1B] text-white border-[#B91C1C]'
-        }`}>
+          }`}>
           {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-[#4ADE80]" /> : <AlertCircle className="w-4 h-4 text-[#FCA5A5]" />}
           <span>{toast.message}</span>
         </div>
@@ -449,7 +448,7 @@ export default function InventoryPage() {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#C81E1E]' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-          
+
           {/* Bulk Excel / CSV Import Button */}
           <button
             onClick={() => setIsBulkImportOpen(true)}
@@ -508,13 +507,12 @@ export default function InventoryPage() {
           <div className="text-[11px] text-[#64748B]">{totalUnits} units on warehouse shelves</div>
         </div>
 
-        <div 
+        <div
           onClick={() => setStatusFilter(statusFilter === 'LOW' ? 'ALL' : 'LOW')}
-          className={`cursor-pointer border rounded-lg p-3.5 shadow-2xs transition-colors bg-white ${
-            statusFilter === 'LOW' 
-              ? 'border-[#D97706] ring-2 ring-[#D97706]/20' 
+          className={`cursor-pointer border rounded-lg p-3.5 shadow-2xs transition-colors bg-white ${statusFilter === 'LOW'
+              ? 'border-[#D97706] ring-2 ring-[#D97706]/20'
               : 'border-[#E2E8F0] hover:border-[#FDE68A]'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#D97706]">{t('dash.low_stock_spares', 'Low Stock Items')}</span>
@@ -569,26 +567,23 @@ export default function InventoryPage() {
           <div className="flex items-center bg-[#F1F5F9] p-0.5 rounded-md border border-[#E2E8F0] text-xs">
             <button
               onClick={() => setStatusFilter('ALL')}
-              className={`h-7 px-3 rounded text-[11px] font-medium transition ${
-                statusFilter === 'ALL' ? 'bg-white text-[#0F172A] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
+              className={`h-7 px-3 rounded text-[11px] font-medium transition ${statusFilter === 'ALL' ? 'bg-white text-[#0F172A] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
             >
               All ({products.length})
             </button>
             <button
               onClick={() => setStatusFilter('LOW')}
-              className={`h-7 px-3 rounded text-[11px] font-medium transition flex items-center gap-1.5 ${
-                statusFilter === 'LOW' ? 'bg-white text-[#92400E] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
+              className={`h-7 px-3 rounded text-[11px] font-medium transition flex items-center gap-1.5 ${statusFilter === 'LOW' ? 'bg-white text-[#92400E] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
             >
               <span>Low</span>
               {lowStockCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-[#D97706]" />}
             </button>
             <button
               onClick={() => setStatusFilter('HEALTHY')}
-              className={`h-7 px-3 rounded text-[11px] font-medium transition ${
-                statusFilter === 'HEALTHY' ? 'bg-white text-[#0F172A] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
+              className={`h-7 px-3 rounded text-[11px] font-medium transition ${statusFilter === 'HEALTHY' ? 'bg-white text-[#0F172A] shadow-2xs font-semibold' : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
             >
               In Stock
             </button>
@@ -679,11 +674,10 @@ export default function InventoryPage() {
                   const isSelected = selectedIds.includes(p.id);
 
                   return (
-                    <tr 
-                      key={p.id} 
-                      className={`transition-colors ${
-                        isSelected ? 'bg-red-50/40 hover:bg-red-50/60' : 'hover:bg-[#F8F9FA]'
-                      }`}
+                    <tr
+                      key={p.id}
+                      className={`transition-colors ${isSelected ? 'bg-red-50/40 hover:bg-red-50/60' : 'hover:bg-[#F8F9FA]'
+                        }`}
                     >
                       {/* Selection Checkbox */}
                       <td className="py-3 px-3 text-center">
@@ -720,9 +714,8 @@ export default function InventoryPage() {
 
                       {/* Current Stock */}
                       <td className="py-3 px-4 text-center">
-                        <span className={`font-mono tabular-nums font-semibold text-xs ${
-                          isOut ? 'text-[#991B1B]' : isLow ? 'text-[#92400E]' : 'text-[#0F172A]'
-                        }`}>
+                        <span className={`font-mono tabular-nums font-semibold text-xs ${isOut ? 'text-[#991B1B]' : isLow ? 'text-[#92400E]' : 'text-[#0F172A]'
+                          }`}>
                           {p.stockQty}
                         </span>
                         <span className="text-[10px] text-[#64748B] ml-1">{p.unit}</span>
@@ -750,21 +743,19 @@ export default function InventoryPage() {
 
                       {/* Status */}
                       <td className="py-3 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                          isOut 
-                            ? 'bg-[#FEF2F2] text-[#991B1B] border border-[#FEE2E2]' 
-                            : isLow 
-                            ? 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]' 
-                            : 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            isOut ? 'bg-[#C81E1E]' : isLow ? 'bg-[#D97706]' : 'bg-[#16A34A]'
-                          }`} />
-                          {isOut 
-                            ? 'Out of Stock' 
-                            : isLow 
-                            ? 'Low Stock' 
-                            : 'In Stock'}
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${isOut
+                            ? 'bg-[#FEF2F2] text-[#991B1B] border border-[#FEE2E2]'
+                            : isLow
+                              ? 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]'
+                              : 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]'
+                          }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isOut ? 'bg-[#C81E1E]' : isLow ? 'bg-[#D97706]' : 'bg-[#16A34A]'
+                            }`} />
+                          {isOut
+                            ? 'Out of Stock'
+                            : isLow
+                              ? 'Low Stock'
+                              : 'In Stock'}
                         </span>
                       </td>
 
@@ -786,7 +777,7 @@ export default function InventoryPage() {
                           >
                             + Stock
                           </button>
-                          
+
                           <button
                             onClick={() => {
                               setSelectedProduct(p);
@@ -1064,18 +1055,16 @@ export default function InventoryPage() {
                   <button
                     type="button"
                     onClick={() => setAdjustData({ ...adjustData, mode: 'ADD', reason: 'PURCHASE' })}
-                    className={`py-1.5 rounded-md transition text-xs ${
-                      adjustData.mode === 'ADD' ? 'bg-white text-[#166534] shadow-2xs font-semibold' : 'text-[#64748B]'
-                    }`}
+                    className={`py-1.5 rounded-md transition text-xs ${adjustData.mode === 'ADD' ? 'bg-white text-[#166534] shadow-2xs font-semibold' : 'text-[#64748B]'
+                      }`}
                   >
                     + Add Stock
                   </button>
                   <button
                     type="button"
                     onClick={() => setAdjustData({ ...adjustData, mode: 'DEDUCT', reason: 'ADJUSTMENT' })}
-                    className={`py-1.5 rounded-md transition text-xs ${
-                      adjustData.mode === 'DEDUCT' ? 'bg-white text-[#92400E] shadow-2xs font-semibold' : 'text-[#64748B]'
-                    }`}
+                    className={`py-1.5 rounded-md transition text-xs ${adjustData.mode === 'DEDUCT' ? 'bg-white text-[#92400E] shadow-2xs font-semibold' : 'text-[#64748B]'
+                      }`}
                   >
                     - Deduct Stock
                   </button>
@@ -1129,9 +1118,8 @@ export default function InventoryPage() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className={`h-8.5 px-5 text-white rounded-md font-semibold shadow-xs transition ${
-                      adjustData.mode === 'ADD' ? 'bg-[#16A34A] hover:bg-[#15803D]' : 'bg-[#D97706] hover:bg-[#B45309]'
-                    }`}
+                    className={`h-8.5 px-5 text-white rounded-md font-semibold shadow-xs transition ${adjustData.mode === 'ADD' ? 'bg-[#16A34A] hover:bg-[#15803D]' : 'bg-[#D97706] hover:bg-[#B45309]'
+                      }`}
                   >
                     {submitting ? 'Updating...' : 'Confirm'}
                   </button>
@@ -1332,11 +1320,10 @@ export default function InventoryPage() {
                   <button
                     type="button"
                     onClick={() => setBulkDeleteAction('SELECTED')}
-                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
-                      bulkDeleteAction === 'SELECTED'
+                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${bulkDeleteAction === 'SELECTED'
                         ? 'border-[#DC2626] bg-[#FEF2F2] text-[#991B1B] ring-1 ring-[#DC2626]'
                         : 'border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#475569]'
-                    }`}
+                      }`}
                   >
                     <span className="font-semibold text-xs">Selected</span>
                     <span className="text-[11px] opacity-80 mt-1">{selectedIds.length} items</span>
@@ -1345,11 +1332,10 @@ export default function InventoryPage() {
                   <button
                     type="button"
                     onClick={() => setBulkDeleteAction('FILTER')}
-                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
-                      bulkDeleteAction === 'FILTER'
+                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${bulkDeleteAction === 'FILTER'
                         ? 'border-[#DC2626] bg-[#FEF2F2] text-[#991B1B] ring-1 ring-[#DC2626]'
                         : 'border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#475569]'
-                    }`}
+                      }`}
                   >
                     <span className="font-semibold text-xs">Filtered</span>
                     <span className="text-[11px] opacity-80 mt-1">{filtered.length} items</span>
@@ -1358,11 +1344,10 @@ export default function InventoryPage() {
                   <button
                     type="button"
                     onClick={() => setBulkDeleteAction('ALL')}
-                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
-                      bulkDeleteAction === 'ALL'
+                    className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${bulkDeleteAction === 'ALL'
                         ? 'border-[#DC2626] bg-[#FEF2F2] text-[#991B1B] ring-1 ring-[#DC2626]'
                         : 'border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#475569]'
-                    }`}
+                      }`}
                   >
                     <span className="font-semibold text-xs">Purge All</span>
                     <span className="text-[11px] opacity-80 mt-1">{products.length} items</span>
@@ -1380,7 +1365,7 @@ export default function InventoryPage() {
                     )}
                   </div>
                   <p className="text-[11px] text-[#64748B]">
-                    {selectedIds.length > 0 
+                    {selectedIds.length > 0
                       ? 'Only the items currently ticked with checkboxes will be removed from active inventory.'
                       : 'Please check the checkboxes next to products in the table, or use the "Filtered" option.'}
                   </p>
@@ -1451,8 +1436,8 @@ export default function InventoryPage() {
                 >
                   {bulkDeleting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>
-                    {bulkDeleting 
-                      ? 'Deleting...' 
+                    {bulkDeleting
+                      ? 'Deleting...'
                       : bulkDeleteAction === 'SELECTED'
                         ? `Delete Selected (${selectedIds.length})`
                         : bulkDeleteAction === 'FILTER'

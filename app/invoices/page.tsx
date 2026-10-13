@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  FileText, 
-  Plus, 
-  Search, 
-  Receipt, 
-  Eye, 
-  Printer, 
+import {
+  FileText,
+  Plus,
+  Search,
+  Receipt,
+  Eye,
+  Printer,
   MessageCircle,
   Clock,
   CheckCircle2,
@@ -181,7 +181,7 @@ export default function InvoicesPage() {
       `Thank you for your business!\n` +
       `*${tenant?.name || 'TradeLedger'}*`;
 
-    const url = phone.length >= 10 
+    const url = phone.length >= 10
       ? `https://api.whatsapp.com/send?phone=91${phone.slice(-10)}&text=${encodeURIComponent(message)}`
       : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
 
@@ -193,7 +193,7 @@ export default function InvoicesPage() {
     const isPaid = !isCancelled && BigInt(inv.creditBalancePaise || 0) === 0n;
     const isCredit = !isCancelled && BigInt(inv.creditBalancePaise || 0) > 0n;
 
-    const matchesFilter = 
+    const matchesFilter =
       filterMode === 'ALL' ||
       (filterMode === 'PAID' && isPaid) ||
       (filterMode === 'CREDIT' && isCredit) ||
@@ -338,11 +338,10 @@ export default function InvoicesPage() {
             <button
               key={id}
               onClick={() => setFilterMode(id)}
-              className={`h-7 px-3 rounded text-[11px] font-medium transition cursor-pointer ${
-                filterMode === id
+              className={`h-7 px-3 rounded text-[11px] font-medium transition cursor-pointer ${filterMode === id
                   ? 'bg-white text-[#0F172A] shadow-2xs font-semibold'
                   : 'text-[#64748B] hover:text-[#0F172A]'
-              }`}
+                }`}
             >
               {label}
             </button>
@@ -384,7 +383,7 @@ export default function InvoicesPage() {
                 filteredInvoices.map((inv) => {
                   const isCancelled = inv.status === 'CANCELLED';
                   const isPaid = !isCancelled && BigInt(inv.creditBalancePaise || 0) === 0n;
-                  const formattedDate = inv.createdAt 
+                  const formattedDate = inv.createdAt
                     ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                     : 'Today';
 
@@ -423,11 +422,10 @@ export default function InvoicesPage() {
                             CANCELLED
                           </span>
                         ) : (
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                            isPaid 
-                              ? 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]' 
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${isPaid
+                              ? 'bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7]'
                               : 'bg-[#FFFBEB] text-[#92400E] border border-[#FEF3C7]'
-                          }`}>
+                            }`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-[#16A34A]' : 'bg-[#D97706]'}`} />
                             {isPaid ? 'PAID' : 'DUE ON CREDIT'}
                           </span>
@@ -441,10 +439,10 @@ export default function InvoicesPage() {
                           <button
                             onClick={() => openPreview(inv)}
                             className="h-7 px-2.5 bg-white hover:bg-[#F1F5F9] text-[#334155] rounded-md border border-[#CBD5E1] transition flex items-center gap-1.5 text-[11px] shadow-2xs font-medium cursor-pointer"
-                            title="Preview and Print Vector Invoice"
+                            title="View Digital Paperless Bill"
                           >
-                            <Printer className="w-3 h-3 text-[#64748B]" />
-                            <span>Print</span>
+                            <Eye className="w-3 h-3 text-[#64748B]" />
+                            <span>View Bill</span>
                           </button>
 
                           {!isCancelled && (

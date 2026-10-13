@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  Printer, 
-  X, 
-  MessageCircle, 
+import {
+  Printer,
+  X,
+  MessageCircle,
   FileText,
-  Phone, 
-  MapPin, 
+  Phone,
+  MapPin,
   CreditCard,
   Building2,
   Mail,
@@ -93,7 +93,7 @@ function numberToWordsINR(amountPaise: number | string | bigint): string {
   const amount = Math.floor(Number(amountPaise) / 100);
   if (amount <= 0) return 'Zero Rupees Only';
 
-  const single = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 
+  const single = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
     'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
   const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
@@ -159,7 +159,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
   const showroomGst = invoice.tenant?.gstin || '10ABCDE1234F1Z5';
   const showroomPhone = invoice.tenant?.phone || '+91 9822100001';
   const showroomEmail = invoice.tenant?.email || 'honda@gmail.com';
-  
+
   // Extract clean state name (e.g. "10 - Bihar" -> "Bihar")
   const rawState = invoice.tenant?.stateCode || 'Bihar';
   const cleanState = (s?: string) => s ? s.replace(/^\d{1,2}\s*[-–—]\s*/, '').trim() || s : 'Bihar';
@@ -272,7 +272,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
   const handleWhatsAppShare = () => {
     const cleanPhone = customerPhone.replace(/[^0-9]/g, '');
     const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    
+
     const message = `*TAX INVOICE - ${showroomName.toUpperCase()}*\n` +
       `--------------------------------\n` +
       `*Invoice No:* ${invoice.invoiceNumber}\n` +
@@ -287,423 +287,385 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
       `*${showroomName}* | Tel: ${showroomPhone}`;
 
     const encoded = encodeURIComponent(message);
-    const url = targetPhone 
-      ? `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encoded}` 
+    const url = targetPhone
+      ? `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encoded}`
       : `https://api.whatsapp.com/send?text=${encoded}`;
-    
+
     window.open(url, '_blank');
   };
 
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:block print:h-auto">
-      
-      {/* Modal Card Container */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-4xl w-full flex flex-col max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:w-full print:rounded-none print:block print:p-0 print:m-0">
-        
-        {/* Top Modal Controls (Strictly Hidden on Print) */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-[#F8FAFC] rounded-t-2xl print:hidden shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-red-50 text-[#DC2626] flex items-center justify-center font-bold">
-              <FileText className="w-4 h-4" />
+
+        {/* Modal Card Container */}
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-4xl w-full flex flex-col max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:w-full print:rounded-none print:block print:p-0 print:m-0">
+
+          {/* Top Modal Controls (Strictly Hidden on Print) */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-[#F8FAFC] rounded-t-2xl print:hidden shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-red-50 text-[#DC2626] flex items-center justify-center font-bold">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>Tax Invoice Preview</span>
+                  <span className="text-xs font-mono font-bold text-[#DC2626] bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                    {invoice.invoiceNumber}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  1-Page A4 PDF & Print Ready · GST Compliant
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <span>Tax Invoice Preview</span>
-                <span className="text-xs font-mono font-bold text-[#DC2626] bg-red-50 px-2 py-0.5 rounded border border-red-100">
-                  {invoice.invoiceNumber}
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-500">
-                1-Page A4 PDF & Print Ready · GST Compliant
-              </div>
+
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-semibold rounded-lg border border-emerald-200">
+                🌱 Paperless Digital Bill
+              </span>
+
+              <button
+                onClick={handleWhatsAppShare}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold rounded-lg shadow-2xs transition"
+                title="Share invoice on WhatsApp"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </button>
+
+              <button
+                onClick={handleDownloadPDF}
+                disabled={isGeneratingPdf}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-semibold rounded-lg shadow-2xs transition"
+                title="Download 1-Page A4 PDF directly"
+              >
+                {isGeneratingPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
+                ) : (
+                  <Download className="w-4 h-4 text-emerald-400" />
+                )}
+                <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</span>
+              </button>
+
+              <button
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleWhatsAppShare}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold rounded-lg shadow-2xs transition"
-              title="Share invoice on WhatsApp"
-            >
-              <MessageCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">WhatsApp</span>
-            </button>
-
-            <button
-              onClick={handleDownloadPDF}
-              disabled={isGeneratingPdf}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-semibold rounded-lg shadow-2xs transition"
-              title="Download 1-Page A4 PDF directly"
-            >
-              {isGeneratingPdf ? (
-                <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
-              ) : (
-                <Download className="w-4 h-4 text-emerald-400" />
-              )}
-              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</span>
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold rounded-lg shadow-2xs transition"
-              title="Print or Save A4 PDF"
-            >
-              <Printer className="w-4 h-4" />
-              <span className="hidden sm:inline">Print A4</span>
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* ============================================================
+          {/* ============================================================
             STANDALONE 1-PAGE PROFESSIONAL GST INVOICE SHEET
            ============================================================ */}
-        <div 
-          id="printable-invoice-container"
-          className="flex-1 overflow-y-auto p-6 sm:p-7 space-y-3.5 text-slate-900 bg-white relative print:p-0 print:m-0 print:overflow-visible print:space-y-2.5 print:text-[11px]"
-        >
-          {invoice.status === 'CANCELLED' && (
-            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-between print:bg-red-100">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                <span><strong>CANCELLED INVOICE:</strong> {invoice.cancelReason ? `Reason: ${invoice.cancelReason}` : 'This bill has been cancelled and reversed.'}</span>
+          <div
+            id="printable-invoice-container"
+            className="flex-1 overflow-y-auto p-6 sm:p-7 space-y-3.5 text-slate-900 bg-white relative print:p-0 print:m-0 print:overflow-visible print:space-y-2.5 print:text-[11px]"
+          >
+            {invoice.status === 'CANCELLED' && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-between print:bg-red-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                  <span><strong>CANCELLED INVOICE:</strong> {invoice.cancelReason ? `Reason: ${invoice.cancelReason}` : 'This bill has been cancelled and reversed.'}</span>
+                </div>
+                <span className="font-mono text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">
+                  Reversed on Ledger
+                </span>
               </div>
-              <span className="font-mono text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">
-                Reversed on Ledger
-              </span>
-            </div>
-          )}
+            )}
 
-          {invoice.status === 'CANCELLED' && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none overflow-hidden z-20">
-              <div className="text-red-500/15 border-8 border-red-500/20 text-6xl sm:text-8xl font-black uppercase tracking-widest rotate-[-25deg] px-8 py-3 rounded-2xl select-none">
-                CANCELLED
+            {invoice.status === 'CANCELLED' && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none overflow-hidden z-20">
+                <div className="text-red-500/15 border-8 border-red-500/20 text-6xl sm:text-8xl font-black uppercase tracking-widest rotate-[-25deg] px-8 py-3 rounded-2xl select-none">
+                  CANCELLED
+                </div>
+              </div>
+            )}
+
+            {/* 1. COMPANY HEADER & TAX INVOICE METADATA */}
+            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-3">
+              {/* Top-Left: Company Logo & Identity */}
+              <div className="space-y-1 max-w-md">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-none uppercase">
+                      {showroomName}
+                    </h1>
+                    {showroomLegal && showroomLegal !== showroomName && (
+                      <div className="text-[10px] font-semibold text-slate-500 tracking-wide mt-0.5">
+                        {showroomLegal}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-600 space-y-1 pt-1.5 leading-tight">
+                  <div className="flex items-center gap-1.5 text-slate-700">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{showroomAddress}</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-700">
+                    <span className="flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span className="font-mono">{showroomPhone}</span>
+                    </span>
+                    {showroomEmail && (
+                      <span className="flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{showroomEmail}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] pt-0.5 text-slate-700 font-medium">
+                    <span>
+                      <span className="text-slate-500">GSTIN:</span>{' '}
+                      <strong className="font-mono font-bold text-slate-900">{showroomGst}</strong>
+                    </span>
+                    <span>
+                      <span className="text-slate-500">State:</span>{' '}
+                      <strong className="font-semibold text-slate-900">{stateDisplay}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top-Right: Digital Bill Tag & Exact Timestamp Meta Details */}
+              <div className="text-right space-y-1">
+                <div className="inline-block px-3 py-1 bg-slate-900 text-white font-black text-xs rounded uppercase tracking-wider">
+                  DIGITAL CASH BILL / INVOICE
+                </div>
+                <div className="text-[9px] text-emerald-700 font-bold uppercase tracking-wider flex items-center justify-end gap-1">
+                  <span>🌱 100% Paperless Digital E-Bill</span>
+                </div>
+
+                <div className="text-[11px] space-y-1 pt-1 leading-tight">
+                  <div>
+                    <span className="text-slate-500">Bill No: </span>
+                    <span className="font-mono font-black text-slate-900 text-xs">{invoice.invoiceNumber}</span>
+                  </div>
+                  <div className="bg-slate-100 px-2.5 py-1.5 rounded-md border border-slate-200 mt-1 inline-block text-left">
+                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Exact Timestamp:</div>
+                    <div className="font-mono font-bold text-slate-900 text-xs flex items-center gap-2 mt-0.5">
+                      <span>📅 {invoiceDate}</span>
+                      <span>🕒 {invoiceTime}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
-          
-          {/* 1. COMPANY HEADER & TAX INVOICE METADATA */}
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-3">
-            {/* Top-Left: Company Logo & Identity */}
-            <div className="space-y-1 max-w-md">
-              <div className="flex items-center gap-3">
+
+            {/* 2. BILLED TO / CUSTOMER INFORMATION */}
+            <div className="bg-[#F8FAFC] border border-slate-200 rounded-lg p-2.5 grid grid-cols-2 gap-3 text-[11px] leading-tight">
+              <div className="space-y-0.5">
+                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                  Billed To (Customer / Client)
+                </div>
+                <div className="font-bold text-slate-900 text-xs">{customerShop}</div>
+                {customerName !== customerShop && (
+                  <div className="text-slate-600">Attn: {customerName}</div>
+                )}
+                <div className="text-slate-600 truncate">{customerAddress}</div>
+                <div className="text-slate-600 font-mono">Phone: {customerPhone || 'N/A'}</div>
+              </div>
+
+              <div className="text-right flex flex-col justify-between space-y-1">
                 <div>
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-none uppercase">
-                    {showroomName}
-                  </h1>
-                  {showroomLegal && showroomLegal !== showroomName && (
-                    <div className="text-[10px] font-semibold text-slate-500 tracking-wide mt-0.5">
-                      {showroomLegal}
+                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                    Customer Account
+                  </div>
+                  <div className="font-mono font-bold text-slate-900 text-xs mt-0.5">
+                    {customerPhone ? `+91 ${customerPhone}` : 'Walk-in Counter'}
+                  </div>
+                </div>
+
+                <div>
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${creditBalance === 0n
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      : paidNow > 0n
+                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                        : 'bg-amber-100 text-amber-800 border border-amber-200'
+                    }`}>
+                    {creditBalance === 0n ? '● Fully Paid' : paidNow > 0n ? '● Partially Paid' : '● Balance Due'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. ITEM DETAILS TABLE (CLEAN, NO GST) */}
+            <div className="border border-slate-300 rounded-lg overflow-hidden">
+              <table className="w-full text-left border-collapse text-[11px]">
+                <thead>
+                  <tr className="border-b border-slate-300 bg-slate-900 text-white font-semibold">
+                    <th className="py-1.5 px-2.5 w-8 text-center">#</th>
+                    <th className="py-1.5 px-2.5">Item Description & OEM Part No.</th>
+                    <th className="py-1.5 px-2 w-16 text-center">Qty</th>
+                    <th className="py-1.5 px-2.5 w-24 text-right">Rate (₹)</th>
+                    <th className="py-1.5 px-2.5 w-28 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-800">
+                  {invoice.items.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-center text-slate-400">
+                        No spare parts recorded
+                      </td>
+                    </tr>
+                  ) : (
+                    invoice.items.map((item, idx) => {
+                      const rateRupees = item.rateRupees || (Number(item.ratePaise || 0) / 100).toFixed(2);
+                      const totalPaise = BigInt(item.totalPaise || (Number(item.ratePaise || 0) * (item.qty || 1)));
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-2.5 text-center font-mono text-slate-500">{idx + 1}</td>
+                          <td className="py-1.5 px-2.5 font-medium text-slate-900">
+                            <div>{item.name}</div>
+                            {item.partNumber && (
+                              <div className="text-[9px] text-slate-500 font-mono font-normal">
+                                SKU: {item.partNumber}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-mono font-bold">
+                            {item.qty} {item.unit || 'pcs'}
+                          </td>
+                          <td className="py-1.5 px-2.5 text-right font-mono-numeric">
+                            {rateRupees}
+                          </td>
+                          <td className="py-1.5 px-2.5 text-right font-mono-numeric font-bold text-slate-900">
+                            {formatPaiseToRupees(totalPaise)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 4. TOTALS, WORDS, AND BANK DETAILS */}
+            <div className="grid grid-cols-12 gap-3 pt-1 text-[11px]">
+              {/* Left: Words, Bank & Terms (7 cols) */}
+              <div className="col-span-7 space-y-2">
+                {/* Words */}
+                <div className="bg-[#F8FAFC] p-2 rounded border border-slate-200 leading-tight">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Amount In Words:
+                  </span>
+                  <span className="font-semibold text-slate-900 italic text-[11px]">
+                    {numberToWordsINR(grandTotal)}
+                  </span>
+                </div>
+
+                {/* Direct Bank Settlement */}
+                <div className="border border-slate-200 p-2 rounded space-y-1 text-[10px] text-slate-600">
+                  <div className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                    <CreditCard className="w-3 h-3 text-blue-600" />
+                    <span>Direct Bank Settlement Details:</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono">
+                    <div>Bank: <span className="font-semibold text-slate-800">{bankName}</span></div>
+                    <div>IFSC: <span className="font-semibold text-slate-800">{ifscCode}</span></div>
+                    <div>A/C No: <span className="font-semibold text-slate-800">{accountNo}</span></div>
+                    <div>UPI: <span className="font-semibold text-slate-800">{upiId}</span></div>
+                  </div>
+                </div>
+
+                {/* Terms */}
+                <div className="text-[9px] text-slate-500 space-y-0.5 leading-tight">
+                  <div className="font-bold text-slate-700">Terms & Conditions:</div>
+                  <div>1. Goods once sold will not be accepted back without original digital receipt.</div>
+                  <div>2. OEM warranty terms apply. Digital receipt generated for instant accounting.</div>
+                </div>
+              </div>
+
+              {/* Right: Net Breakdown Summary (5 cols - NO GST) */}
+              <div className="col-span-5 space-y-1 bg-[#F8FAFC] p-2.5 rounded-lg border border-slate-200 text-[11px]">
+                <div className="flex justify-between text-slate-600">
+                  <span>Items Total / Subtotal:</span>
+                  <span className="font-mono-numeric font-semibold text-slate-800">
+                    {formatPaiseToRupees(grandTotal)}
+                  </span>
+                </div>
+
+                <div className="border-t border-slate-300 pt-1.5 flex justify-between items-baseline">
+                  <span className="font-bold text-slate-900 text-xs">Grand Total:</span>
+                  <span className="text-base font-black text-slate-900 font-mono-numeric">
+                    {formatPaiseToRupees(grandTotal)}
+                  </span>
+                </div>
+
+                <div className="border-t border-dashed border-slate-300 pt-1 space-y-0.5 text-[10px]">
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span>Paid at Counter:</span>
+                    <span className="font-mono-numeric font-bold">{formatPaiseToRupees(paidNow)}</span>
+                  </div>
+                  {creditBalance > 0n && (
+                    <div className="flex justify-between text-amber-700 font-semibold">
+                      <span>Balance on Khata:</span>
+                      <span className="font-mono-numeric font-bold">{formatPaiseToRupees(creditBalance)}</span>
                     </div>
                   )}
                 </div>
               </div>
-
-              <div className="text-[11px] text-slate-600 space-y-1 pt-1.5 leading-tight">
-                <div className="flex items-center gap-1.5 text-slate-700">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>{showroomAddress}</span>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-700">
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                    <span className="font-mono">{showroomPhone}</span>
-                  </span>
-                  {showroomEmail && (
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                      <span>{showroomEmail}</span>
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] pt-0.5 text-slate-700 font-medium">
-                  <span>
-                    <span className="text-slate-500">GSTIN:</span>{' '}
-                    <strong className="font-mono font-bold text-slate-900">{showroomGst}</strong>
-                  </span>
-                  <span>
-                    <span className="text-slate-500">State:</span>{' '}
-                    <strong className="font-semibold text-slate-900">{stateDisplay}</strong>
-                  </span>
-                </div>
-              </div>
             </div>
 
-            {/* Top-Right: Tax Invoice Tag & Meta Details */}
-            <div className="text-right space-y-0.5">
-              <div className="inline-block px-3 py-1 bg-slate-900 text-white font-black text-xs rounded uppercase tracking-wider">
-                TAX INVOICE
-              </div>
-              <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
-                Original for Recipient
-              </div>
-
-              <div className="text-[11px] space-y-1 pt-1.5 leading-tight">
-                <div>
-                  <span className="text-slate-500">Invoice No: </span>
-                  <span className="font-mono font-black text-slate-900 text-xs">{invoice.invoiceNumber}</span>
+            {/* 5. DUAL SIGNATURE & DIGITAL SIGNATURE SECTION */}
+            <div className="grid grid-cols-2 gap-6 pt-3.5 border-t border-slate-300">
+              {/* Left: Customer / Receiver Acknowledgment */}
+              <div className="space-y-1">
+                <div className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
+                  Customer / Receiver Acknowledgment
                 </div>
-                <div>
-                  <span className="text-slate-500">Date: </span>
-                  <span className="font-semibold text-slate-900">{invoiceDate}</span>
+                <div className="h-9 flex items-end">
+                  <div className="border-b border-slate-400 w-44" />
                 </div>
-                <div>
-                  <span className="text-slate-500">Time: </span>
-                  <span className="font-mono text-slate-700">{invoiceTime}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500">Place of Supply: </span>
-                  <span className="font-semibold text-slate-900">{placeOfSupplyDisplay}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500">Reverse Charge: </span>
-                  <span className="font-semibold text-slate-900">No</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. BILLED TO / CUSTOMER INFORMATION */}
-          <div className="bg-[#F8FAFC] border border-slate-200 rounded-lg p-2.5 grid grid-cols-2 gap-3 text-[11px] leading-tight">
-            <div className="space-y-0.5">
-              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                Billed To (Customer / Client)
-              </div>
-              <div className="font-bold text-slate-900 text-xs">{customerShop}</div>
-              {customerName !== customerShop && (
-                <div className="text-slate-600">Attn: {customerName}</div>
-              )}
-              <div className="text-slate-600 truncate">{customerAddress}</div>
-              <div className="text-slate-600 font-mono">Phone: {customerPhone || 'N/A'}</div>
-            </div>
-
-            <div className="text-right flex flex-col justify-between space-y-1">
-              <div>
-                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                  Customer GSTIN
-                </div>
-                <div className="font-mono font-bold text-slate-900 text-xs mt-0.5">
-                  {customerGstin}
+                <div className="text-[10px] text-slate-500 font-medium">
+                  Received in Good Condition · Signature & Date
                 </div>
               </div>
 
-              <div>
-                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                  creditBalance === 0n 
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                    : paidNow > 0n
-                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                    : 'bg-amber-100 text-amber-800 border border-amber-200'
-                }`}>
-                  {creditBalance === 0n ? '● Fully Paid' : paidNow > 0n ? '● Partially Paid' : '● Balance Due'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. ITEM DETAILS TABLE */}
-          <div className="border border-slate-300 rounded-lg overflow-hidden">
-            <table className="w-full text-left border-collapse text-[11px]">
-              <thead>
-                <tr className="border-b border-slate-300 bg-slate-900 text-white font-semibold">
-                  <th className="py-1.5 px-2.5 w-8 text-center">#</th>
-                  <th className="py-1.5 px-2.5">Item Description & OEM Part No.</th>
-                  <th className="py-1.5 px-2 w-16 text-center">HSN</th>
-                  <th className="py-1.5 px-2 w-14 text-center">Qty</th>
-                  <th className="py-1.5 px-2.5 w-20 text-right">Rate (₹)</th>
-                  <th className="py-1.5 px-2 w-14 text-center">GST</th>
-                  <th className="py-1.5 px-2.5 w-24 text-right">Amount (₹)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 text-slate-800">
-                {invoice.items.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-4 text-center text-slate-400">
-                      No spare parts recorded
-                    </td>
-                  </tr>
-                ) : (
-                  invoice.items.map((item, idx) => {
-                    const rateRupees = item.rateRupees || (Number(item.ratePaise || 0) / 100).toFixed(2);
-                    const totalPaise = BigInt(item.totalPaise || (Number(item.ratePaise || 0) * (item.qty || 1)));
-                    const gstPercent = (item.gstRateBp || 1800) / 100;
-
-                    return (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="py-1.5 px-2.5 text-center font-mono text-slate-500">{idx + 1}</td>
-                        <td className="py-1.5 px-2.5 font-medium text-slate-900">
-                          <div>{item.name}</div>
-                          {item.partNumber && (
-                            <div className="text-[9px] text-slate-500 font-mono font-normal">
-                              SKU: {item.partNumber}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-1.5 px-2 text-center font-mono text-slate-600">
-                          {item.hsnCode || '8714'}
-                        </td>
-                        <td className="py-1.5 px-2 text-center font-mono font-bold">
-                          {item.qty} {item.unit || 'pcs'}
-                        </td>
-                        <td className="py-1.5 px-2.5 text-right font-mono-numeric">
-                          {rateRupees}
-                        </td>
-                        <td className="py-1.5 px-2 text-center font-mono text-slate-600">
-                          {gstPercent}%
-                        </td>
-                        <td className="py-1.5 px-2.5 text-right font-mono-numeric font-bold text-slate-900">
-                          {formatPaiseToRupees(totalPaise)}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 4. TOTALS, WORDS, AND BANK DETAILS */}
-          <div className="grid grid-cols-12 gap-3 pt-1 text-[11px]">
-            {/* Left: Words, Bank & Terms (7 cols) */}
-            <div className="col-span-7 space-y-2">
-              {/* Words */}
-              <div className="bg-[#F8FAFC] p-2 rounded border border-slate-200 leading-tight">
-                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Amount In Words:
-                </span>
-                <span className="font-semibold text-slate-900 italic text-[11px]">
-                  {numberToWordsINR(grandTotal)}
-                </span>
-              </div>
-
-              {/* Direct Bank Settlement */}
-              <div className="border border-slate-200 p-2 rounded space-y-1 text-[10px] text-slate-600">
-                <div className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
-                  <CreditCard className="w-3 h-3 text-blue-600" />
-                  <span>Direct Bank Settlement Details:</span>
+              {/* Right: Certified Digital Signature & Security Stamp */}
+              <div className="text-right flex flex-col items-end space-y-1">
+                <div className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
+                  For {showroomName}
                 </div>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono">
-                  <div>Bank: <span className="font-semibold text-slate-800">{bankName}</span></div>
-                  <div>IFSC: <span className="font-semibold text-slate-800">{ifscCode}</span></div>
-                  <div>A/C No: <span className="font-semibold text-slate-800">{accountNo}</span></div>
-                  <div>UPI: <span className="font-semibold text-slate-800">{upiId}</span></div>
-                </div>
-              </div>
 
-              {/* Terms */}
-              <div className="text-[9px] text-slate-500 space-y-0.5 leading-tight">
-                <div className="font-bold text-slate-700">Terms & Conditions:</div>
-                <div>1. Goods once sold will not be accepted back without original tax invoice.</div>
-                <div>2. Parts covered under OEM warranty only. Interest @ 18% p.a. on overdue credit.</div>
-              </div>
-            </div>
-
-            {/* Right: Tax Breakdown Summary (5 cols) */}
-            <div className="col-span-5 space-y-1 bg-[#F8FAFC] p-2.5 rounded-lg border border-slate-200 text-[11px]">
-              <div className="flex justify-between text-slate-600">
-                <span>Taxable Value:</span>
-                <span className="font-mono-numeric font-semibold text-slate-800">
-                  {formatPaiseToRupees(taxableVal)}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-slate-600">
-                <span>CGST (9%):</span>
-                <span className="font-mono-numeric font-semibold text-slate-800">
-                  {formatPaiseToRupees(cgstVal || totalTax / 2n)}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-slate-600">
-                <span>SGST (9%):</span>
-                <span className="font-mono-numeric font-semibold text-slate-800">
-                  {formatPaiseToRupees(sgstVal || totalTax / 2n)}
-                </span>
-              </div>
-
-              <div className="border-t border-slate-300 pt-1.5 flex justify-between items-baseline">
-                <span className="font-bold text-slate-900 text-xs">Grand Total:</span>
-                <span className="text-base font-black text-slate-900 font-mono-numeric">
-                  {formatPaiseToRupees(grandTotal)}
-                </span>
-              </div>
-
-              <div className="border-t border-dashed border-slate-300 pt-1 space-y-0.5 text-[10px]">
-                <div className="flex justify-between text-emerald-700 font-semibold">
-                  <span>Paid at Counter:</span>
-                  <span className="font-mono-numeric font-bold">{formatPaiseToRupees(paidNow)}</span>
-                </div>
-                {creditBalance > 0n && (
-                  <div className="flex justify-between text-amber-700 font-semibold">
-                    <span>Balance Due:</span>
-                    <span className="font-mono-numeric font-bold">{formatPaiseToRupees(creditBalance)}</span>
+                {/* Digital Signature Badge */}
+                <div className="bg-[#F0FDF4] border border-[#86EFAC] rounded-lg p-2 text-left w-64 shadow-2xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#166534]">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
+                    <span>DIGITALLY SIGNED & VERIFIED</span>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 5. DUAL SIGNATURE & DIGITAL SIGNATURE SECTION */}
-          <div className="grid grid-cols-2 gap-6 pt-3.5 border-t border-slate-300">
-            {/* Left: Customer / Receiver Acknowledgment */}
-            <div className="space-y-1">
-              <div className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
-                Customer / Receiver Acknowledgment
-              </div>
-              <div className="h-9 flex items-end">
-                <div className="border-b border-slate-400 w-44" />
-              </div>
-              <div className="text-[10px] text-slate-500 font-medium">
-                Received in Good Condition · Signature & Date
-              </div>
-            </div>
-
-            {/* Right: Certified Digital Signature & Security Stamp */}
-            <div className="text-right flex flex-col items-end space-y-1">
-              <div className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
-                For {showroomName}
-              </div>
-              
-              {/* Digital Signature Badge */}
-              <div className="bg-[#F0FDF4] border border-[#86EFAC] rounded-lg p-2 text-left w-64 shadow-2xs space-y-1">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#166534]">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
-                  <span>DIGITALLY SIGNED & VERIFIED</span>
+                  <div className="text-[9px] text-slate-600 font-mono leading-tight">
+                    <div>Signer: <span className="font-semibold text-slate-800">{showroomName}</span></div>
+                    <div>Cert ID: <span className="font-semibold text-slate-800">TL-DSC-{invoice.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '') || 'SECURE'}</span></div>
+                    <div>Timestamp: <span className="font-semibold text-slate-800">{invoiceDate} {invoiceTime}</span></div>
+                  </div>
                 </div>
-                <div className="text-[9px] text-slate-600 font-mono leading-tight">
-                  <div>Signer: <span className="font-semibold text-slate-800">{showroomName}</span></div>
-                  <div>Cert ID: <span className="font-semibold text-slate-800">TL-DSC-{invoice.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '') || 'SECURE'}</span></div>
-                  <div>Timestamp: <span className="font-semibold text-slate-800">{invoiceDate} {invoiceTime}</span></div>
+
+                <div className="text-[9px] font-semibold text-slate-600">
+                  Authorised Signatory (E-Signed)
                 </div>
               </div>
+            </div>
 
-              <div className="text-[9px] font-semibold text-slate-600">
-                Authorised Signatory (E-Signed)
+            <div className="text-center flex flex-col items-center justify-center pt-3 border-t border-slate-100 mt-2">
+              <div className="flex items-center justify-center gap-1.5 mb-1.5 opacity-60 mix-blend-multiply print:opacity-50">
+                <span className="text-[9px] font-semibold tracking-widest text-slate-500 uppercase">POWERED BY</span>
+                <img src="/logo.png" alt="TradeLeger" className="h-3.5 w-auto" />
               </div>
-            </div>
-          </div>
-
-          <div className="text-center flex flex-col items-center justify-center pt-3 border-t border-slate-100 mt-2">
-            <div className="flex items-center justify-center gap-1.5 mb-1.5 opacity-60 mix-blend-multiply print:opacity-50">
-              <span className="text-[9px] font-semibold tracking-widest text-slate-500 uppercase">POWERED BY</span>
-              <img src="/logo.png" alt="TradeLeger" className="h-3.5 w-auto" />
-            </div>
-            <div className="text-[9px] text-slate-400 font-mono">
-              Digitally generated & signed tax invoice compliant with Information Technology Act, 2000 & Rule 46 of CGST Rules, 2017. Physical signature not required.
+              <div className="text-[9px] text-slate-400 font-mono">
+                Digitally generated & signed tax invoice compliant with Information Technology Act, 2000 & Rule 46 of CGST Rules, 2017. Physical signature not required.
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
     </ClientPortal>
   );
 }

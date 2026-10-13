@@ -3,18 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
-import { 
-  Building2, 
-  Store, 
-  CreditCard, 
-  FileText, 
-  Check, 
-  Save, 
-  AlertCircle, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  ShieldCheck, 
+import {
+  Building2,
+  Store,
+  CreditCard,
+  FileText,
+  Check,
+  Save,
+  AlertCircle,
+  Phone,
+  Mail,
+  MapPin,
+  ShieldCheck,
   QrCode,
   Percent,
   Sparkles,
@@ -78,7 +78,7 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [upiId, setUpiId] = useState('');
-  
+
   // Bank details
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -684,11 +684,10 @@ export default function SettingsPage() {
             <Zap className="w-4 h-4 text-[#16A34A]" />
             <h2 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider flex items-center gap-2">
               <span>Razorpay Payment Gateway API</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${
-                razorpayKeyId.startsWith('rzp_live') 
-                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${razorpayKeyId.startsWith('rzp_live')
+                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
                   : 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]'
-              }`}>
+                }`}>
                 {razorpayKeyId.startsWith('rzp_live') ? 'LIVE PRODUCTION' : 'TEST SANDBOX'}
               </span>
             </h2>
@@ -792,8 +791,8 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => {
-                const url = typeof window !== 'undefined' 
-                  ? `${window.location.origin}/api/v1/webhooks/razorpay` 
+                const url = typeof window !== 'undefined'
+                  ? `${window.location.origin}/api/v1/webhooks/razorpay`
                   : 'https://tradeledger.app/api/v1/webhooks/razorpay';
                 navigator.clipboard.writeText(url);
                 setCopiedWebhook(true);
@@ -903,9 +902,8 @@ export default function SettingsPage() {
         </div>
 
         {backupToast && (
-          <div className={`p-3 rounded-md border text-xs font-medium flex items-center gap-1.5 ${
-            backupToast.type === 'success' ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
-          }`}>
+          <div className={`p-3 rounded-md border text-xs font-medium flex items-center gap-1.5 ${backupToast.type === 'success' ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
+            }`}>
             {backupToast.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
             <span>{backupToast.message}</span>
           </div>

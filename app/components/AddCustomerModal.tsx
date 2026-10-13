@@ -1,17 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  X, 
-  Store, 
-  User, 
-  Phone, 
-  MapPin, 
-  FileText, 
-  CheckCircle2, 
-  ShieldAlert, 
-  IndianRupee, 
-  Calendar, 
+import {
+  X,
+  Store,
+  User,
+  Phone,
+  MapPin,
+  FileText,
+  CheckCircle2,
+  ShieldAlert,
+  IndianRupee,
+  Calendar,
   CreditCard,
   Building2
 } from 'lucide-react';
@@ -103,7 +103,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: AddCust
     <ClientPortal>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
         <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-150">
-          
+
           {/* Header */}
           <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
             <div className="flex items-center gap-3">

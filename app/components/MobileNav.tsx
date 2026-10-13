@@ -4,12 +4,12 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLanguage } from '@/app/context/LanguageContext';
-import { 
-  LayoutDashboard, 
-  Receipt, 
-  Package, 
-  Users, 
-  MoreHorizontal 
+import {
+  LayoutDashboard,
+  Receipt,
+  Package,
+  Users,
+  MoreHorizontal
 } from 'lucide-react';
 
 export default function MobileNav() {
@@ -34,11 +34,10 @@ export default function MobileNav() {
           <Link
             key={item.href}
             href={item.href}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-semibold transition ${
-              isActive 
-                ? 'text-[#E11D48]' 
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-semibold transition ${isActive
+                ? 'text-[#E11D48]'
                 : 'text-slate-500 hover:text-slate-900'
-            }`}
+              }`}
           >
             <Icon className={`w-5 h-5 mb-0.5 ${isActive ? 'text-[#E11D48]' : 'text-slate-500'}`} />
             <span>{t(item.labelKey, item.fallback)}</span>

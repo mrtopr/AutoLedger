@@ -71,12 +71,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
 
       {/* Main Content Area (Offset for 240px Sidebar on Desktop) */}
-      <div className="lg:pl-[240px] flex flex-col min-h-screen">
+      <div className={`lg:pl-[240px] flex flex-col ${pathname === '/pos' ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
         {/* Compact Topbar (48px) */}
         <Topbar onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)} />
 
         {/* Dashboard Content Container */}
-        <main className="flex-1 p-4 sm:p-5 max-w-7xl w-full mx-auto pb-16 lg:pb-8">
+        <main className={`flex-1 w-full ${pathname === '/pos' ? 'p-2 sm:p-2.5 overflow-hidden flex flex-col min-h-0' : 'p-4 sm:p-5 max-w-7xl mx-auto pb-16 lg:pb-8'}`}>
           {children}
         </main>
       </div>

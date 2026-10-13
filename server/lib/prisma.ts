@@ -54,10 +54,16 @@ export async function isPostgresAvailable(): Promise<boolean> {
     globalForPrisma._lastDbCheck = Date.now();
     return true;
   } catch (err: any) {
-    // If closed due to idle scale-to-zero, trigger a silent reconnect
+    // If closed due to idle scale-to-zero, trigger a silent reconnect with strict timeout
     try {
-      await prisma.$connect();
-      await prisma.$queryRaw`SELECT 1`;
+      const reconnect = async () => {
+        await prisma.$connect();
+        await prisma.$queryRaw`SELECT 1`;
+      };
+      const timeout = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('DB Reconnect Timeout')), 2500)
+      );
+      await Promise.race([reconnect(), timeout]);
       globalForPrisma._dbAvailable = true;
       globalForPrisma._lastDbCheck = Date.now();
       return true;

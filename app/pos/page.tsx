@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { 
-  Receipt, 
-  Plus, 
-  Trash2, 
-  Printer, 
-  CheckCircle2, 
-  Search, 
-  Package, 
+import {
+  Receipt,
+  Plus,
+  Trash2,
+  Printer,
+  CheckCircle2,
+  Search,
+  Package,
   UserPlus,
   Eye,
   MessageCircle,
@@ -31,9 +31,11 @@ import {
   Phone,
   Users,
   Calendar,
-  Calculator
+  Calculator,
+  Banknote,
+  Layers
 } from 'lucide-react';
-import { calculateInvoiceTax, formatPaiseToRupees, parseRupeesToPaise, LineItemInput } from '@/server/lib/tax';
+import { formatPaiseToRupees, parseRupeesToPaise, calculateInvoiceTax, LineItemInput } from '@/server/lib/tax';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
 import RazorpayModal from '@/app/components/RazorpayModal';
 import ClientPortal from '@/app/components/ClientPortal';
@@ -44,6 +46,7 @@ import AddCustomerModal from '@/app/components/AddCustomerModal';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { searchTallyItems, getHighlightedTallySegments } from '@/app/lib/tallySearch';
+import { calculateCustomerCreditScore } from '@/app/lib/creditScore';
 
 interface PosLineItem {
   id: string;
@@ -91,7 +94,7 @@ interface CatalogOption {
 export default function QuickBillPosPage() {
   const { tenant } = useAuth();
   const { t, language } = useLanguage();
-  
+
   // Data states
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [catalog, setCatalog] = useState<CatalogOption[]>([]);
@@ -104,7 +107,7 @@ export default function QuickBillPosPage() {
   const [walkInVehicle, setWalkInVehicle] = useState<string>('');
   const [showWalkInDetails, setShowWalkInDetails] = useState<boolean>(true);
 
-  // Quick Catalog Search (Tally Multi-Token Engine)
+  // Quick Catalog Search (Fast Stock Search)
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
@@ -112,22 +115,8 @@ export default function QuickBillPosPage() {
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Line items state
-  const [items, setItems] = useState<PosLineItem[]>([
-    {
-      id: '1',
-      name: '',
-      qty: 1,
-      unit: 'pcs',
-      mrpRupees: '',
-      discountPercent: '0',
-      rateRupees: '',
-      discountType: 'PERCENT',
-      discountValue: '0',
-      gstRateBp: 1800,
-      isTaxInclusive: false,
-    }
-  ]);
+  // Line items state - initially empty cart
+  const [items, setItems] = useState<PosLineItem[]>([]);
 
   // Payment states
   const [paymentMode, setPaymentMode] = useState<'FULL_CASH' | 'FULL_UPI' | 'FULL_KHATA' | 'SPLIT'>('FULL_CASH');
@@ -162,14 +151,14 @@ export default function QuickBillPosPage() {
       if (res.ok) {
         const json = await res.json();
         const saved = json.savedSettlement;
-        const opening = saved 
-          ? BigInt(saved.openingFloatPaise || '0') 
+        const opening = saved
+          ? BigInt(saved.openingFloatPaise || '0')
           : BigInt(json.summary?.openingFloatPaise || '0');
-        const cashIn = saved 
-          ? BigInt(saved.cashSalesPaise || '0') 
+        const cashIn = saved
+          ? BigInt(saved.cashSalesPaise || '0')
           : BigInt(json.summary?.cashCollectedPaise || '0');
-        const cashOut = saved 
-          ? BigInt(saved.cashExpensesPaise || '0') 
+        const cashOut = saved
+          ? BigInt(saved.cashExpensesPaise || '0')
           : 0n;
         const totalAvail = opening + cashIn - cashOut;
 
@@ -237,35 +226,6 @@ export default function QuickBillPosPage() {
           const prodData = await prodRes.json();
           if (prodData.products && prodData.products.length > 0) {
             setCatalog(prodData.products);
-            const first = prodData.products[0];
-            const salePrice = (Number(first.salePricePaise) / 100).toFixed(2);
-            const mrp = first.mrpPaise && Number(first.mrpPaise) > 0 
-              ? (Number(first.mrpPaise) / 100).toFixed(2) 
-              : salePrice;
-            const mrpNum = parseFloat(mrp) || 0;
-            const rateNum = parseFloat(salePrice) || 0;
-            let discPct = '0';
-            if (mrpNum > 0 && mrpNum > rateNum) {
-              const calc = ((mrpNum - rateNum) / mrpNum) * 100;
-              discPct = Number.isInteger(calc) ? calc.toString() : calc.toFixed(1);
-            }
-            setItems([
-              {
-                id: '1',
-                productId: first.id,
-                name: first.name,
-                partNumber: first.partNumber,
-                qty: 1,
-                unit: first.unit || 'pcs',
-                mrpRupees: mrp,
-                discountPercent: discPct,
-                rateRupees: salePrice,
-                discountType: 'PERCENT',
-                discountValue: discPct,
-                gstRateBp: first.gstRateBp || 1800,
-                isTaxInclusive: false,
-              }
-            ]);
           }
         }
       } catch (err) {
@@ -380,16 +340,16 @@ export default function QuickBillPosPage() {
 
   // Payment Breakdown Calculation
   const grandTotalPaise = taxSummary.grandTotal;
-  const cashPaise = paymentMode === 'FULL_CASH' 
-    ? grandTotalPaise 
-    : paymentMode === 'SPLIT' 
-    ? parseRupeesToPaise(cashAmount || '0') 
-    : 0n;
-  const upiPaise = paymentMode === 'FULL_UPI' 
-    ? grandTotalPaise 
-    : paymentMode === 'SPLIT' 
-    ? parseRupeesToPaise(upiAmount || '0') 
-    : 0n;
+  const cashPaise = paymentMode === 'FULL_CASH'
+    ? grandTotalPaise
+    : paymentMode === 'SPLIT'
+      ? parseRupeesToPaise(cashAmount || '0')
+      : 0n;
+  const upiPaise = paymentMode === 'FULL_UPI'
+    ? grandTotalPaise
+    : paymentMode === 'SPLIT'
+      ? parseRupeesToPaise(upiAmount || '0')
+      : 0n;
   const totalPaidNowPaise = cashPaise + upiPaise;
   const balanceOnCreditPaise = grandTotalPaise > totalPaidNowPaise ? (grandTotalPaise - totalPaidNowPaise) : 0n;
 
@@ -412,11 +372,38 @@ export default function QuickBillPosPage() {
 
   // Add Item Row (Tally fast selection & auto-focus)
   const addItemRow = (prod?: CatalogOption) => {
+    if (prod) {
+      // 1. Check if product already exists in current bill items
+      const existingIdx = items.findIndex(it =>
+        (it.productId && prod.id && it.productId === prod.id) ||
+        (it.name.trim().toLowerCase() === prod.name.trim().toLowerCase())
+      );
+
+      if (existingIdx !== -1) {
+        setItems(prev => prev.map((it, idx) =>
+          idx === existingIdx ? { ...it, qty: (Number(it.qty) || 1) + 1 } : it
+        ));
+
+        setSearchQuery('');
+        setIsSearchOpen(false);
+        setSelectedSearchIndex(0);
+
+        setTimeout(() => {
+          const qtyInput = document.getElementById(`item-qty-${existingIdx}`) as HTMLInputElement;
+          if (qtyInput) {
+            qtyInput.focus();
+            qtyInput.select();
+          }
+        }, 50);
+        return;
+      }
+    }
+
     let newItem: PosLineItem;
     if (prod) {
       const salePrice = (Number(prod.salePricePaise) / 100).toFixed(2);
-      const mrp = prod.mrpPaise && Number(prod.mrpPaise) > 0 
-        ? (Number(prod.mrpPaise) / 100).toFixed(2) 
+      const mrp = prod.mrpPaise && Number(prod.mrpPaise) > 0
+        ? (Number(prod.mrpPaise) / 100).toFixed(2)
         : salePrice;
       const mrpNum = parseFloat(mrp) || 0;
       const rateNum = parseFloat(salePrice) || 0;
@@ -463,6 +450,11 @@ export default function QuickBillPosPage() {
         targetIdx = 0;
         return [newItem];
       }
+      // If the last row is blank, replace the blank row with the selected product
+      if (prev.length > 0 && !prev[prev.length - 1].name.trim() && prod) {
+        targetIdx = prev.length - 1;
+        return [...prev.slice(0, prev.length - 1), newItem];
+      }
       targetIdx = prev.length;
       return [...prev, newItem];
     });
@@ -483,24 +475,7 @@ export default function QuickBillPosPage() {
 
   // Remove Item Row
   const removeItemRow = (id: string) => {
-    setItems(prev => {
-      if (prev.length === 1) {
-        return [{
-          id: '1',
-          name: '',
-          qty: 1,
-          unit: 'pcs',
-          mrpRupees: '',
-          discountPercent: '0',
-          rateRupees: '',
-          discountType: 'PERCENT',
-          discountValue: '0',
-          gstRateBp: 1800,
-          isTaxInclusive: false,
-        }];
-      }
-      return prev.filter(it => it.id !== id);
-    });
+    setItems(prev => prev.filter(it => it.id !== id));
   };
 
   // Update Item Row
@@ -711,21 +686,7 @@ export default function QuickBillPosPage() {
   const startNextBill = () => {
     setIsSuccessModal(false);
     setInvoiceDate(new Date().toISOString().split('T')[0]);
-    setItems([
-      {
-        id: Math.random().toString(),
-        name: '',
-        qty: 1,
-        unit: 'pcs',
-        mrpRupees: '',
-        discountPercent: '0',
-        rateRupees: '',
-        discountType: 'PERCENT',
-        discountValue: '0',
-        gstRateBp: 1800,
-        isTaxInclusive: false,
-      }
-    ]);
+    setItems([]);
     setCashAmount('');
     setUpiAmount('');
     setUpiRef('');
@@ -740,33 +701,33 @@ export default function QuickBillPosPage() {
   const openCurrentBillPreview = () => {
     const validItems = items.filter(it => it.name.trim() !== '');
     const previewItems = validItems.map(it => {
-        const rateP = parseRupeesToPaise(it.rateRupees || '0');
-        const discVal = parseRupeesToPaise(it.discountValue || '0');
-        const discP = it.discountType === 'PERCENT'
-          ? (rateP * BigInt(parseInt(it.discountValue, 10) || 0)) / 100n
-          : discVal;
-        const totalP = (rateP - discP) * BigInt(it.qty || 1);
+      const rateP = parseRupeesToPaise(it.rateRupees || '0');
+      const discVal = parseRupeesToPaise(it.discountValue || '0');
+      const discP = it.discountType === 'PERCENT'
+        ? (rateP * BigInt(parseInt(it.discountValue, 10) || 0)) / 100n
+        : discVal;
+      const totalP = (rateP - discP) * BigInt(it.qty || 1);
 
-        return {
-          productId: it.productId,
-          name: it.name,
-          partNumber: it.partNumber || 'SP-GEN-01',
-          hsnCode: '8714',
-          qty: it.qty,
-          unit: it.unit,
-          ratePaise: rateP.toString(),
-          rateRupees: it.rateRupees,
-          discountType: it.discountType,
-          discountPaise: discP.toString(),
-          gstRateBp: it.gstRateBp,
-          taxableValuePaise: totalP.toString(),
-          totalPaise: totalP.toString(),
-        };
-      });
+      return {
+        productId: it.productId,
+        name: it.name,
+        partNumber: it.partNumber || 'SP-GEN-01',
+        hsnCode: '8714',
+        qty: it.qty,
+        unit: it.unit,
+        ratePaise: rateP.toString(),
+        rateRupees: it.rateRupees,
+        discountType: it.discountType,
+        discountPaise: discP.toString(),
+        gstRateBp: it.gstRateBp,
+        taxableValuePaise: totalP.toString(),
+        totalPaise: totalP.toString(),
+      };
+    });
 
     const previewInvoice: InvoicePreviewData = {
       invoiceNumber: issuedInvoiceData?.invoiceNumber || `${tenant?.settings?.invoicePrefix || 'INV/2026-27/'}DRAFT`,
-      date: invoiceDate 
+      date: invoiceDate
         ? new Date(`${invoiceDate}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
         : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
@@ -826,9 +787,6 @@ export default function QuickBillPosPage() {
 
   const handlePrintFromSuccessModal = () => {
     openCurrentBillPreview();
-    setTimeout(() => {
-      window.print();
-    }, 350);
   };
 
   const handleWhatsAppFromSuccessModal = () => {
@@ -851,10 +809,10 @@ export default function QuickBillPosPage() {
       `Thank you for your business!`;
 
     const encoded = encodeURIComponent(message);
-    const url = targetPhone 
-      ? `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encoded}` 
+    const url = targetPhone
+      ? `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encoded}`
       : `https://api.whatsapp.com/send?text=${encoded}`;
-    
+
     window.open(url, '_blank');
   };
 
@@ -882,69 +840,46 @@ export default function QuickBillPosPage() {
 
   if (loadingInitial) {
     return (
-      <PageSkeleton 
-        title="Initializing POS Billing..." 
-        subtitle="Fetching product catalog, real-time rates, and customer accounts..." 
+      <PageSkeleton
+        title="Initializing POS Billing..."
+        subtitle="Fetching product catalog, real-time rates, and customer accounts..."
       />
     );
   }
 
   return (
-    <div className="space-y-3.5 max-w-7xl mx-auto pb-12">
-      {/* 1. TOP HEADER RIBBON: TITLE & BILLING MODE SWITCHER */}
-      <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 sm:px-4 sm:py-3 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Left: Bill Info */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[#FEF2F2] text-[#C81E1E] flex items-center justify-center font-bold border border-[#FEE2E2] shrink-0 shadow-2xs">
-            <Receipt className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-bold text-[#0F172A] tracking-tight">
-                Fast Counter POS Billing
+    <div className="h-full flex flex-col gap-2 min-h-0 w-full overflow-hidden">
+      {/* 1. UNIFIED COMPACT POS COMMAND & CUSTOMER HEADER BAR */}
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-2 sm:p-2.5 shadow-2xs space-y-1.5 shrink-0">
+        {/* Row 1: Brand/Title, Mode Switcher, Date & Live Till */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-1.5 border-b border-slate-100">
+          {/* Left: Terminal Title & Draft Status */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-red-50 text-[#C81E1E] flex items-center justify-center font-bold border border-red-100 shrink-0">
+              <Receipt className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xs sm:text-sm font-bold text-[#0F172A] tracking-tight">
+                POS Billing
               </h1>
-              <span className="text-[10px] font-mono font-semibold bg-[#F1F5F9] text-[#475569] px-2 py-0.5 rounded border border-[#E2E8F0]">
+              <span className="text-[9.5px] font-mono font-semibold bg-[#F1F5F9] text-[#475569] px-1.5 py-0.5 rounded border border-[#E2E8F0]">
                 {tenant?.settings?.invoicePrefix || 'INV/2026-27/'}DRAFT
               </span>
             </div>
-            <div className="text-[11px] text-[#64748B]">
-              Real-time GST calculations · Instant inventory allocation · Double-entry Ledger
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Date Picker, Mode Switcher & Quick Navigation */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Invoice Date Picker (Supports today & backdated billings) */}
-          <div className="flex items-center gap-1.5 bg-[#F8F9FA] hover:bg-white border border-[#CBD5E1] rounded-lg px-2.5 py-0.5 shadow-2xs transition focus-within:border-[#C81E1E] focus-within:bg-white h-8">
-            <Calendar className="w-3.5 h-3.5 text-[#C81E1E] shrink-0" />
-            <div className="flex flex-col justify-center">
-              <label htmlFor="invoice-date-input" className="text-[8px] uppercase font-bold text-[#64748B] leading-none select-none">
-                Invoice Date
-              </label>
-              <input
-                id="invoice-date-input"
-                type="date"
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-                className="text-[11px] font-semibold text-[#0F172A] bg-transparent border-0 outline-hidden p-0 cursor-pointer h-3.5 font-mono"
-                title="Invoice Date (Select past date if billing forgotten orders)"
-              />
-            </div>
           </div>
 
-          {/* Segmented Mode Control */}
-          <div className="bg-[#F1F5F9] p-0.5 rounded-lg flex items-center border border-[#E2E8F0]">
+          {/* Center: Billing Mode Segmented Switch */}
+          <div className="bg-[#F1F5F9] p-0.5 rounded-lg flex items-center border border-[#E2E8F0] self-start md:self-auto">
             <button
               type="button"
               onClick={() => setSelectedCustomerId('WALK_IN')}
-              className={`h-7.5 px-3 rounded-md text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+              className={`h-6 px-2.5 rounded-md text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer ${
                 isWalkIn
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Zap className={`w-3.5 h-3.5 ${isWalkIn ? 'fill-slate-950' : 'text-amber-500'}`} />
+              <Zap className={`w-3 h-3 ${isWalkIn ? 'fill-slate-950' : 'text-amber-500'}`} />
               <span>Retail Walk-in</span>
             </button>
 
@@ -957,116 +892,100 @@ export default function QuickBillPosPage() {
                   setIsAddCustomerOpen(true);
                 }
               }}
-              className={`h-7.5 px-3 rounded-md text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+              className={`h-6 px-2.5 rounded-md text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer ${
                 !isWalkIn
                   ? 'bg-white text-slate-900 font-bold shadow-xs border border-slate-200'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Users className="w-3.5 h-3.5 text-slate-500" />
+              <Users className="w-3 h-3 text-slate-500" />
               <span>Account Client</span>
             </button>
           </div>
 
-          <Link
-            href="/invoices"
-            className="h-8 inline-flex items-center gap-1.5 px-3 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium text-xs rounded-lg border border-[#CBD5E1] transition shadow-2xs"
-            title="Search Past Bills & Invoices"
-          >
-            <FileText className="w-3.5 h-3.5 text-[#64748B]" />
-            <span className="hidden sm:inline">Past Invoices</span>
-          </Link>
+          {/* Right: Date Picker, Till Cash & Past Bills */}
+          <div className="flex items-center gap-1.5 self-end md:self-auto">
+            {/* Invoice Date Picker */}
+            <div className="flex items-center gap-1 bg-[#F8F9FA] hover:bg-white border border-[#CBD5E1] rounded-md px-2 py-0.5 shadow-2xs transition focus-within:border-[#C81E1E] focus-within:bg-white h-6.5">
+              <Calendar className="w-2.5 h-2.5 text-[#C81E1E] shrink-0" />
+              <input
+                id="invoice-date-input"
+                type="date"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+                className="text-[10px] font-semibold text-[#0F172A] bg-transparent border-0 outline-hidden p-0 cursor-pointer h-3.5 font-mono"
+                title="Invoice Date"
+              />
+            </div>
 
-          <Link
-            href="/settlement"
-            className="h-8 inline-flex items-center gap-1.5 px-3 bg-white hover:bg-red-50 text-[#C81E1E] font-medium text-xs rounded-lg border border-red-200 transition shadow-2xs"
-            title="End of Day Cash Settlement & Till Reconciliation"
-          >
-            <Calculator className="w-3.5 h-3.5 text-[#C81E1E]" />
-            <span className="hidden sm:inline">Day-End Tally</span>
-          </Link>
-
-          {/* Real-time Available Counter Cash Badge */}
-          <Link
-            href="/settlement"
-            className="h-8 inline-flex items-center gap-2 px-3 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-950 font-medium text-xs rounded-lg border border-emerald-300 transition shadow-2xs group cursor-pointer"
-            title="Real-time Physical Cash in Counter Till (Opening Float + Cash Sales - Expenses). Click to view Day-End Settlement."
-          >
-            <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Counter Cash:</span>
-              <span className="font-mono font-bold text-xs tabular-nums text-emerald-950">
+            {/* Compact Till Snapshot */}
+            <Link
+              href="/settlement"
+              className="h-6.5 inline-flex items-center gap-1 px-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-medium text-[11px] rounded-md border border-emerald-300 transition shadow-2xs group cursor-pointer"
+              title="Physical Cash in Counter Till. Click for Day-End Settlement."
+            >
+              <span className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[9px] font-bold text-emerald-800 uppercase tracking-wider hidden sm:inline">Till:</span>
+              <span className="font-mono font-bold text-[11px] tabular-nums text-emerald-950">
                 {formatPaiseToRupees(counterCashPaise)}
               </span>
-            </div>
-          </Link>
-        </div>
-      </div>
+            </Link>
 
-      {/* 2. CUSTOMER CONTEXT CARD */}
-      {isWalkIn ? (
-        /* Walk-in Retail Card */
-        <div className="bg-gradient-to-r from-amber-50/80 to-amber-50/40 border border-amber-200/90 rounded-xl p-3.5 shadow-2xs space-y-2.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-2">
-            <div className="flex items-center gap-2 text-xs text-amber-950 font-bold">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-              <span>Retail Walk-in Customer</span>
-              <span className="text-amber-700 font-normal text-[11px]">— Instant Counter Cash / UPI Billing</span>
-            </div>
-            <span className="px-2 py-0.5 bg-amber-100/80 text-amber-900 border border-amber-300/80 rounded text-[10px] font-mono font-bold w-fit">
-              ZERO CREDIT SALE · CASH ONLY
-            </span>
+            <Link
+              href="/invoices"
+              className="h-6.5 inline-flex items-center gap-1 px-2 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium text-[11px] rounded-md border border-[#CBD5E1] transition shadow-2xs"
+              title="Search Past Bills & Invoices"
+            >
+              <FileText className="w-2.5 h-2.5 text-[#64748B]" />
+              <span className="hidden sm:inline text-[10px]">Past Bills</span>
+            </Link>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-            <div>
-              <label className="block text-[10px] font-semibold text-amber-900 mb-0.5">Buyer Name (Optional)</label>
+        {/* Row 2: Customer Selection & Live Khata Status Strip */}
+        {isWalkIn ? (
+          <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg px-2.5 py-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+              <span className="font-bold text-amber-950 text-[11px] shrink-0">Walk-in Buyer:</span>
               <input
                 type="text"
                 value={walkInName}
                 onChange={(e) => setWalkInName(e.target.value)}
-                placeholder="e.g. Ramesh Kumar"
-                className="w-full h-8 px-2.5 bg-white border border-amber-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs"
+                placeholder="Buyer Name (Optional)"
+                className="h-6.5 px-2 bg-white border border-amber-300 rounded text-slate-900 placeholder:text-slate-400 text-[11px] focus:border-[#C81E1E] outline-hidden flex-1 min-w-[130px]"
               />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-semibold text-amber-900 mb-0.5">Mobile Number (For Receipt/SMS)</label>
               <input
                 type="tel"
                 value={walkInPhone}
                 onChange={(e) => setWalkInPhone(e.target.value)}
-                placeholder="e.g. 9812345678"
-                className="w-full h-8 px-2.5 bg-white border border-amber-300 rounded-lg font-mono text-slate-900 placeholder:text-slate-400 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs"
+                placeholder="Mobile (For WhatsApp E-Bill)"
+                className="h-6.5 px-2 bg-white border border-amber-300 rounded font-mono text-slate-900 placeholder:text-slate-400 text-[11px] focus:border-[#C81E1E] outline-hidden flex-1 min-w-[150px]"
               />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-semibold text-amber-900 mb-0.5">Reference / Notes (Optional)</label>
               <input
                 type="text"
                 value={walkInVehicle}
                 onChange={(e) => setWalkInVehicle(e.target.value)}
-                placeholder="e.g. Counter Cash / PO-102"
-                className="w-full h-8 px-2.5 bg-white border border-amber-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs"
+                placeholder="Vehicle / Notes (Optional)"
+                className="h-6.5 px-2 bg-white border border-amber-300 rounded text-slate-900 placeholder:text-slate-400 text-[11px] focus:border-[#C81E1E] outline-hidden flex-1 min-w-[130px] hidden md:block"
               />
             </div>
+            <span className="text-[9px] font-mono font-bold text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded border border-amber-300/80 shrink-0">
+              CASH / UPI ONLY
+            </span>
           </div>
-        </div>
-      ) : (
-        /* Registered Account Customer Card */
-        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-2xs space-y-3">
-          {/* Top Row: Dropdown selector & Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-2">
-              <div className="relative flex-1 min-w-[220px] max-w-lg">
+        ) : (
+          <div className="bg-slate-50 border border-slate-200/90 rounded-lg px-2.5 py-1.5 flex flex-col lg:flex-row lg:items-center justify-between gap-1.5 text-xs">
+            {/* Left: Customer Dropdown Selector & Quick Add/Edit */}
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 max-w-xl">
+              <div className="relative flex-1 min-w-0">
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => handleCustomerSelectChange(e.target.value)}
-                  className="w-full bg-[#F8F9FA] hover:bg-white border border-[#CBD5E1] rounded-lg py-1.5 px-3 text-xs font-bold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden shadow-2xs cursor-pointer transition truncate"
+                  className="w-full h-7 bg-white hover:bg-slate-50 border border-[#CBD5E1] rounded-md px-2 text-[11px] font-bold text-[#0F172A] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden shadow-2xs cursor-pointer transition truncate"
                 >
                   {customers.length > 0 ? (
                     <optgroup label="Registered Business Clients & Retailers">
@@ -1090,165 +1009,189 @@ export default function QuickBillPosPage() {
               <button
                 type="button"
                 onClick={() => setIsAddCustomerOpen(true)}
-                className="h-8 px-3 flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-[#C81E1E] text-xs font-bold rounded-lg border border-red-200 transition shadow-2xs cursor-pointer shrink-0"
+                className="h-7 px-2 flex items-center gap-1 bg-red-50 hover:bg-red-100 text-[#C81E1E] text-[11px] font-bold rounded-md border border-red-200 transition shadow-2xs cursor-pointer shrink-0"
                 title="Add New Customer Account"
               >
-                <UserPlus className="w-3.5 h-3.5 text-[#C81E1E]" />
-                <span>+ Add Client</span>
+                <UserPlus className="w-3 h-3" />
+                <span className="hidden sm:inline">+ Add</span>
               </button>
 
               {selectedCustomer.id && (
                 <button
                   type="button"
                   onClick={() => setIsEditCustomerOpen(true)}
-                  className="h-8 px-2.5 flex items-center gap-1 bg-white hover:bg-[#F8F9FA] text-[#334155] text-xs font-medium rounded-lg border border-[#CBD5E1] transition shadow-2xs cursor-pointer shrink-0"
-                  title="Edit Selected Customer Details"
+                  className="h-7 px-1.5 flex items-center gap-1 bg-white hover:bg-[#F8F9FA] text-[#334155] text-[11px] font-medium rounded-md border border-[#CBD5E1] transition shadow-2xs cursor-pointer shrink-0"
+                  title="Edit Customer"
                 >
-                  <Edit3 className="w-3.5 h-3.5 text-[#64748B]" />
+                  <Edit3 className="w-2.5 h-2.5 text-[#64748B]" />
                   <span className="hidden sm:inline">Edit</span>
                 </button>
               )}
             </div>
-          </div>
 
-          {/* Bottom Row: Selected Customer Live Metrics */}
-          {selectedCustomer.id && (
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100 text-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex items-center gap-1.5 font-bold text-slate-900 truncate max-w-[200px] sm:max-w-xs" title={selectedCustomer.shopName || selectedCustomer.name}>
-                  <Store className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  <span className="truncate">{selectedCustomer.shopName || selectedCustomer.name}</span>
-                </div>
-                {selectedCustomer.phone && (
-                  <span className="text-slate-500 font-mono text-[11px] flex items-center gap-1 shrink-0">
-                    <Phone className="w-3 h-3 text-slate-400" />
-                    {selectedCustomer.phone}
-                  </span>
-                )}
-                {selectedCustomer.address && (
-                  <span className="text-slate-400 text-[11px] hidden md:inline truncate max-w-[180px]" title={selectedCustomer.address}>
-                    · {selectedCustomer.address}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 font-mono text-[11px]">
+            {/* Right: Selected Customer Live Metrics Badges */}
+            {selectedCustomer.id && (
+              <div className="flex flex-wrap items-center gap-1 font-mono text-[10px] shrink-0">
                 {/* Due / Advance Balance Badge */}
                 {Number(selectedCustomer.balancePaise || 0) > 0 ? (
-                  <div className="px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold bg-amber-50 text-amber-900 border-amber-200">
-                    <BookOpen className="w-3 h-3 text-amber-600" />
-                    <span>Outstanding: {formatPaiseToRupees(Number(selectedCustomer.balancePaise))}</span>
+                  <div className="px-1.5 py-0.5 rounded border flex items-center gap-1 font-bold bg-amber-50 text-amber-900 border-amber-200">
+                    <BookOpen className="w-2.5 h-2.5 text-amber-600" />
+                    <span>Due: {formatPaiseToRupees(Number(selectedCustomer.balancePaise))}</span>
                   </div>
                 ) : Number(selectedCustomer.balancePaise || 0) < 0 ? (
-                  <div className="px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold bg-emerald-50 text-emerald-800 border-emerald-200">
-                    <Wallet className="w-3 h-3 text-emerald-600" />
-                    <span>Advance Credit: {formatPaiseToRupees(Math.abs(Number(selectedCustomer.balancePaise)))}</span>
+                  <div className="px-1.5 py-0.5 rounded border flex items-center gap-1 font-bold bg-emerald-50 text-emerald-800 border-emerald-200">
+                    <Wallet className="w-2.5 h-2.5 text-emerald-600" />
+                    <span>Adv: {formatPaiseToRupees(Math.abs(Number(selectedCustomer.balancePaise)))}</span>
                   </div>
                 ) : (
-                  <div className="px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold bg-slate-50 text-slate-700 border-slate-200">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    <span>Balance: ₹0.00 (All Clear)</span>
+                  <div className="px-1.5 py-0.5 rounded border flex items-center gap-1 font-bold bg-white text-slate-700 border-slate-200">
+                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                    <span>Bal: ₹0</span>
                   </div>
                 )}
 
                 {/* Credit Limit */}
-                <div className="px-2.5 py-1 bg-slate-50 text-slate-700 border border-slate-200 rounded-md">
+                <div className="px-1.5 py-0.5 bg-white text-slate-700 border border-slate-200 rounded">
                   <span>Limit: {formatPaiseToRupees(Number(selectedCustomer.creditLimitPaise) || 5000000)}</span>
                 </div>
 
-                {/* Terms */}
-                <div className="px-2 py-1 bg-slate-50 text-slate-600 border border-slate-200 rounded-md">
-                  <span>{selectedCustomer.termsDays || 15} Days Terms</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+                {/* Credit Score Badge */}
+                {(() => {
+                  const cScore = calculateCustomerCreditScore({
+                    balancePaise: selectedCustomer.balancePaise,
+                    creditLimitPaise: selectedCustomer.creditLimitPaise,
+                  });
+                  return (
+                    <div className={`px-1.5 py-0.5 rounded border flex items-center gap-1 font-bold ${cScore.badgeBg} ${cScore.badgeText}`} title={`Customer Credit Rating: ${cScore.label}`}>
+                      <span>Score: {cScore.score}</span>
+                    </div>
+                  );
+                })()}
 
-      {/* 2. MAIN 2-COLUMN WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-        
-        {/* LEFT PANEL (8 COLS): PARTS SEARCH & LINE ITEMS TABLE */}
-        <div className="lg:col-span-8 space-y-3.5">
-          
-          {/* Quick Auto-Complete Part Search Bar (Tally-Style List of Stock Items) */}
-          <div ref={searchContainerRef} className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 shadow-2xs space-y-2.5 relative">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-3" />
-              <input
-                ref={searchInputRef}
-                id="pos-part-search"
-                type="text"
-                value={searchQuery}
-                onFocus={() => setIsSearchOpen(true)}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setIsSearchOpen(true);
-                  setSelectedSearchIndex(0);
-                }}
-                onKeyDown={(e) => {
-                  if (!isSearchOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                {/* Terms */}
+                <div className="px-1 py-0.5 bg-white text-slate-600 border border-slate-200 rounded text-[9.5px]">
+                  <span>{selectedCustomer.termsDays || 15}d</span>
+                </div>
+
+                {/* Address & Full Ledger Link */}
+                <Link
+                  href="/customers"
+                  className="text-[#C81E1E] hover:underline font-semibold flex items-center gap-0.5 text-[10px] ml-0.5 font-sans shrink-0"
+                  title="View Customer Khata Ledger"
+                >
+                  <span className="hidden sm:inline">Ledger</span>
+                  <ArrowRight className="w-2.5 h-2.5" />
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 2. MAIN 2-COLUMN VIEWPORT-FIT WORKSPACE */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2 overflow-hidden">
+
+        {/* LEFT PANEL (8 COLS): UNIFIED FAST BILLING GRID & STOCK SEARCH */}
+        <div className="lg:col-span-8 flex flex-col min-h-0 bg-white border border-[#E2E8F0] rounded-xl shadow-2xs overflow-hidden h-full">
+
+          {/* Top Command Strip: Quick Search Input & Add Row Action */}
+          <div ref={searchContainerRef} className="p-2 sm:p-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] relative shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              {/* Search Input */}
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-2.5 top-2" />
+                <input
+                  ref={searchInputRef}
+                  id="pos-part-search"
+                  type="text"
+                  value={searchQuery}
+                  onFocus={() => setIsSearchOpen(true)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
                     setIsSearchOpen(true);
-                    e.preventDefault();
-                    return;
-                  }
-                  if (searchResults.length === 0) {
-                    if (e.key === 'Escape') {
+                    setSelectedSearchIndex(0);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!isSearchOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                      setIsSearchOpen(true);
+                      e.preventDefault();
+                      return;
+                    }
+                    if (searchResults.length === 0) {
+                      if (e.key === 'Escape') {
+                        setIsSearchOpen(false);
+                      }
+                      return;
+                    }
+
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setSelectedSearchIndex(prev => (prev < searchResults.length - 1 ? prev + 1 : 0));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSelectedSearchIndex(prev => (prev > 0 ? prev - 1 : searchResults.length - 1));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (searchResults[selectedSearchIndex]) {
+                        addItemRow(searchResults[selectedSearchIndex]);
+                      }
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
                       setIsSearchOpen(false);
                     }
-                    return;
-                  }
+                  }}
+                  placeholder={t('pos.search_parts', 'Type part name, OEM SKU, or fitment (e.g. TVS RTR, 13 NUT, CHOKE CAB)...')}
+                  className="w-full bg-white border border-[#CBD5E1] rounded-lg py-1 pl-8 pr-12 text-xs font-medium text-[#0F172A] placeholder-[#94A3B8] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden transition shadow-2xs h-7.5"
+                />
+                <div className="absolute right-2 top-1.5 flex items-center gap-1 pointer-events-none">
+                  <kbd className="px-1.5 py-0.5 text-[9px] font-mono text-slate-500 bg-slate-100 border border-slate-200 rounded">F3</kbd>
+                </div>
+              </div>
 
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setSelectedSearchIndex(prev => (prev < searchResults.length - 1 ? prev + 1 : 0));
-                  } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setSelectedSearchIndex(prev => (prev > 0 ? prev - 1 : searchResults.length - 1));
-                  } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (searchResults[selectedSearchIndex]) {
-                      addItemRow(searchResults[selectedSearchIndex]);
-                    }
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    setIsSearchOpen(false);
-                  }
-                }}
-                placeholder={t('pos.search_parts', 'Type part name, OEM SKU, or fitment (e.g. TVS RTR, 13 NUT, CHOKE CAB)...')}
-                className="w-full bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl py-2 pl-9 pr-14 text-xs text-[#0F172A] placeholder-[#94A3B8] focus:bg-white focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden transition shadow-2xs"
-              />
-              <div className="absolute right-3 top-2.5 flex items-center gap-1 pointer-events-none">
-                <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-white border border-slate-200 rounded shadow-2xs">F3</kbd>
+              {/* Right Actions */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => addItemRow()}
+                  className="h-7.5 inline-flex items-center gap-1 px-2.5 bg-white hover:bg-slate-50 text-[#0F172A] font-bold text-xs rounded-lg border border-[#CBD5E1] shadow-2xs transition cursor-pointer"
+                  title="Add Blank Item Row (F2)"
+                >
+                  <Plus className="w-3 h-3 text-[#C81E1E]" />
+                  <span>+ Add Row</span>
+                  <kbd className="hidden sm:inline px-1 py-0.2 text-[8.5px] font-mono text-slate-400 bg-slate-50 border border-slate-200 rounded">F2</kbd>
+                </button>
+
+                <span className="text-[10px] font-semibold text-slate-500 font-mono bg-white px-2 py-1 rounded-md border border-slate-200 shrink-0">
+                  {items.length} {items.length === 1 ? 'item' : 'items'}
+                </span>
               </div>
             </div>
 
             {/* Live Search Results Dropdown - Tally "List of Stock Items" */}
             {isSearchOpen && searchQuery.trim() !== '' && (
-              <div 
+              <div
                 ref={searchDropdownRef}
-                className="absolute left-0 right-0 top-[52px] bg-white rounded-xl shadow-2xl border border-slate-300 z-50 overflow-hidden animate-in fade-in duration-100"
+                className="absolute left-2 right-2 top-[44px] bg-white rounded-xl shadow-2xl border border-slate-300 z-50 overflow-hidden animate-in fade-in duration-100"
               >
                 {/* Tally Header Bar */}
-                <div className="bg-slate-900 text-white px-3.5 py-2 flex items-center justify-between border-b border-slate-800">
+                <div className="bg-slate-900 text-white px-3 py-1.5 flex items-center justify-between border-b border-slate-800">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-xs uppercase tracking-wider text-amber-400">
                       ⚡ List of Stock Items
                     </span>
-                    <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700">
+                    <span className="bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded text-[10px] font-mono border border-slate-700">
                       {searchResults.length} {searchResults.length === 1 ? 'match' : 'matches'}
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-300 flex items-center gap-2">
                     <span><kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-[9px] font-mono text-white">↑</kbd> <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-[9px] font-mono text-white">↓</kbd> Navigate</span>
-                    <span><kbd className="px-1.5 py-0.5 bg-blue-600 border border-blue-500 rounded text-[9px] font-mono text-white font-semibold">↵ Enter</kbd> Select & Add</span>
+                    <span><kbd className="px-1.5 py-0.5 bg-blue-600 border border-blue-500 rounded text-[9px] font-mono text-white font-semibold">↵ Enter</kbd> Select</span>
                     <span><kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-[9px] font-mono text-white">Esc</kbd> Close</span>
                   </div>
                 </div>
 
                 {/* Table Column Headers */}
-                <div className="grid grid-cols-12 gap-2 px-3.5 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                <div className="grid grid-cols-12 gap-2 px-3 py-1 bg-slate-100 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-600">
                   <div className="col-span-5">Item Description & OEM SKU</div>
                   <div className="col-span-3">Make / Fitment</div>
                   <div className="col-span-2 text-right">Closing Stock</div>
@@ -1257,7 +1200,7 @@ export default function QuickBillPosPage() {
 
                 {/* Search Results Table Rows */}
                 {searchResults.length > 0 ? (
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
                     {searchResults.map((prod, idx) => {
                       const isSelected = idx === selectedSearchIndex;
                       const hasStock = prod.stockQty > 0;
@@ -1268,18 +1211,17 @@ export default function QuickBillPosPage() {
                           id={`tally-search-item-${idx}`}
                           onClick={() => addItemRow(prod)}
                           onMouseEnter={() => setSelectedSearchIndex(idx)}
-                          className={`grid grid-cols-12 gap-2 px-3.5 py-2 cursor-pointer transition-colors items-center text-xs ${
-                            isSelected
+                          className={`grid grid-cols-12 gap-2 px-3 py-1.5 cursor-pointer transition-colors items-center text-xs ${isSelected
                               ? 'bg-blue-600 text-white shadow-xs'
                               : 'hover:bg-slate-50 text-slate-800'
-                          }`}
+                            }`}
                         >
                           {/* Item Description & SKU */}
                           <div className="col-span-5 min-w-0 pr-2">
-                            <div className={`font-semibold truncate text-[12px] ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                            <div className={`font-semibold truncate text-[11.5px] ${isSelected ? 'text-white' : 'text-slate-900'}`}>
                               {renderHighlightedText(prod.name, searchQuery, isSelected)}
                             </div>
-                            <div className={`text-[10px] font-mono truncate ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                            <div className={`text-[9.5px] font-mono truncate ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
                               SKU: {renderHighlightedText(prod.partNumber || '-', searchQuery, isSelected)}
                               {prod.category && ` · ${prod.category}`}
                             </div>
@@ -1287,25 +1229,24 @@ export default function QuickBillPosPage() {
 
                           {/* Brand & Model */}
                           <div className="col-span-3 min-w-0 pr-2">
-                            <div className={`text-[11px] font-medium truncate ${isSelected ? 'text-white' : 'text-slate-700'}`}>
+                            <div className={`text-[10.5px] font-medium truncate ${isSelected ? 'text-white' : 'text-slate-700'}`}>
                               {prod.brand || 'Unbranded'}
                             </div>
-                            <div className={`text-[10px] truncate ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                            <div className={`text-[9.5px] truncate ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
                               {Array.isArray(prod.models) && prod.models.length > 0 ? prod.models.slice(0, 2).join(', ') : 'Universal Fit'}
                             </div>
                           </div>
 
                           {/* Closing Stock */}
                           <div className="col-span-2 text-right">
-                            <span className={`inline-flex items-center gap-1 text-[11px] font-mono font-semibold px-2 py-0.5 rounded ${
-                              isSelected
+                            <span className={`inline-flex items-center gap-1 text-[10.5px] font-mono font-semibold px-1.5 py-0.2 rounded ${isSelected
                                 ? hasStock
                                   ? 'bg-emerald-400/25 text-emerald-200 border border-emerald-400/40'
                                   : 'bg-rose-400/20 text-rose-200 border border-rose-400/30'
                                 : hasStock
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                   : 'bg-slate-100 text-slate-400 border border-slate-200'
-                            }`}>
+                              }`}>
                               {prod.stockQty} {prod.unit || 'pcs'}
                             </span>
                           </div>
@@ -1316,7 +1257,7 @@ export default function QuickBillPosPage() {
                               ₹{(Number(prod.salePricePaise) / 100).toFixed(2)}
                             </div>
                             {prod.mrpPaise && Number(prod.mrpPaise) > 0 ? (
-                              <div className={`text-[9px] font-mono tabular-nums ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                              <div className={`text-[8.5px] font-mono tabular-nums ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
                                 MRP: ₹{(Number(prod.mrpPaise) / 100).toFixed(2)}
                               </div>
                             ) : null}
@@ -1326,76 +1267,81 @@ export default function QuickBillPosPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="p-5 text-center text-xs text-slate-500">
-                    <p className="font-semibold text-slate-700 mb-1">No stock items match "{searchQuery}"</p>
-                    <p className="text-[11px] text-slate-400">
-                      Press <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono">F2</kbd> to add a blank row or try different search tokens.
+                  <div className="p-4 text-center text-xs text-slate-500">
+                    <p className="font-semibold text-slate-700 mb-0.5">No stock items match "{searchQuery}"</p>
+                    <p className="text-[10px] text-slate-400">
+                      Press <kbd className="px-1 py-0.2 bg-slate-100 border border-slate-200 rounded font-mono">F2</kbd> to add a blank row.
                     </p>
                   </div>
                 )}
 
                 {/* Footer Status Bar */}
-                <div className="bg-slate-50 px-3.5 py-1.5 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
-                  <div className="flex items-center gap-2">
+                <div className="bg-slate-50 px-3 py-1 border-t border-slate-200 flex items-center justify-between text-[9.5px] text-slate-500">
+                  <div className="flex items-center gap-1.5">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Tally Multi-Token Engine: Token-order agnostic & punctuation-free</span>
+                    <span>Smart Match by part name, SKU, or vehicle fitment</span>
                   </div>
                   <div className="font-medium text-slate-600">
-                    Press <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded font-mono text-[9px]">F3</kbd> anytime to search
+                    Press <kbd className="px-1 py-0.2 bg-white border border-slate-200 rounded font-mono text-[8.5px]">F3</kbd> to focus search
                   </div>
                 </div>
               </div>
             )}
-
-            {/* Fast-Add Popular Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs">
-              <span className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider shrink-0 mr-0.5">Quick Add:</span>
-              {catalog.slice(0, 4).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => addItemRow(p)}
-                  className="shrink-0 px-2.5 py-1 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#334155] font-medium rounded-lg text-[11px] border border-[#E2E8F0] transition flex items-center gap-1 shadow-2xs"
-                >
-                  <Plus className="w-2.5 h-2.5 text-[#C81E1E]" />
-                  <span>{p.name.split(' ')[0]} {p.name.split(' ')[1] || ''}</span>
-                  <span className="font-mono tabular-nums text-[#64748B]">₹{(Number(p.salePricePaise) / 100).toFixed(0)}</span>
-                </button>
-              ))}
-            </div>
           </div>
 
-          {/* Line Items Table Container */}
-          <div className="bg-white border border-[#E2E8F0] rounded-lg shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#E2E8F0] bg-[#F8F9FA] text-[#64748B] font-semibold uppercase text-[10px]">
-                    <th className="py-2.5 px-3 w-8 text-center">#</th>
-                    <th className="py-2.5 px-3 min-w-[180px]">{t('pos.item_name', 'Item Description & SKU')}</th>
-                    <th className="py-2.5 px-2 w-14 text-center">{t('pos.quantity', 'Qty')}</th>
-                    <th className="py-2.5 px-2 w-14 text-center">Unit</th>
-                    <th className="py-2.5 px-2.5 w-22 text-right">MRP (₹)</th>
-                    <th className="py-2.5 px-2 w-20 text-center">Disc (%)</th>
-                    <th className="py-2.5 px-2.5 w-22 text-right">{t('pos.rate', 'Rate (₹)')}</th>
-                    <th className="py-2.5 px-2 w-16 text-center">GST</th>
-                    <th className="py-2.5 px-3 w-26 text-right">{t('pos.amount', 'Amount (₹)')}</th>
-                    <th className="py-2.5 px-2 w-8 text-center"></th>
+          {/* Line Items Billing Grid Table (100% Viewport-Fit - Zero Horizontal Scroll) */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+            <table className="w-full text-left border-collapse text-xs table-fixed">
+              <colgroup>
+                <col style={{ width: '28px' }} />  {/* # */}
+                <col />                             {/* Item Description & SKU (auto fills remaining width) */}
+                <col style={{ width: '46px' }} />  {/* Qty */}
+                <col style={{ width: '48px' }} />  {/* Unit */}
+                <col style={{ width: '64px' }} />  {/* MRP */}
+                <col style={{ width: '50px' }} />  {/* Disc % */}
+                <col style={{ width: '68px' }} />  {/* Rate */}
+                <col style={{ width: '78px' }} />  {/* Amount */}
+                <col style={{ width: '30px' }} />  {/* Delete */}
+              </colgroup>
+              <thead>
+                <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] font-bold uppercase text-[9.5px] tracking-wider select-none">
+                  <th className="py-2 px-1 text-center">#</th>
+                  <th className="py-2 px-2">{t('pos.item_name', 'Item Description & SKU')}</th>
+                  <th className="py-2 px-0.5 text-center">{t('pos.quantity', 'Qty')}</th>
+                  <th className="py-2 px-0.5 text-center">Unit</th>
+                  <th className="py-2 px-1 text-right">MRP (₹)</th>
+                  <th className="py-2 px-0.5 text-center">Disc (%)</th>
+                  <th className="py-2 px-1 text-right">{t('pos.rate', 'Rate (₹)')}</th>
+                  <th className="py-2 px-1 text-right">{t('pos.amount', 'Amount (₹)')}</th>
+                  <th className="py-2 px-0.5 text-center"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F1F5F9] text-[#334155]">
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-10 text-center">
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-400 flex items-center justify-center mx-auto mb-2 shadow-2xs">
+                        <Receipt className="w-5 h-5 text-slate-400" />
+                      </div>
+                      <p className="font-bold text-slate-800 text-xs">Billing cart is empty</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 max-w-sm mx-auto">
+                        Press <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[9.5px] text-slate-700 font-bold">F3</kbd> to search stock catalog, or click above to insert a blank item row.
+                      </p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-[#334155]">
-                  {items.map((item, idx) => {
+                ) : (
+                  items.map((item, idx) => {
                     const rateNum = parseFloat(item.rateRupees) || 0;
                     const lineTotal = rateNum * (item.qty || 1);
                     const mrpNum = parseFloat(item.mrpRupees) || 0;
                     const hasDiscount = mrpNum > rateNum && rateNum > 0;
 
                     return (
-                      <tr key={item.id} className="hover:bg-[#F8F9FA] transition-colors">
-                        <td className="py-2 px-2.5 text-center font-mono text-[#94A3B8] text-[11px]">{idx + 1}</td>
-                        
+                      <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-1 px-1 text-center font-mono text-[#94A3B8] text-[11px] font-semibold">{idx + 1}</td>
+
                         {/* Name & SKU */}
-                        <td className="py-2 px-2.5">
+                        <td className="py-1 px-1.5">
                           <input
                             id={`item-name-${idx}`}
                             type="text"
@@ -1403,12 +1349,12 @@ export default function QuickBillPosPage() {
                             onChange={(e) => updateItemRow(item.id, 'name', e.target.value)}
                             onKeyDown={(e) => handleItemKeyDown(e, idx, 'name')}
                             placeholder="Enter item description..."
-                            className="w-full bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg px-2.5 py-1 text-xs font-medium text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
+                            className="w-full bg-slate-50/80 hover:bg-white focus:bg-white border border-[#CBD5E1]/60 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] rounded-md px-2 py-1 text-xs font-semibold text-[#0F172A] outline-hidden shadow-2xs transition truncate"
                           />
                         </td>
 
                         {/* Qty */}
-                        <td className="py-2 px-2 text-center">
+                        <td className="py-1 px-0.5 text-center">
                           <input
                             id={`item-qty-${idx}`}
                             type="number"
@@ -1417,27 +1363,30 @@ export default function QuickBillPosPage() {
                             onChange={(e) => updateItemRow(item.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
                             onFocus={(e) => e.target.select()}
                             onKeyDown={(e) => handleItemKeyDown(e, idx, 'qty')}
-                            className="w-14 text-center bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 font-semibold font-mono tabular-nums text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs"
+                            className="w-full text-center bg-slate-50/80 hover:bg-white focus:bg-white border border-[#CBD5E1]/60 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] rounded-md py-1 font-bold font-mono tabular-nums text-[#0F172A] outline-hidden text-xs"
                           />
                         </td>
 
                         {/* Unit */}
-                        <td className="py-2 px-2 text-center">
+                        <td className="py-1 px-0.5 text-center">
                           <select
                             value={item.unit}
                             onChange={(e) => updateItemRow(item.id, 'unit', e.target.value)}
-                            className="bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-1.5 text-[11px] font-medium text-[#334155] outline-hidden shadow-2xs"
+                            className="w-full bg-slate-50/80 hover:bg-white border border-[#CBD5E1]/60 rounded-md py-1 px-0.5 text-[10px] font-medium text-[#334155] outline-hidden cursor-pointer"
                           >
                             <option value="pcs">pcs</option>
                             <option value="set">set</option>
                             <option value="can">can</option>
                             <option value="ltr">ltr</option>
                             <option value="kit">kit</option>
+                            <option value="box">box</option>
+                            <option value="pkt">pkt</option>
+                            <option value="mtr">mtr</option>
                           </select>
                         </td>
 
                         {/* MRP (₹) */}
-                        <td className="py-2 px-2 text-right">
+                        <td className="py-1 px-0.5 text-right">
                           <input
                             id={`item-mrp-${idx}`}
                             type="text"
@@ -1451,13 +1400,13 @@ export default function QuickBillPosPage() {
                             }}
                             onKeyDown={(e) => handleItemKeyDown(e, idx, 'mrp')}
                             placeholder="0.00"
-                            className="w-20 text-right bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-2 font-mono tabular-nums font-semibold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs placeholder:text-slate-400"
+                            className="w-full text-right bg-slate-50/80 hover:bg-white focus:bg-white border border-[#CBD5E1]/60 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] rounded-md py-1 px-1 font-mono tabular-nums font-semibold text-[#0F172A] outline-hidden text-xs placeholder:text-slate-400"
                           />
                         </td>
 
                         {/* Discount (%) Section */}
-                        <td className="py-2 px-2 text-center">
-                          <div className="relative inline-flex items-center">
+                        <td className="py-1 px-0.5 text-center">
+                          <div className="relative w-full inline-flex items-center">
                             <input
                               id={`item-disc-${idx}`}
                               type="text"
@@ -1471,14 +1420,14 @@ export default function QuickBillPosPage() {
                               }}
                               onKeyDown={(e) => handleItemKeyDown(e, idx, 'disc')}
                               placeholder="0"
-                              className="w-16 text-right pr-4.5 bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-1 font-mono tabular-nums font-semibold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs placeholder:text-slate-400 text-xs"
+                              className="w-full text-right pr-3 bg-slate-50/80 hover:bg-white focus:bg-white border border-[#CBD5E1]/60 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] rounded-md py-1 px-0.5 font-mono tabular-nums font-semibold text-[#0F172A] outline-hidden text-xs placeholder:text-slate-400"
                             />
-                            <span className="absolute right-1 text-[10px] text-slate-400 font-bold pointer-events-none">%</span>
+                            <span className="absolute right-0.5 text-[8.5px] text-slate-400 font-bold pointer-events-none">%</span>
                           </div>
                         </td>
 
                         {/* Rate (₹) */}
-                        <td className="py-2 px-2.5 text-right">
+                        <td className="py-1 px-0.5 text-right">
                           <input
                             id={`item-rate-${idx}`}
                             type="text"
@@ -1492,462 +1441,419 @@ export default function QuickBillPosPage() {
                             }}
                             onKeyDown={(e) => handleItemKeyDown(e, idx, 'rate')}
                             placeholder="0.00"
-                            className="w-20 text-right bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-2 font-mono tabular-nums font-semibold text-[#0F172A] focus:bg-white focus:border-[#C81E1E] outline-hidden shadow-2xs placeholder:text-slate-400"
+                            className="w-full text-right bg-slate-50/80 hover:bg-white focus:bg-white border border-[#CBD5E1]/60 focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] rounded-md py-1 px-1 font-mono tabular-nums font-bold text-[#0F172A] outline-hidden text-xs placeholder:text-slate-400"
                           />
                         </td>
 
-                        {/* GST Slab */}
-                        <td className="py-2 px-2 text-center">
-                          <select
-                            value={item.gstRateBp}
-                            onChange={(e) => updateItemRow(item.id, 'gstRateBp', parseInt(e.target.value))}
-                            className="bg-[#F8F9FA] border border-[#CBD5E1] rounded-lg py-1 px-1.5 text-[11px] font-medium font-mono text-[#334155] outline-hidden shadow-2xs"
-                          >
-                            <option value={1800}>18%</option>
-                            <option value={2800}>28%</option>
-                            <option value={1200}>12%</option>
-                            <option value={500}>5%</option>
-                            <option value={0}>0%</option>
-                          </select>
-                        </td>
-
                         {/* Line Total & Savings Badge */}
-                        <td className="py-2 px-2.5 text-right font-mono tabular-nums">
-                          <div className="font-semibold text-[#0F172A]">
+                        <td className="py-1 px-1 text-right font-mono tabular-nums">
+                          <div className="font-bold text-xs text-[#0F172A]">
                             ₹{lineTotal.toFixed(2)}
                           </div>
                           {hasDiscount && (
-                            <div className="text-[9px] text-emerald-600 font-bold tracking-tight">
+                            <div className="text-[8.5px] text-emerald-600 font-bold tracking-tight leading-none">
                               save ₹{((mrpNum - rateNum) * (item.qty || 1)).toFixed(0)}
                             </div>
                           )}
                         </td>
 
                         {/* Delete */}
-                        <td className="py-2 px-2 text-center">
+                        <td className="py-1 px-0.5 text-center">
                           <button
                             type="button"
                             onClick={() => removeItemRow(item.id)}
-                            className="p-1 text-[#94A3B8] hover:text-[#DC2626] rounded-md transition"
+                            className="w-6 h-6 inline-flex items-center justify-center text-[#94A3B8] hover:text-[#DC2626] hover:bg-red-50 rounded transition cursor-pointer"
+                            title="Delete row"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
-            {/* Bottom Row: + Add Row Button */}
-            <div className="p-3 border-t border-[#F1F5F9] bg-[#F8F9FA] flex items-center justify-between">
+          {/* Bottom Row: Shortcut Tips & Clear Bill */}
+          <div className="p-1.5 px-3 border-t border-[#F1F5F9] bg-[#F8F9FA] flex items-center justify-between gap-2 text-xs shrink-0">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => addItemRow()}
-                className="h-8 inline-flex items-center gap-1.5 px-3.5 bg-white hover:bg-[#F1F5F9] text-[#0F172A] font-semibold text-xs rounded-md border border-[#CBD5E1] shadow-2xs transition"
+                className="h-6.5 inline-flex items-center gap-1 px-2 bg-white hover:bg-slate-100 text-[#0F172A] font-semibold text-[11px] rounded-md border border-[#CBD5E1] shadow-2xs transition cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5 text-[#C81E1E]" />
-                <span>Add Item Row (F2)</span>
+                <Plus className="w-3 h-3 text-[#C81E1E]" />
+                <span>+ Blank Row</span>
               </button>
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Clear all line items from this bill?')) {
+                      setItems([]);
+                    }
+                  }}
+                  className="h-6.5 px-1.5 text-[10.5px] text-slate-500 hover:text-red-600 transition cursor-pointer"
+                >
+                  Clear Bill
+                </button>
+              )}
+            </div>
 
-              <span className="text-[11px] text-[#64748B]">
-                {items.length} line items on bill
-              </span>
+            {/* Keyboard Shortcuts Hint Bar */}
+            <div className="hidden sm:flex items-center gap-2.5 text-[9.5px] text-[#64748B] font-mono">
+              <span><kbd className="px-1 py-0.2 bg-white border border-slate-200 rounded text-slate-700">F3</kbd> Search</span>
+              <span><kbd className="px-1 py-0.2 bg-white border border-slate-200 rounded text-slate-700">F2</kbd> Add Row</span>
+              <span><kbd className="px-1 py-0.2 bg-white border border-slate-200 rounded text-slate-700">↵</kbd> Next</span>
             </div>
           </div>
 
         </div>
 
         {/* RIGHT PANEL (4 COLS): SETTLEMENT & CHECKOUT */}
-        <div className="lg:col-span-4 space-y-3.5">
-          
-          <div className="bg-white border border-[#E2E8F0] rounded-lg p-4 sm:p-5 shadow-2xs space-y-4 sticky top-16">
-            
-            <div className="border-b border-[#F1F5F9] pb-2.5">
-              <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5 text-[#16A34A]" />
-                <span>Settlement & Checkout</span>
-              </h2>
-            </div>
+        <div className="lg:col-span-4 flex flex-col min-h-0 bg-white border border-[#E2E8F0] rounded-xl shadow-2xs overflow-y-auto h-full p-2.5 sm:p-3 space-y-2">
 
-            {/* Real-time Available Counter Cash Overview Card */}
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/90 rounded-xl p-3 shadow-2xs space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                    <Wallet className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
-                      <span>Available Counter Cash</span>
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    </div>
-                    <div className="text-[10px] text-emerald-700">
-                      Float ₹{(Number(counterOpeningFloatPaise) / 100).toFixed(0)} · Sales ₹{(Number(counterCashSalesPaise) / 100).toFixed(0)}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-mono font-bold text-sm text-emerald-900 tabular-nums">
-                    {formatPaiseToRupees(counterCashPaise)}
-                  </div>
-                  <span className="text-[9px] uppercase font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded border border-emerald-200">
-                    In Till
-                  </span>
-                </div>
+          {/* Checkout Header */}
+          <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-1.5 shrink-0">
+            <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider flex items-center gap-1.5">
+              <Wallet className="w-3.5 h-3.5 text-[#C81E1E]" />
+              <span>Settlement & Checkout</span>
+            </h2>
+            <span className="font-mono text-[9.5px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+              {items.length} {items.length === 1 ? 'ITEM' : 'ITEMS'}
+            </span>
+          </div>
+
+          {/* HERO TOTAL PAYABLE CARD */}
+          <div className="bg-[#0F172A] text-white rounded-lg p-2.5 shadow-xs flex items-center justify-between shrink-0">
+            <div>
+              <div className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">
+                Total Payable
               </div>
-
-              {/* If Cash Mode is selected, show projected counter cash after this bill */}
-              {(paymentMode === 'FULL_CASH' || (paymentMode === 'SPLIT' && cashAmount && parseFloat(cashAmount) > 0)) && (
-                <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[11px]">
-                  <span className="text-emerald-800 font-medium">
-                    After this sale (+{formatPaiseToRupees(cashPaise)}):
-                  </span>
-                  <span className="font-mono font-bold text-emerald-950 tabular-nums">
-                    {formatPaiseToRupees(counterCashPaise + cashPaise)}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Quick 1-Click Payment Presets */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider block">{t('pos.payment_type', 'Payment Mode:')}</label>
-              <div className="grid grid-cols-2 gap-2 text-xs font-medium">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMode('FULL_CASH')}
-                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
-                    paymentMode === 'FULL_CASH' 
-                      ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold' 
-                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
-                  }`}
-                >
-                  <span>💵 Cash</span>
-                  {paymentMode === 'FULL_CASH' && <Check className="w-3.5 h-3.5 text-white" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMode('FULL_UPI')}
-                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
-                    paymentMode === 'FULL_UPI' 
-                      ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold' 
-                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
-                  }`}
-                >
-                  <span>📱 UPI / QR</span>
-                  {paymentMode === 'FULL_UPI' && <Check className="w-3.5 h-3.5 text-white" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isWalkIn) {
-                      alert('Walk-in retail customers do not have a credit account. Please select Cash or UPI, or register them as a business client.');
-                      return;
-                    }
-                    setPaymentMode('FULL_KHATA');
-                  }}
-                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
-                    isWalkIn 
-                       ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60' 
-                      : paymentMode === 'FULL_KHATA' 
-                      ? 'bg-[#D97706] text-white border-[#D97706] font-semibold' 
-                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
-                  }`}
-                  title={isWalkIn ? 'Credit is disabled for Walk-in Retail customers (Cash/UPI only)' : 'Full payment on Credit Ledger'}
-                >
-                  <span>{isWalkIn ? '🚫 No Credit' : '📖 Credit Ledger'}</span>
-                  {paymentMode === 'FULL_KHATA' && <Check className="w-3.5 h-3.5 text-white" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSelectSplitMode}
-                  className={`h-9 px-2.5 rounded-md border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${
-                    paymentMode === 'SPLIT' 
-                      ? 'bg-[#0F172A] text-white border-[#0F172A] font-semibold' 
-                      : 'bg-[#F8F9FA] text-[#334155] border-[#E2E8F0] hover:bg-[#F1F5F9]'
-                  }`}
-                >
-                  <span>⚡ Split</span>
-                  {paymentMode === 'SPLIT' && <Check className="w-3.5 h-3.5 text-white" />}
-                </button>
+              <div className="text-[10px] text-slate-400">
+                Subtotal: {formatPaiseToRupees(taxSummary.grandTotal)}
               </div>
             </div>
+            <div className="text-right">
+              <div className="font-mono text-xl font-black text-white tabular-nums tracking-tight">
+                {formatPaiseToRupees(taxSummary.grandTotal)}
+              </div>
+            </div>
+          </div>
 
-            {/* Cash Mode: Customer Tendered Cash & Return Change Calculator */}
-            {paymentMode === 'FULL_CASH' && grandTotalPaise > 0n && (
-              <div className="bg-[#F8F9FA] p-3 rounded-xl border border-[#CBD5E1] space-y-2 text-xs shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">
-                    💵 Customer Tendered Cash:
-                  </label>
-                  {cashTenderedRupees && (
-                    <button
-                      type="button"
-                      onClick={() => setCashTenderedRupees('')}
-                      className="text-[10px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
+          {/* Payment Mode Selector */}
+          <div className="space-y-1 shrink-0">
+            <label className="text-[9.5px] font-semibold text-[#64748B] uppercase tracking-wider block">
+              {t('pos.payment_type', 'Payment Mode')}
+            </label>
+            <div className="grid grid-cols-2 gap-1.5 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setPaymentMode('FULL_CASH')}
+                className={`h-9 px-2.5 rounded-lg border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs cursor-pointer ${paymentMode === 'FULL_CASH'
+                    ? 'bg-[#0F172A] text-white border-[#0F172A] font-bold'
+                    : 'bg-[#F8F9FA] text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9]'
+                  }`}
+              >
+                <Banknote className="w-4 h-4 shrink-0" />
+                <span>Cash</span>
+                {paymentMode === 'FULL_CASH' && <Check className="w-3.5 h-3.5 text-emerald-400 ml-auto" />}
+              </button>
 
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-2.5 top-1.5 text-xs text-slate-400 font-mono">₹</span>
-                    <input
-                      type="text"
-                      value={cashTenderedRupees}
-                      onChange={(e) => setCashTenderedRupees(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder={(Number(grandTotalPaise) / 100).toFixed(2)}
-                      className="w-full bg-white border border-[#CBD5E1] rounded-lg py-1 pl-6 pr-2 font-mono font-bold text-xs text-[#0F172A] focus:border-[#C81E1E] outline-hidden shadow-2xs"
-                    />
-                  </div>
-                  {/* Quick Preset Buttons */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setCashTenderedRupees((Number(grandTotalPaise) / 100).toFixed(0))}
-                      className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-md text-[10px] font-semibold text-slate-700 shadow-2xs"
-                    >
-                      Exact
-                    </button>
-                    {[500, 1000, 2000]
-                      .filter(amt => BigInt(amt * 100) >= grandTotalPaise)
-                      .slice(0, 2)
-                      .map(amt => (
-                        <button
-                          key={amt}
-                          type="button"
-                          onClick={() => setCashTenderedRupees(amt.toString())}
-                          className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-md text-[10px] font-mono font-semibold text-slate-700 shadow-2xs"
-                        >
-                          ₹{amt}
-                        </button>
-                      ))}
-                  </div>
-                </div>
+              <button
+                type="button"
+                onClick={() => setPaymentMode('FULL_UPI')}
+                className={`h-9 px-2.5 rounded-lg border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs cursor-pointer ${paymentMode === 'FULL_UPI'
+                    ? 'bg-[#0F172A] text-white border-[#0F172A] font-bold'
+                    : 'bg-[#F8F9FA] text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9]'
+                  }`}
+              >
+                <QrCode className="w-4 h-4 shrink-0" />
+                <span>UPI / QR</span>
+                {paymentMode === 'FULL_UPI' && <Check className="w-3.5 h-3.5 text-emerald-400 ml-auto" />}
+              </button>
 
-                {/* Return Change calculation */}
-                {(() => {
-                  const tenderedPaise = parseRupeesToPaise(cashTenderedRupees || '0');
-                  if (tenderedPaise > grandTotalPaise) {
-                    const changePaise = tenderedPaise - grandTotalPaise;
-                    return (
-                      <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg flex items-center justify-between text-amber-950">
-                        <span className="text-[11px] font-bold">Return Change to Buyer:</span>
-                        <span className="font-mono font-extrabold text-sm text-amber-900 tabular-nums">
-                          {formatPaiseToRupees(changePaise)}
-                        </span>
-                      </div>
-                    );
+              <button
+                type="button"
+                onClick={() => {
+                  if (isWalkIn) {
+                    alert('Walk-in retail customers do not have a credit account. Please select Cash or UPI, or register them as a business client.');
+                    return;
                   }
-                  return null;
-                })()}
-              </div>
-            )}
+                  setPaymentMode('FULL_KHATA');
+                }}
+                className={`h-9 px-2.5 rounded-lg border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs ${isWalkIn
+                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                    : paymentMode === 'FULL_KHATA'
+                      ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                      : 'bg-[#F8F9FA] text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9]'
+                  }`}
+                title={isWalkIn ? 'Credit is disabled for Walk-in Retail customers' : 'Full payment on Credit Ledger'}
+              >
+                <BookOpen className="w-4 h-4 shrink-0" />
+                <span>{isWalkIn ? 'No Credit' : 'Credit Ledger'}</span>
+                {paymentMode === 'FULL_KHATA' && <Check className="w-3.5 h-3.5 text-white ml-auto" />}
+              </button>
 
-            {/* FULL_UPI QR action */}
-            {paymentMode === 'FULL_UPI' && (
-              <div className="bg-[#EFF6FF] p-2.5 rounded-md border border-[#DBEAFE] flex items-center justify-between text-xs shadow-2xs">
-                <span className="text-[11px] text-[#1E40AF] font-medium">Dynamic QR Link:</span>
-                <button
-                  type="button"
-                  onClick={() => setIsRazorpayModalOpen(true)}
-                  className="h-7 px-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-[10px] rounded-md transition flex items-center gap-1 shadow-2xs"
-                >
-                  <QrCode className="w-3 h-3" />
-                  <span>Show QR</span>
-                </button>
-              </div>
-            )}
+              <button
+                type="button"
+                onClick={handleSelectSplitMode}
+                className={`h-9 px-2.5 rounded-lg border transition-colors flex items-center justify-center gap-1.5 text-xs shadow-2xs cursor-pointer ${paymentMode === 'SPLIT'
+                    ? 'bg-[#0F172A] text-white border-[#0F172A] font-bold'
+                    : 'bg-[#F8F9FA] text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9]'
+                  }`}
+              >
+                <Layers className="w-4 h-4 shrink-0" />
+                <span>Split Pay</span>
+                {paymentMode === 'SPLIT' && <Check className="w-3.5 h-3.5 text-emerald-400 ml-auto" />}
+              </button>
+            </div>
+          </div>
 
-            {/* Split: Simple Cash & UPI Inputs */}
-            {paymentMode === 'SPLIT' && (
-              <div className="bg-[#F8F9FA] p-3 rounded-md border border-[#E2E8F0] space-y-2 text-xs shadow-2xs">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">
-                      💵 Cash Paid (₹)
-                    </label>
-                    <input
-                      type="text"
-                      value={cashAmount}
-                      onChange={(e) => handleCashAmountChange(e.target.value)}
-                      onFocus={(e) => {
-                        if (cashAmount === '0' || cashAmount === '0.00' || cashAmount === '0.0') {
-                          setCashAmount('');
-                        }
-                        e.target.select();
-                      }}
-                      placeholder="0.00"
-                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs placeholder:text-slate-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] mb-0.5">
-                      📱 UPI Paid (₹)
-                    </label>
-                    <input
-                      type="text"
-                      value={upiAmount}
-                      onChange={(e) => handleUpiAmountChange(e.target.value)}
-                      onFocus={(e) => {
-                        if (upiAmount === '0' || upiAmount === '0.00' || upiAmount === '0.0') {
-                          setUpiAmount('');
-                        }
-                        e.target.select();
-                      }}
-                      placeholder="0.00"
-                      className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 font-mono tabular-nums font-semibold text-[#0F172A] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden text-xs placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-                <div>
+          {/* Cash Mode: Customer Tendered Cash & Return Change Calculator */}
+          {paymentMode === 'FULL_CASH' && grandTotalPaise > 0n && (
+            <div className="bg-[#F8F9FA] p-2 rounded-lg border border-[#CBD5E1] space-y-1.5 text-xs shadow-2xs shrink-0">
+              <div className="flex items-center justify-between">
+                <label className="text-[9.5px] font-bold text-[#475569] uppercase tracking-wider flex items-center gap-1">
+                  <Banknote className="w-3 h-3 text-[#16A34A]" />
+                  <span>Customer Tendered Cash</span>
+                </label>
+                {cashTenderedRupees && (
+                  <button
+                    type="button"
+                    onClick={() => setCashTenderedRupees('')}
+                    className="text-[9.5px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <span className="absolute left-2 top-1.5 text-xs text-slate-400 font-mono">₹</span>
                   <input
                     type="text"
-                    value={upiRef}
-                    onChange={(e) => setUpiRef(e.target.value)}
-                    placeholder="Optional UPI Ref / UTR number..."
-                    className="w-full bg-white border border-[#CBD5E1] rounded-md p-1.5 text-[11px] text-[#334155] focus:border-[#C81E1E] focus:ring-1 focus:ring-[#C81E1E] outline-hidden"
+                    value={cashTenderedRupees}
+                    onChange={(e) => setCashTenderedRupees(e.target.value.replace(/[^0-9.]/g, ''))}
+                    placeholder={(Number(grandTotalPaise) / 100).toFixed(2)}
+                    className="w-full bg-white border border-[#CBD5E1] rounded-md py-1 pl-5 pr-1.5 font-mono font-bold text-xs text-[#0F172A] focus:border-[#C81E1E] outline-hidden shadow-2xs h-7"
+                  />
+                </div>
+                {/* Quick Preset Buttons (Indian Note Denominations) */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setCashTenderedRupees((Number(grandTotalPaise) / 100).toFixed(2))}
+                    className="px-1.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-[9.5px] font-semibold text-slate-700 shadow-2xs cursor-pointer h-7"
+                    title="Exact amount"
+                  >
+                    Exact
+                  </button>
+                  {[500, 200, 100].map(note => {
+                    const totalRupees = Number(grandTotalPaise) / 100;
+                    let tenderAmt = note;
+                    if (totalRupees > note) {
+                      tenderAmt = Math.ceil(totalRupees / note) * note;
+                    }
+                    return (
+                      <button
+                        key={note}
+                        type="button"
+                        onClick={() => setCashTenderedRupees(tenderAmt.toString())}
+                        className="px-1.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-[9.5px] font-mono font-bold text-slate-700 shadow-2xs cursor-pointer h-7"
+                        title={`Tender in ₹${note} notes (₹${tenderAmt})`}
+                      >
+                        ₹{note}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Return Change calculation */}
+              {(() => {
+                const tenderedPaise = parseRupeesToPaise(cashTenderedRupees || '0');
+                if (tenderedPaise > grandTotalPaise) {
+                  const changePaise = tenderedPaise - grandTotalPaise;
+                  return (
+                    <div className="p-1.5 bg-amber-50 border border-amber-300 rounded flex items-center justify-between text-amber-950">
+                      <span className="text-[10px] font-bold">Return Change:</span>
+                      <span className="font-mono font-extrabold text-xs text-amber-900 tabular-nums">
+                        {formatPaiseToRupees(changePaise)}
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          )}
+
+          {/* FULL_UPI QR action */}
+          {paymentMode === 'FULL_UPI' && (
+            <div className="bg-[#EFF6FF] p-2 rounded-lg border border-[#DBEAFE] flex items-center justify-between text-xs shadow-2xs shrink-0">
+              <span className="text-[10.5px] text-[#1E40AF] font-medium">Dynamic UPI QR Code:</span>
+              <button
+                type="button"
+                onClick={() => setIsRazorpayModalOpen(true)}
+                className="h-7.5 px-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-[11px] rounded transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Show QR</span>
+              </button>
+            </div>
+          )}
+
+          {/* Split: Simple Cash & UPI Inputs */}
+          {paymentMode === 'SPLIT' && (
+            <div className="bg-[#F8F9FA] p-2 rounded-lg border border-[#E2E8F0] space-y-1.5 text-xs shadow-2xs shrink-0">
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="block text-[9px] font-semibold text-[#64748B] mb-0.5 flex items-center gap-1">
+                    <Banknote className="w-2.5 h-2.5 text-[#16A34A]" />
+                    <span>Cash (₹)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={cashAmount}
+                    onChange={(e) => handleCashAmountChange(e.target.value)}
+                    onFocus={(e) => {
+                      if (cashAmount === '0' || cashAmount === '0.00' || cashAmount === '0.0') {
+                        setCashAmount('');
+                      }
+                      e.target.select();
+                    }}
+                    placeholder="0.00"
+                    className="w-full bg-white border border-[#CBD5E1] rounded p-1 font-mono tabular-nums font-semibold text-[#0F172A] focus:border-[#C81E1E] outline-hidden text-[11px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-semibold text-[#64748B] mb-0.5 flex items-center gap-1">
+                    <QrCode className="w-2.5 h-2.5 text-[#2563EB]" />
+                    <span>UPI (₹)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={upiAmount}
+                    onChange={(e) => handleUpiAmountChange(e.target.value)}
+                    onFocus={(e) => {
+                      if (upiAmount === '0' || upiAmount === '0.00' || upiAmount === '0.0') {
+                        setUpiAmount('');
+                      }
+                      e.target.select();
+                    }}
+                    placeholder="0.00"
+                    className="w-full bg-white border border-[#CBD5E1] rounded p-1 font-mono tabular-nums font-semibold text-[#0F172A] focus:border-[#C81E1E] outline-hidden text-[11px]"
                   />
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Financial Totals Breakdown */}
-            <div className="space-y-1.5 pt-2 border-t border-[#F1F5F9] text-xs">
-              <div className="flex justify-between text-[#64748B]">
-                <span>{t('pos.subtotal', 'Taxable Value')}:</span>
-                <span className="font-mono tabular-nums font-semibold text-[#334155]">
-                  {formatPaiseToRupees(taxSummary.taxableValue)}
+          {/* Financial Paid vs Due Breakdown */}
+          <div className="space-y-1 pt-1 border-t border-[#F1F5F9] text-xs shrink-0">
+            {/* Paid vs Due Pill */}
+            <div className="flex justify-between items-center text-[10.5px] font-mono tabular-nums font-semibold bg-[#F8F9FA] p-1.5 rounded border border-[#E2E8F0]">
+              <span className="text-[#166534] flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                Paid: {formatPaiseToRupees(totalPaidNowPaise)}
+              </span>
+              {balanceOnCreditPaise > 0n ? (
+                <span className="text-[#92400E] font-bold">
+                  Khata Due: {formatPaiseToRupees(balanceOnCreditPaise)}
                 </span>
-              </div>
-              <div className="flex justify-between text-[#64748B]">
-                <span>{t('pos.total_tax', 'GST (CGST + SGST)')}:</span>
-                <span className="font-mono tabular-nums font-semibold text-[#334155]">
-                  {formatPaiseToRupees(taxSummary.totalTax)}
-                </span>
-              </div>
-              {taxSummary.roundOff !== 0n && (
-                <div className="flex justify-between text-[#64748B]">
-                  <span>Round Off:</span>
-                  <span className="font-mono tabular-nums font-semibold text-[#64748B]">
-                    {formatPaiseToRupees(taxSummary.roundOff)}
-                  </span>
-                </div>
+              ) : (
+                <span className="text-slate-500 font-normal">Fully Paid</span>
               )}
+            </div>
 
-              {/* GRAND TOTAL */}
-              <div className="border-t border-[#E2E8F0] pt-2 flex justify-between items-baseline">
-                <span className="font-bold text-[#0F172A] text-xs">{t('pos.grand_total', 'Grand Total')}:</span>
-                <span className="text-xl font-bold text-[#0F172A] font-mono tabular-nums tracking-tight">
-                  {formatPaiseToRupees(taxSummary.grandTotal)}
+            {/* Smart Credit Risk & Limit Check Banner */}
+            {balanceOnCreditPaise > 0n && selectedCustomer.id && (() => {
+              const curBal = BigInt(selectedCustomer.balancePaise || '0');
+              const limit = BigInt(selectedCustomer.creditLimitPaise || '5000000');
+              const projected = curBal + balanceOnCreditPaise;
+              const isOver = projected > limit;
+
+              return (
+                <div className={`p-1.5 rounded border text-[10.5px] space-y-0.5 ${isOver
+                    ? 'bg-red-50 border-red-200 text-red-900'
+                    : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                  }`}>
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="flex items-center gap-1">
+                      {isOver ? (
+                        <>
+                          <AlertCircle className="w-3 h-3 text-red-600" />
+                          <span>Over Limit!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>Within Limit</span>
+                        </>
+                      )}
+                    </span>
+                    <span className="font-mono text-[9px]">
+                      Limit: {formatPaiseToRupees(limit)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Primary Action Buttons */}
+          <div className="space-y-1.5 pt-1 mt-auto shrink-0">
+            <button
+              type="button"
+              onClick={handleIssueInvoice}
+              disabled={isSubmittingBill}
+              className="w-full h-11 bg-[#C81E1E] hover:bg-[#A81818] active:scale-[0.99] disabled:opacity-60 text-white font-bold text-[13px] rounded-lg shadow-sm hover:shadow transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {isSubmittingBill ? (
+                <>
+                  <ModernLoader size="xs" />
+                  <span>Issuing Bill...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Issue Bill & Record Sale</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={openCurrentBillPreview}
+              className="w-full h-8.5 bg-white hover:bg-[#F8F9FA] text-[#334155] font-semibold rounded-md text-xs border border-[#CBD5E1] transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5 text-[#64748B]" />
+              <span>Preview E-Bill</span>
+            </button>
+          </div>
+
+          {/* Counter Cash Mini Snapshot */}
+          <div className="pt-1 border-t border-[#F1F5F9] shrink-0">
+            <div className="bg-[#F8F9FA] border border-[#E2E8F0] rounded-md p-1.5 px-2 flex items-center justify-between text-[10.5px]">
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></div>
+                <span className="font-semibold text-slate-700">Till:</span>
+                <span className="font-mono font-bold text-slate-900 tabular-nums">
+                  {formatPaiseToRupees(counterCashPaise)}
                 </span>
               </div>
-
-              {/* Paid vs Due Pill */}
-              <div className="pt-1.5 flex justify-between text-[11px] font-mono tabular-nums font-semibold">
-                <span className="text-[#166534]">Paid: {formatPaiseToRupees(totalPaidNowPaise)}</span>
-                {balanceOnCreditPaise > 0n && (
-                  <span className="text-[#92400E]">Khata: {formatPaiseToRupees(balanceOnCreditPaise)}</span>
-                )}
-              </div>
-
-              {/* Smart Credit Risk & Limit Check Banner */}
-              {balanceOnCreditPaise > 0n && selectedCustomer.id && (() => {
-                const curBal = BigInt(selectedCustomer.balancePaise || '0');
-                const limit = BigInt(selectedCustomer.creditLimitPaise || '5000000');
-                const projected = curBal + balanceOnCreditPaise;
-                const isOver = projected > limit;
-
-                return (
-                  <div className={`mt-2 p-2.5 rounded-lg border text-xs space-y-1 ${
-                    isOver 
-                      ? 'bg-red-50 border-red-200 text-red-900' 
-                      : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                  }`}>
-                    <div className="flex items-center justify-between font-bold">
-                      <span className="flex items-center gap-1">
-                        {isOver ? (
-                          <>
-                            <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-                            <span>Credit Limit Exceeded!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Within Approved Credit Limit</span>
-                          </>
-                        )}
-                      </span>
-                      <span className="font-mono text-[10px]">
-                        Limit: {formatPaiseToRupees(limit)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[10px] font-mono text-slate-600 pt-0.5">
-                      <span>Projected Khata Due:</span>
-                      <span className={`font-bold ${isOver ? 'text-red-700' : 'text-slate-900'}`}>
-                        {formatPaiseToRupees(projected)}
-                      </span>
-                    </div>
-                    {isOver && (
-                      <p className="text-[10px] text-red-700 leading-tight pt-0.5">
-                        ⚠️ Over limit by {formatPaiseToRupees(projected - limit)}. Counter staff review required.
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
+              {(paymentMode === 'FULL_CASH' || (paymentMode === 'SPLIT' && cashAmount && parseFloat(cashAmount) > 0)) && (
+                <span className="text-[9.5px] text-emerald-700 font-mono font-semibold">
+                  (+{formatPaiseToRupees(cashPaise)})
+                </span>
+              )}
             </div>
-
-            {/* Primary Action Buttons */}
-            <div className="space-y-2 pt-2">
-              <button
-                type="button"
-                onClick={handleIssueInvoice}
-                disabled={isSubmittingBill}
-                className="w-full h-10 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-60 text-white font-bold text-xs rounded-md shadow-2xs transition flex items-center justify-center gap-2"
-              >
-                {isSubmittingBill ? (
-                  <>
-                    <ModernLoader size="xs" />
-                    <span>Issuing Bill & Recording...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Issue Bill & Record Sale</span>
-                  </>
-                )}
-              </button>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={openCurrentBillPreview}
-                  className="h-8 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium rounded-md text-[11px] border border-[#CBD5E1] transition flex items-center justify-center gap-1 shadow-2xs"
-                >
-                  <Eye className="w-3 h-3 text-[#64748B]" />
-                  <span>Preview</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openCurrentBillPreview}
-                  className="h-8 bg-white hover:bg-[#F8F9FA] text-[#334155] font-medium rounded-md text-[11px] border border-[#CBD5E1] transition flex items-center justify-center gap-1 shadow-2xs"
-                >
-                  <Printer className="w-3 h-3 text-[#64748B]" />
-                  <span>Print A4</span>
-                </button>
-              </div>
-            </div>
-
           </div>
+
         </div>
       </div>
 
@@ -1956,7 +1862,7 @@ export default function QuickBillPosPage() {
         <ClientPortal>
           <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150 print:hidden">
             <div className="bg-white border border-[#CBD5E1] rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-150 print:hidden">
-              
+
               {/* Header */}
               <div className="flex items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3.5">
                 <div className="flex items-center gap-3">
@@ -2025,8 +1931,8 @@ export default function QuickBillPosPage() {
                     onClick={handlePrintFromSuccessModal}
                     className="h-9 bg-[#0F172A] hover:bg-[#1E293B] text-white font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
                   >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Print / PDF</span>
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>View Digital Bill</span>
                   </button>
                   <button
                     onClick={handleWhatsAppFromSuccessModal}

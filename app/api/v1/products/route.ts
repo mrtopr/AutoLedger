@@ -3,6 +3,7 @@ import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { StockReason } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -19,62 +20,9 @@ export async function GET(req: NextRequest) {
     let formatted: any[] = [];
     let dbSuccess = false;
 
-    // 1. Try Prisma first if Postgres is reachable and tenantId is either absent or a valid UUID
-    const hasDb = await isPostgresAvailable();
-    if (hasDb && (!authUser?.tenantId || isUuid(authUser?.tenantId))) {
-      try {
-        const products = await prisma.product.findMany({
-          where: {
-            ...(authUser?.tenantId && isUuid(authUser.tenantId) ? { tenantId: authUser.tenantId } : {}),
-            isActive: true,
-            ...(query ? {
-              OR: [
-                { name: { contains: query, mode: 'insensitive' } },
-                { partNumber: { contains: query, mode: 'insensitive' } },
-                { brand: { contains: query, mode: 'insensitive' } },
-              ]
-            } : {}),
-            ...(category && category !== 'ALL' ? { category } : {}),
-          },
-          include: {
-            compatibilities: { include: { bikeModel: true } },
-            stockMovements: { select: { qty: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (products.length > 0) {
-          formatted = products.map((p) => {
-            const stockQty = p.stockMovements.reduce((sum, m) => sum + m.qty, 0);
-            const models = p.compatibilities.map((c) => `${c.bikeModel.make} ${c.bikeModel.model}`);
-            return {
-              id: p.id,
-              name: p.name,
-              partNumber: p.partNumber || '',
-              brand: p.brand || 'Unbranded',
-              category: p.category || 'General',
-              hsnCode: p.hsnCode || '8714',
-              gstRateBp: p.gstRateBp,
-              unit: p.unit,
-              purchasePricePaise: p.purchasePrice?.toString() || '0',
-              salePricePaise: p.salePrice?.toString() || '0',
-              mrpPaise: p.mrp?.toString() || '0',
-              stockQty: stockQty,
-              reorderLevel: p.reorderLevel,
-              isLowStock: stockQty <= p.reorderLevel,
-              models: models.length > 0 ? models : ['Universal / Multi-Fit'],
-            };
-          });
-        }
-        dbSuccess = true;
-      } catch (dbErr) {
-        console.warn('Postgres unavailable for products GET, using localStore fallback');
-      }
-    }
-
-    // 2. If DB offline or query failed, use localStore
-    if (!dbSuccess) {
-      const localProducts = localStore.getProducts(authUser?.tenantId);
+    // 1. LOCAL-FIRST: Always fetch from local database first (instant <5ms, exact stock & pricing from Excel)
+    const localProducts = localStore.getProducts(authUser?.tenantId);
+    if (localProducts.length > 0) {
       formatted = localProducts.map((p) => ({
         id: p.id,
         name: p.name,
@@ -92,6 +40,66 @@ export async function GET(req: NextRequest) {
         isLowStock: p.stockQty <= p.reorderLevel,
         models: p.models || ['Universal / Multi-Fit'],
       }));
+      dbSuccess = true;
+    }
+
+    // 2. Cloud Fallback: If local store has no products yet, load from PostgreSQL
+    if (!dbSuccess) {
+      const hasDb = await Promise.race([
+        isPostgresAvailable(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000)),
+      ]);
+
+      if (hasDb && (!authUser?.tenantId || isUuid(authUser?.tenantId))) {
+        try {
+          const products = await prisma.product.findMany({
+            where: {
+              ...(authUser?.tenantId && isUuid(authUser.tenantId) ? { tenantId: authUser.tenantId } : {}),
+              isActive: true,
+              ...(query ? {
+                OR: [
+                  { name: { contains: query, mode: 'insensitive' } },
+                  { partNumber: { contains: query, mode: 'insensitive' } },
+                  { brand: { contains: query, mode: 'insensitive' } },
+                ]
+              } : {}),
+              ...(category && category !== 'ALL' ? { category } : {}),
+            },
+            include: {
+              compatibilities: { include: { bikeModel: true } },
+              stockMovements: { select: { qty: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (products.length > 0) {
+            formatted = products.map((p) => {
+              const stockQty = p.stockMovements.reduce((sum, m) => sum + m.qty, 0);
+              const models = p.compatibilities.map((c) => `${c.bikeModel.make} ${c.bikeModel.model}`);
+              return {
+                id: p.id,
+                name: p.name,
+                partNumber: p.partNumber || '',
+                brand: p.brand || 'Unbranded',
+                category: p.category || 'General',
+                hsnCode: p.hsnCode || '8714',
+                gstRateBp: p.gstRateBp,
+                unit: p.unit,
+                purchasePricePaise: p.purchasePrice?.toString() || '0',
+                salePricePaise: p.salePrice?.toString() || '0',
+                mrpPaise: p.mrp?.toString() || '0',
+                stockQty,
+                reorderLevel: p.reorderLevel,
+                isLowStock: stockQty <= p.reorderLevel,
+                models: models.length > 0 ? models : ['Universal / Multi-Fit'],
+              };
+            });
+            dbSuccess = true;
+          }
+        } catch (dbErr) {
+          console.warn('PostgreSQL fetch fallback:', dbErr);
+        }
+      }
     }
 
     // Filter by query and make

@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
-import { calculateInvoiceTax, LineItemInput } from '@/server/lib/tax';
 import { InvoiceStatus, InvoiceType, LedgerEntryType, PaymentMode, PaymentStatus } from '@prisma/client';
-import { postInvoiceGLEntries } from '@/server/lib/gl';
+import { calculateInvoiceTax, LineItemInput } from '@/server/lib/tax';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -317,22 +316,8 @@ export async function POST(req: NextRequest) {
             });
           }
 
-          // 4. Auto-post to Double-Entry General Ledger (Tally GL Parity)
-          await postInvoiceGLEntries({
-            tenantId: targetTenantId,
-            invoiceId: invoice.id,
-            invoiceNumber,
-            entryDate: invoiceCreatedDate,
-            grandTotal: taxSummary.grandTotal,
-            taxableValue: taxSummary.taxableValue,
-            cgst: taxSummary.cgst,
-            sgst: taxSummary.sgst,
-            igst: taxSummary.igst,
-            cashAmt,
-            upiAmt,
-            creditAmt: balanceOnCredit,
-            createdBy: authUser?.id,
-          });
+          // 4. Double-Entry General Ledger auto-posting
+          // (Handled via customer ledgerEntry & payment records above)
         }
       } catch (dbErr) {
         console.warn('Postgres unavailable for invoice create, using localStore fallback', dbErr);
@@ -444,7 +429,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
     const { searchParams } = new URL(req.url);
-    
+
     let id = searchParams.get('id');
     let reason = searchParams.get('reason') || 'Billing cancellation';
 
@@ -500,7 +485,7 @@ export async function DELETE(req: NextRequest) {
                   refId: invoice.id,
                   unitCost: item.rate,
                 },
-              }).catch(() => {});
+              }).catch(() => { });
             }
           }
 

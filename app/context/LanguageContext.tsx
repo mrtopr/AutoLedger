@@ -55,7 +55,7 @@ export const dictionary: Translations = {
   'dash.across_workshops': { en: 'Across client accounts' },
   'dash.low_stock_spares': { en: 'Low Stock Products' },
   'dash.parts_below_threshold': { en: 'Below critical reorder threshold' },
-  
+
   // Dashboard Chart
   'dash.trend_title': { en: 'Daily Sales & Cash/UPI Collections Trend' },
 };
@@ -69,8 +69,8 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType>({
   language: 'en',
-  setLanguage: () => {},
-  toggleLanguage: () => {},
+  setLanguage: () => { },
+  toggleLanguage: () => { },
   t: (key: string, fallback?: string) => fallback || dictionary[key]?.en || key,
 });
 
@@ -80,7 +80,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <LanguageContext.Provider value={{ language: 'en', setLanguage: () => {}, toggleLanguage: () => {}, t }}>
+    <LanguageContext.Provider value={{ language: 'en', setLanguage: () => { }, toggleLanguage: () => { }, t }}>
       {children}
     </LanguageContext.Provider>
   );
@@ -91,8 +91,8 @@ export function useLanguage() {
   if (!context) {
     return {
       language: 'en' as const,
-      setLanguage: () => {},
-      toggleLanguage: () => {},
+      setLanguage: () => { },
+      toggleLanguage: () => { },
       t: (key: string, fallback?: string) => fallback || dictionary[key]?.en || key,
     };
   }

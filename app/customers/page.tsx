@@ -3,15 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/app/context/LanguageContext';
-import { 
-  Users, 
-  Search, 
-  Plus, 
-  Phone, 
-  MapPin, 
-  ChevronRight, 
-  AlertTriangle, 
-  CheckCircle2, 
+import {
+  Users,
+  Search,
+  Plus,
+  Phone,
+  MapPin,
+  ChevronRight,
+  AlertTriangle,
+  CheckCircle2,
   ShieldAlert,
   X,
   Store,
@@ -27,6 +27,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
+import { calculateCustomerCreditScore } from '@/app/lib/creditScore';
 import RazorpayModal from '@/app/components/RazorpayModal';
 import ClientPortal from '@/app/components/ClientPortal';
 import EditCustomerModal from '@/app/components/EditCustomerModal';
@@ -281,11 +282,11 @@ export default function CustomersPage() {
               {totalReceivablesPaise > 0n ? formatPaiseToRupees(totalReceivablesPaise) : totalAdvancesPaise > 0n ? formatPaiseToRupees(totalAdvancesPaise) : '₹0.00'}
             </div>
             <div className="text-[11px] text-[#64748B] mt-0.5 truncate">
-              {totalReceivablesPaise > 0n 
+              {totalReceivablesPaise > 0n
                 ? `Active receivables ${totalAdvancesPaise > 0n ? `(${formatPaiseToRupees(totalAdvancesPaise)} advance)` : ''}`
                 : totalAdvancesPaise > 0n
-                ? 'Advance credit deposited'
-                : 'All accounts settled'}
+                  ? 'Advance credit deposited'
+                  : 'All accounts settled'}
             </div>
           </div>
         </div>
@@ -375,11 +376,10 @@ export default function CustomersPage() {
             <button
               key={st.key}
               onClick={() => setFilterStatus(st.key)}
-              className={`h-7 px-2.5 text-[11px] font-medium rounded-md transition shrink-0 ${
-                filterStatus === st.key 
-                  ? 'bg-[#0F172A] text-white shadow-xs' 
+              className={`h-7 px-2.5 text-[11px] font-medium rounded-md transition shrink-0 ${filterStatus === st.key
+                  ? 'bg-[#0F172A] text-white shadow-xs'
                   : 'bg-[#F8F9FA] text-[#475569] hover:bg-[#F1F5F9] border border-[#E2E8F0]'
-              }`}
+                }`}
             >
               {st.label}
             </button>
@@ -396,23 +396,24 @@ export default function CustomersPage() {
                 <th className="py-3 px-4">Business / Shop Name</th>
                 <th className="py-3 px-4">Contact & Phone</th>
                 <th className="py-3 px-4">GSTIN / Type</th>
+                <th className="py-3 px-4 text-center">Credit Score</th>
                 <th className="py-3 px-4 text-right">Credit Limit (₹)</th>
                 <th className="py-3 px-4 text-right">Outstanding (₹)</th>
                 <th className="py-3 px-4 text-right">Overdue (₹)</th>
-                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Health</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E2E8F0] text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-[#64748B]">
+                  <td colSpan={9} className="py-12 text-center text-[#64748B]">
                     Loading live khata debtor accounts...
                   </td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-[#94A3B8]">
+                  <td colSpan={9} className="py-12 text-center text-[#94A3B8]">
                     No customer accounts match criteria. Click "Register Khata" to add one.
                   </td>
                 </tr>
@@ -425,11 +426,18 @@ export default function CustomersPage() {
                   const isCustDue = balPaise > 0n;
                   const absBal = isCustAdvance ? -balPaise : balPaise;
                   const utilizationPct = limPaise > 0n && isCustDue ? Math.min(100, Math.round(Number((balPaise * 100n) / limPaise))) : 0;
+                  const scoreObj = calculateCustomerCreditScore({
+                    balancePaise: cust.balancePaise,
+                    creditLimitPaise: cust.creditLimitPaise,
+                    overduePaise: overdue,
+                    daysOverdue: overdue > 0n ? 30 : 0,
+                    termsDays: cust.termsDays || 15,
+                  });
 
                   return (
                     <tr key={cust.id} className="hover:bg-[#F8F9FA] transition">
                       <td className="py-3 px-4">
-                        <Link 
+                        <Link
                           href={`/customers/${cust.id}`}
                           className="font-semibold text-[#0F172A] hover:text-[#C81E1E] transition flex items-center gap-1 group"
                         >
@@ -452,6 +460,25 @@ export default function CustomersPage() {
                         <span className="text-[10px] text-[#64748B] uppercase">
                           {cust.customerType === 'GARAGE' ? 'WORKSHOP' : (cust.customerType || 'RETAILER')}
                         </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <div className="inline-flex flex-col items-center">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
+                            scoreObj.color === 'emerald'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : scoreObj.color === 'blue'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : scoreObj.color === 'amber'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}>
+                            {scoreObj.score}
+                          </span>
+                          <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-tight mt-0.5">
+                            {scoreObj.rating}
+                          </span>
+                        </div>
                       </td>
 
                       <td className="py-3 px-4 text-right font-mono text-xs text-[#64748B] tabular-nums">
@@ -484,16 +511,14 @@ export default function CustomersPage() {
                       </td>
 
                       <td className="py-3 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${
-                          cust.status === 'GREEN' 
-                            ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
-                            : cust.status === 'YELLOW' 
-                            ? 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]' 
-                            : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            cust.status === 'GREEN' ? 'bg-[#16A34A]' : cust.status === 'YELLOW' ? 'bg-[#D97706]' : 'bg-[#DC2626]'
-                          }`} />
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${cust.status === 'GREEN'
+                            ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+                            : cust.status === 'YELLOW'
+                              ? 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]'
+                              : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
+                          }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${cust.status === 'GREEN' ? 'bg-[#16A34A]' : cust.status === 'YELLOW' ? 'bg-[#D97706]' : 'bg-[#DC2626]'
+                            }`} />
                           {cust.status}
                         </span>
                       </td>
@@ -526,11 +551,10 @@ export default function CustomersPage() {
                               e.stopPropagation();
                               setActiveMenuId(activeMenuId === cust.id ? null : cust.id);
                             }}
-                            className={`w-7 h-7 flex items-center justify-center rounded-md border transition cursor-pointer ${
-                              activeMenuId === cust.id
+                            className={`w-7 h-7 flex items-center justify-center rounded-md border transition cursor-pointer ${activeMenuId === cust.id
                                 ? 'bg-[#0F172A] text-white border-[#0F172A]'
                                 : 'bg-white hover:bg-[#F8F9FA] text-[#64748B] hover:text-[#0F172A] border-[#CBD5E1]'
-                            }`}
+                              }`}
                             title="More Actions"
                           >
                             <MoreVertical className="w-3.5 h-3.5" />
@@ -538,7 +562,7 @@ export default function CustomersPage() {
 
                           {/* Floating Dropdown Menu */}
                           {activeMenuId === cust.id && (
-                            <div 
+                            <div
                               onClick={(e) => e.stopPropagation()}
                               className={`absolute right-0 z-50 w-44 bg-white border border-[#E2E8F0] rounded-lg shadow-lg py-1 text-left animate-in fade-in zoom-in-95 duration-100 ${idx >= customers.length - 2 && customers.length >= 3 ? 'bottom-full mb-1' : 'top-8'}`}
                             >
@@ -737,11 +761,10 @@ export default function CustomersPage() {
                       <select
                         value={newCustomer.openingBalanceType}
                         onChange={(e) => setNewCustomer({ ...newCustomer, openingBalanceType: e.target.value as 'DUE' | 'ADVANCE' })}
-                        className={`w-full h-8.5 px-2.5 rounded-xl text-xs font-bold border transition ${
-                          newCustomer.openingBalanceType === 'DUE'
+                        className={`w-full h-8.5 px-2.5 rounded-xl text-xs font-bold border transition ${newCustomer.openingBalanceType === 'DUE'
                             ? 'bg-white text-red-700 border-red-300'
                             : 'bg-white text-emerald-700 border-emerald-300'
-                        }`}
+                          }`}
                       >
                         <option value="DUE">🔴 Customer Owes (Previous Udhar)</option>
                         <option value="ADVANCE">🟢 Customer Has Advance (Credit)</option>

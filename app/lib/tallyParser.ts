@@ -458,8 +458,23 @@ export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResul
           particularsCol = c;
         }
 
-        // 2. Quantity (Specific quantity column - do not match plain "closing" unless it says qty)
-        if (h.includes('quantity') || h === 'qty' || h.includes('pack / qty') || h.includes('closing qty') || h.includes('stock qty') || h.includes('balance qty') || h === 'closing quantity') {
+        // 2. Quantity (Specific quantity column - supports Stock, Closing Stock, Closing Balance, Qty., Qty (Nos), etc.)
+        const isNotPriceOrAmount = !h.includes('rate') && !h.includes('price') && !h.includes('mrp') && !h.includes('cost') && !h.includes('value') && !h.includes('amount') && !h.includes('val');
+        if (isNotPriceOrAmount && (
+          h.includes('quantity') ||
+          h.includes('qty') ||
+          h.includes('stock') ||
+          h.includes('balance') ||
+          h.includes('closing') ||
+          h.includes('opening') ||
+          h.includes('pack') ||
+          h.includes('on hand') ||
+          h.includes('in hand') ||
+          h === 'nos' ||
+          h === 'pcs' ||
+          h === 'units' ||
+          h === 'count'
+        )) {
           qtyCol = c;
         }
 
@@ -538,14 +553,23 @@ export function parseTallyInventorySheet(inputRows: string[][]): TallyParseResul
 
   // Infer column positions from sample data rows if still unfound
   if (qtyCol === -1 || rateCol === -1) {
-    for (let r = Math.max(0, tableHeaderRowIndex); r < Math.min(rawRows.length, 15); r++) {
-      const row = rawRows[r];
+    for (let r = Math.max(0, tableHeaderRowIndex + 1); r < Math.min(rawRows.length, 25); r++) {
+      const row = rawRows[r] || [];
       for (let c = 1; c < row.length; c++) {
-        const val = row[c] || '';
-        if (qtyCol === -1 && /^[0-9]+\s*(nos|pcs|set|ltr|pkt)$/i.test(val.trim())) {
-          qtyCol = c;
-        } else if (rateCol === -1 && /^[0-9.]+\/[a-z]+$/i.test(val.trim())) {
-          rateCol = c;
+        const val = (row[c] ? String(row[c]) : '').trim();
+        if (!val) continue;
+
+        // Check if cell is an integer quantity with or without units (e.g. "17", "17 PCS", "10 Nos", "5")
+        if (qtyCol === -1 && c !== rateCol && c !== valueCol) {
+          if (/^-?[0-9]+\s*(nos|pcs|set|ltr|pkt|box|mtr|kg)?$/i.test(val) && !val.includes('.')) {
+            qtyCol = c;
+          }
+        }
+        // Check if cell is a rate (e.g. "48.07", "48.07/PCS", "₹ 48.07")
+        if (rateCol === -1 && c !== qtyCol && c !== valueCol) {
+          if (/^[0-9.]+\/[a-z]+$/i.test(val) || (/^[0-9]+\.[0-9]{2}$/.test(val) && parseFloat(val) > 0)) {
+            rateCol = c;
+          }
         }
       }
     }

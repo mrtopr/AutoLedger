@@ -19,9 +19,10 @@ export async function GET(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req);
     const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-default';
 
-    // Parse requested date from query param
+    // Parse requested date or period from query param
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get('date');
+    const periodParam = (searchParams.get('period') || 'today').toLowerCase(); // 'today' | 'month' | 'year' | 'all'
 
     const today = new Date();
     const todayStr = toDateStr(today);
@@ -38,6 +39,10 @@ export async function GET(req: NextRequest) {
 
     const selectedDateStr = toDateStr(targetDate);
     const isHistorical = selectedDateStr !== todayStr;
+
+    // Filter boundary calculation based on periodParam
+    const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
+    const startOfCurrentYear = new Date(today.getFullYear(), 0, 1, 0, 0, 0, 0);
 
     // Human formatted string
     const options: Intl.DateTimeFormatOptions = { 
@@ -58,6 +63,20 @@ export async function GET(req: NextRequest) {
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(targetDate);
     dayEnd.setHours(23, 59, 59, 999);
+
+    const isMatchPeriod = (itemDate: Date, itemDateStr: string): boolean => {
+      if (periodParam === 'month') {
+        return itemDate >= startOfCurrentMonth;
+      }
+      if (periodParam === 'year') {
+        return itemDate >= startOfCurrentYear;
+      }
+      if (periodParam === 'all') {
+        return true;
+      }
+      // default: 'today' or specific target day
+      return itemDateStr === selectedDateStr;
+    };
 
     // Real dynamic metrics
     let totalOutstanding = 0n;
@@ -155,13 +174,14 @@ export async function GET(req: NextRequest) {
 
         for (const inv of allRecentInvoices) {
           const invDate = toDateStr(new Date(inv.createdAt));
+          const invObjDate = new Date(inv.createdAt);
           if (weekMap[invDate]) {
             weekMap[invDate].salesPaise += inv.grandTotal;
           }
           if (invDate === prevDayStr) {
             prevDaySalesPaise += inv.grandTotal;
           }
-          if (invDate === selectedDateStr) {
+          if (isMatchPeriod(invObjDate, invDate)) {
             daySalesPaise += inv.grandTotal;
             const paid = inv.amountPaid > 0n ? inv.amountPaid : inv.paidNow;
             if (inv.grandTotal > paid) {
@@ -230,6 +250,7 @@ export async function GET(req: NextRequest) {
       for (const inv of localInvoices) {
         if (inv.status === 'CANCELLED') continue; // Skip voided/cancelled invoices
         const invDate = toDateStr(new Date(inv.createdAt));
+        const invObjDate = new Date(inv.createdAt);
         const gTotal = BigInt(inv.grandTotalPaise || 0);
         const pNow = BigInt(inv.paidNowPaise || 0);
 
@@ -240,7 +261,7 @@ export async function GET(req: NextRequest) {
         if (invDate === prevDayStr) {
           prevDaySalesPaise += gTotal;
         }
-        if (invDate === selectedDateStr) {
+        if (isMatchPeriod(invObjDate, invDate)) {
           daySalesPaise += gTotal;
           dayCollectedPaise += pNow;
           if (gTotal > pNow) {

@@ -1,15 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  X, 
-  Plus, 
-  CheckCircle2, 
-  AlertCircle, 
-  Calendar, 
-  FileText, 
-  DollarSign, 
-  ArrowUpRight, 
+import {
+  X,
+  Plus,
+  CheckCircle2,
+  AlertCircle,
+  Calendar,
+  FileText,
+  DollarSign,
+  ArrowUpRight,
   ArrowDownLeft,
   Save
 } from 'lucide-react';
@@ -101,7 +101,7 @@ export default function AddLedgerEntryModal({
     <ClientPortal>
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
-          
+
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
             <div>
@@ -129,7 +129,7 @@ export default function AddLedgerEntryModal({
           )}
 
           <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
-            
+
             {/* Type Switcher */}
             <div>
               <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
@@ -142,11 +142,10 @@ export default function AddLedgerEntryModal({
                     setEntryType('DEBIT');
                     setNarration('Previous register ledger balance');
                   }}
-                  className={`h-10 px-3 rounded-xl font-bold border transition flex items-center justify-center gap-2 cursor-pointer ${
-                    entryType === 'DEBIT'
+                  className={`h-10 px-3 rounded-xl font-bold border transition flex items-center justify-center gap-2 cursor-pointer ${entryType === 'DEBIT'
                       ? 'bg-red-50 text-red-700 border-red-300 ring-2 ring-red-200'
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
                   <ArrowUpRight className="w-4 h-4 text-red-600" />
                   <span>🔴 Add Udhar / Debit (You will Receive)</span>
@@ -158,11 +157,10 @@ export default function AddLedgerEntryModal({
                     setEntryType('CREDIT');
                     setNarration('Advance cash deposit');
                   }}
-                  className={`h-10 px-3 rounded-xl font-bold border transition flex items-center justify-center gap-2 cursor-pointer ${
-                    entryType === 'CREDIT'
+                  className={`h-10 px-3 rounded-xl font-bold border transition flex items-center justify-center gap-2 cursor-pointer ${entryType === 'CREDIT'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-300 ring-2 ring-emerald-200'
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
                   <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
                   <span>🟢 Add Advance / Credit (You Received)</span>
@@ -262,9 +260,8 @@ export default function AddLedgerEntryModal({
 
               <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-slate-500">New Resulting Balance:</span>
-                <div className={`font-mono font-bold text-sm ${
-                  previewBal > 0n ? 'text-red-600' : previewBal < 0n ? 'text-emerald-600' : 'text-slate-900'
-                }`}>
+                <div className={`font-mono font-bold text-sm ${previewBal > 0n ? 'text-red-600' : previewBal < 0n ? 'text-emerald-600' : 'text-slate-900'
+                  }`}>
                   {formatPaiseToRupees(previewBal)} {previewBal > 0n ? 'Dr (Due)' : previewBal < 0n ? 'Cr (Advance)' : 'NIL'}
                 </div>
               </div>

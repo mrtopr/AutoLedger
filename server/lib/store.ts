@@ -244,8 +244,8 @@ class LocalStore {
         return created;
       }
     }
-    this.data.tenants[idx] = { 
-      ...this.data.tenants[idx], 
+    this.data.tenants[idx] = {
+      ...this.data.tenants[idx],
       ...updates,
       bankDetails: updates.bankDetails !== undefined ? updates.bankDetails : this.data.tenants[idx].bankDetails,
       settings: updates.settings !== undefined ? updates.settings : this.data.tenants[idx].settings,
@@ -310,10 +310,17 @@ class LocalStore {
   getProducts(tenantId?: string): LocalProduct[] {
     if (tenantId) {
       const filtered = this.data.products.filter((p) => p.tenantId === tenantId);
-      
-      this.data.hasSeededProducts = this.data.hasSeededProducts || {};
-      if (filtered.length > 0 || this.data.hasSeededProducts[tenantId]) {
+      if (filtered.length > 0) {
         return filtered;
+      }
+      // If store already has products under another tenant or imported earlier, return them
+      if (this.data.products.length > 0) {
+        return this.data.products;
+      }
+
+      this.data.hasSeededProducts = this.data.hasSeededProducts || {};
+      if (this.data.hasSeededProducts[tenantId]) {
+        return this.data.products;
       }
 
       this.data.hasSeededProducts[tenantId] = true;
@@ -485,7 +492,7 @@ class LocalStore {
       }
 
       const existing = (item.existingProductId ? existingById.get(item.existingProductId) : null) ||
-                       existingByName.get(trimmedName.toLowerCase());
+        existingByName.get(trimmedName.toLowerCase());
 
       if (existing) {
         if (item.salePricePaise !== undefined) existing.salePricePaise = item.salePricePaise;
@@ -582,14 +589,14 @@ class LocalStore {
   }
 
   deleteProductsByFilter(
-    tenantId?: string, 
+    tenantId?: string,
     options?: { category?: string; brand?: string; zeroStockOnly?: boolean; search?: string; all?: boolean }
   ): number {
     const beforeLen = this.data.products.length;
     this.data.products = this.data.products.filter((prod) => {
       if (tenantId && prod.tenantId !== tenantId) return true; // keep other tenants
       if (options?.all) return false; // delete all for this tenant
-      
+
       let matches = true;
       if (options?.category && options.category !== 'All Departments') {
         matches = matches && prod.category === options.category;
@@ -622,7 +629,7 @@ class LocalStore {
   getCustomers(tenantId?: string): LocalCustomer[] {
     if (tenantId) {
       const filtered = this.data.customers.filter((c) => c.tenantId === tenantId);
-      
+
       this.data.hasSeededCustomers = this.data.hasSeededCustomers || {};
       if (filtered.length > 0 || this.data.hasSeededCustomers[tenantId]) {
         return filtered;

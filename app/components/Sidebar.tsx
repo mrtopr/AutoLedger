@@ -46,20 +46,16 @@ export default function Sidebar() {
       fallbackTitle: 'OPERATIONS',
       items: [
         { labelKey: 'app.new_bill', fallbackLabel: 'POS Billing', href: '/pos', icon: Receipt, shortcut: 'N' },
-        { labelKey: 'nav.invoices', fallbackLabel: 'Invoices', href: '/invoices', icon: FileText },
-        { labelKey: 'nav.customers_khata', fallbackLabel: 'Customer Directory', href: '/customers', icon: Users, shortcut: 'C' },
+        { labelKey: 'nav.invoices', fallbackLabel: 'Invoices & Bills', href: '/invoices', icon: FileText },
+        { labelKey: 'nav.customers_khata', fallbackLabel: 'Customer Directory & Khata', href: '/customers', icon: Users, shortcut: 'C' },
         { labelKey: 'nav.inventory', fallbackLabel: 'Inventory & Stock', href: '/inventory', icon: Boxes, shortcut: 'I' },
-        { labelKey: 'nav.purchases', fallbackLabel: 'Purchases & PO', href: '/purchases', icon: ShoppingBag },
       ],
     },
     {
       titleKey: 'nav.finance',
-      fallbackTitle: 'FINANCE & AUDIT',
+      fallbackTitle: 'SETTLEMENT',
       items: [
-        { labelKey: 'nav.accounts', fallbackLabel: 'Accounts & GL', href: '/accounts', icon: BookOpen },
         { labelKey: 'nav.settlement', fallbackLabel: 'Day-End Settlement', href: '/settlement', icon: Landmark },
-        { labelKey: 'nav.reports', fallbackLabel: 'Reports & Analytics', href: '/reports', icon: BarChart3 },
-        { labelKey: 'nav.tally', fallbackLabel: 'Tally XML Export', href: '/tally', icon: FileSpreadsheet },
       ],
     },
     {

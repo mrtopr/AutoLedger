@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
-import { StockReason } from '@prisma/client';
+import { queueCloudSync } from '@/server/lib/cloudSync';
 
 export interface BulkImportItem {
   name: string;
@@ -76,58 +75,9 @@ export async function POST(req: NextRequest) {
 
     const localSummary = localStore.bulkUpsertProducts(targetTenantId, localStorePayload);
 
-    // 2. PostgreSQL bulk sync ONLY if logged-in user belongs to a valid UUID PostgreSQL tenant
+    // 2. Background cloud synchronization: queue non-blocking sync with automatic retries
     if (authUser?.tenantId && isValidUuid(authUser.tenantId)) {
-      const dbTenantId = authUser.tenantId;
-      try {
-        const hasDb = await Promise.race([
-          isPostgresAvailable(),
-          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000))
-        ]);
-
-        if (hasDb) {
-          const dbNewProducts: any[] = [];
-          for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            const trimmedName = (item.name || '').trim();
-            if (!trimmedName || item.syncAction === 'SKIP') continue;
-
-            const isUnpriced = Boolean(item.isUnpriced);
-            const salePricePaise = isUnpriced ? 0 : Math.max(0, Number(item.salePricePaise) || 0);
-            const purchasePricePaise = isUnpriced ? 0 : Math.max(0, Number(item.purchasePricePaise) || 0);
-            const mrpPaise = isUnpriced ? 0 : Math.max(0, Number(item.mrpPaise) || salePricePaise);
-            const reorderLevel = Math.max(0, parseInt(String(item.reorderLevel || 5), 10) || 5);
-
-            dbNewProducts.push({
-              tenantId: dbTenantId,
-              name: trimmedName,
-              partNumber: item.partNumber || `SKU-${Date.now().toString(36).toUpperCase()}-${i + 1}`,
-              brand: item.brand || null,
-              category: item.category || null,
-              hsnCode: item.hsnCode || '8714',
-              gstRateBp: Number(item.gstRateBp) || 1800,
-              unit: item.unit || 'pcs',
-              purchasePrice: BigInt(purchasePricePaise),
-              salePrice: BigInt(salePricePaise),
-              mrp: BigInt(mrpPaise),
-              reorderLevel,
-              isActive: true,
-            });
-          }
-
-          if (dbNewProducts.length > 0) {
-            for (let c = 0; c < dbNewProducts.length; c += 500) {
-              const chunk = dbNewProducts.slice(c, c + 500);
-              await prisma.product.createMany({
-                data: chunk,
-                skipDuplicates: true,
-              });
-            }
-          }
-        }
-      } catch (dbErr) {
-        console.warn('DB batch sync error (localStore succeeded):', dbErr);
-      }
+      queueCloudSync(authUser.tenantId, items, authUser.id);
     }
 
     return NextResponse.json({

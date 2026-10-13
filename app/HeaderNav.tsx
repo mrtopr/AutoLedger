@@ -4,13 +4,13 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from './context/AuthContext';
-import { 
-  LayoutDashboard, 
-  Receipt, 
-  Users, 
-  Package, 
-  LogOut, 
-  LogIn, 
+import {
+  LayoutDashboard,
+  Receipt,
+  Users,
+  Package,
+  LogOut,
+  LogIn,
   UserPlus,
   Crown,
   Shield,
@@ -30,11 +30,11 @@ export default function HeaderNav() {
 
   const brandInitial = tenant?.name ? tenant.name.trim().charAt(0).toUpperCase() : 'T';
   const brandName = tenant?.name || 'TradeLedger B2B';
-  const brandSubtext = tenant?.address 
+  const brandSubtext = tenant?.address
     ? `${tenant.address.split(',')[0]}${tenant.gstin ? ` • GST: ${tenant.gstin}` : ''}`
-    : tenant?.gstin 
-    ? `GST: ${tenant.gstin}` 
-    : 'Universal Wholesale & B2B Trade';
+    : tenant?.gstin
+      ? `GST: ${tenant.gstin}`
+      : 'Universal Wholesale & B2B Trade';
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
@@ -62,11 +62,10 @@ export default function HeaderNav() {
             <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200">
               <Link
                 href="/"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
-                  pathname === '/' 
-                    ? 'bg-blue-50 text-blue-700 font-semibold' 
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${pathname === '/'
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
+                  }`}
               >
                 <LayoutDashboard className="w-4 h-4 text-slate-500" />
                 Dashboard
@@ -82,11 +81,10 @@ export default function HeaderNav() {
 
               <Link
                 href="/customers"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
-                  pathname.startsWith('/customers') 
-                    ? 'bg-blue-50 text-blue-700 font-semibold' 
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${pathname.startsWith('/customers')
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
+                  }`}
               >
                 <Users className="w-4 h-4 text-slate-500" />
                 Customer Accounts
@@ -94,11 +92,10 @@ export default function HeaderNav() {
 
               <Link
                 href="/products"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
-                  pathname.startsWith('/products') 
-                    ? 'bg-blue-50 text-blue-700 font-semibold' 
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${pathname.startsWith('/products')
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
+                  }`}
               >
                 <Package className="w-4 h-4 text-slate-500" />
                 Parts Catalog
@@ -109,11 +106,10 @@ export default function HeaderNav() {
                 <>
                   <Link
                     href="/settlement"
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
-                      pathname === '/settlement' 
-                        ? 'bg-indigo-50 text-indigo-700 font-semibold' 
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${pathname === '/settlement'
+                        ? 'bg-indigo-50 text-indigo-700 font-semibold'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     <Calculator className="w-4 h-4 text-indigo-500" />
                     EOD Settlement
@@ -121,11 +117,10 @@ export default function HeaderNav() {
 
                   <Link
                     href="/staff"
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
-                      pathname === '/staff' 
-                        ? 'bg-blue-50 text-blue-700 font-semibold' 
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${pathname === '/staff'
+                        ? 'bg-blue-50 text-blue-700 font-semibold'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     <UserCheck className="w-4 h-4 text-blue-500" />
                     Staff Roles

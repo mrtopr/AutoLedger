@@ -1,313 +1,136 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
-import { localStore, LocalCashSettlement } from '@/server/lib/store';
-
-const isUuid = (id?: string | null): boolean =>
-  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+import { localStore } from '@/server/lib/store';
+import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-royal-1';
-
     const { searchParams } = new URL(req.url);
-    const requestedDate = searchParams.get('date') || new Date().toISOString().split('T')[0];
+    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
 
-    // Determine Opening Float from previous day's settlement
-    const allSettlements = localStore.getCashSettlements(targetTenantId);
-    const previousSettlement = [...allSettlements]
-      .filter((s) => s.date < requestedDate)
-      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    const targetDate = searchParams.get('date') || new Date().toISOString().split('T')[0];
 
-    const defaultOpeningFloatPaise = previousSettlement ? previousSettlement.retainedFloatPaise : '0';
-    const existingSettlement = localStore.getCashSettlementByDate(requestedDate, targetTenantId);
+    // 1. Check for existing saved settlement on this date
+    const savedSettlement = localStore.getCashSettlementByDate(targetDate, targetTenantId);
 
-    // 1. Try Prisma first if Postgres is available
+    // 2. Fetch invoices for this date from localStore (and DB if available)
+    let allInvoices = localStore.getInvoices(targetTenantId) || [];
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(targetTenantId)) {
+    if (hasDb) {
       try {
-        const startOfDay = new Date(`${requestedDate}T00:00:00.000Z`);
-        const endOfDay = new Date(`${requestedDate}T23:59:59.999Z`);
-
-        const todayInvoices = await prisma.invoice.findMany({
-          where: {
-            tenantId: targetTenantId,
-            createdAt: { gte: startOfDay, lte: endOfDay },
-            status: { not: 'CANCELLED' },
-          },
-          include: {
-            customer: { select: { name: true, shopName: true } },
-            items: { include: { product: { select: { purchasePrice: true } } } },
-          },
+        const dbInvoices = await prisma.invoice.findMany({
+          where: { tenantId: targetTenantId },
+          include: { customer: true, items: true },
           orderBy: { createdAt: 'desc' },
         });
-
-        const todayPayments = await prisma.payment.findMany({
-          where: {
-            tenantId: targetTenantId,
-            createdAt: { gte: startOfDay, lte: endOfDay },
-            status: { not: 'BOUNCED' },
-          },
-          include: {
-            customer: { select: { name: true, shopName: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        let totalBilled = 0n;
-        let totalCogs = 0n;
-        let totalTax = 0n;
-
-        for (const inv of todayInvoices) {
-          totalBilled += inv.grandTotal;
-          totalTax += (inv.cgst + inv.sgst + inv.igst);
-          for (const item of inv.items) {
-            const cost = item.product?.purchasePrice || (item.rate * 75n) / 100n;
-            totalCogs += cost * BigInt(Math.round(Number(item.qty)));
-          }
-        }
-
-        let cashCollected = 0n;
-        let upiCollected = 0n;
-        let bankCollected = 0n;
-        const onlineTransactions: any[] = [];
-
-        for (const p of todayPayments) {
-          if (p.mode === 'CASH') {
-            cashCollected += p.amount;
-          } else if (p.mode === 'UPI') {
-            upiCollected += p.amount;
-            onlineTransactions.push({
-              id: p.id,
-              mode: 'UPI',
-              amountPaise: p.amount.toString(),
-              referenceNumber: p.reference || 'UPI',
-              customerName: p.customer?.name || p.customer?.shopName || 'Counter Customer',
-              time: p.createdAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-              notes: p.notes,
-            });
-          } else {
-            bankCollected += p.amount;
-            onlineTransactions.push({
-              id: p.id,
-              mode: p.mode,
-              amountPaise: p.amount.toString(),
-              referenceNumber: p.reference || 'Bank Ref',
-              customerName: p.customer?.name || p.customer?.shopName || 'Counter Customer',
-              time: p.createdAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-              notes: p.notes,
-            });
-          }
-        }
-
-        // Check if any invoices had paidNow that were not captured in payments
-        const paidInvoiceNumbers = new Set<string>();
-        for (const p of todayPayments) {
-          for (const inv of todayInvoices) {
-            if (inv.number && p.reference && p.reference.includes(inv.number)) {
-              paidInvoiceNumbers.add(inv.number);
-            }
-          }
-        }
-        for (const inv of todayInvoices) {
-          if (inv.number && !paidInvoiceNumbers.has(inv.number) && inv.paidNow > 0n) {
-            cashCollected += inv.paidNow;
-          }
-        }
-
-        let newUdhaar = 0n;
-        for (const inv of todayInvoices) {
-          const bal = inv.balanceDue || (inv.grandTotal > inv.paidNow ? inv.grandTotal - inv.paidNow : 0n);
-          newUdhaar += bal;
-        }
-
-        // If day was already settled, honor the locked figures
-        if (existingSettlement) {
-          cashCollected = BigInt(existingSettlement.cashSalesPaise || '0');
-          upiCollected = BigInt(existingSettlement.upiTotalPaise || '0');
-          bankCollected = BigInt(existingSettlement.bankTotalPaise || '0');
-        }
-
-        const grossProfit = totalBilled > totalCogs ? totalBilled - totalCogs : 0n;
-        const marginPct = totalBilled > 0n ? Number((grossProfit * 100n) / totalBilled) : 0;
-        const totalCollected = cashCollected + upiCollected + bankCollected;
-
-        return NextResponse.json({
-          success: true,
-          date: requestedDate,
-          summary: {
-            date: requestedDate,
-            openingFloatPaise: existingSettlement?.openingFloatPaise || defaultOpeningFloatPaise,
-            totalBilledPaise: totalBilled.toString(),
-            totalCogsPaise: totalCogs.toString(),
-            grossProfitPaise: grossProfit.toString(),
-            grossMarginPercent: marginPct,
-            totalTaxPaise: totalTax.toString(),
-            cashCollectedPaise: cashCollected.toString(),
-            upiCollectedPaise: upiCollected.toString(),
-            bankCollectedPaise: bankCollected.toString(),
-            totalCollectedPaise: totalCollected.toString(),
-            newCreditGivenPaise: newUdhaar.toString(),
-            invoicesCount: todayInvoices.length,
-            paymentsCount: todayPayments.length,
-          },
-          onlineTransactions,
-          isClosed: !!existingSettlement,
-          savedSettlement: existingSettlement || null,
-          recentSettlements: allSettlements.slice(0, 7),
-          invoices: todayInvoices.map((inv) => ({
+        if (dbInvoices.length > 0) {
+          allInvoices = dbInvoices.map((inv: any) => ({
             id: inv.id,
-            number: inv.number,
+            invoiceNumber: inv.number,
+            customerId: inv.customerId,
+            customerName: inv.customer?.name || inv.customer?.shopName || 'Walk-in Retail',
+            customerShop: inv.customer?.shopName || 'Walk-in Retail',
+            customerPhone: inv.customer?.phone || '',
             grandTotalPaise: inv.grandTotal.toString(),
-            status: inv.status,
-            customerName: inv.customer?.name || inv.customer?.shopName || 'Walk-in',
-            time: inv.createdAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-          })),
-        });
-      } catch (dbErr) {
-        console.warn('Postgres query error in settlement route, falling back to localStore:', dbErr);
+            paidNowPaise: (inv.paidNow || 0n).toString(),
+            creditBalancePaise: (inv.balanceDue || 0n).toString(),
+            createdAt: inv.createdAt ? inv.createdAt.toISOString() : new Date().toISOString(),
+          }));
+        }
+      } catch (e) {
+        // Fallback to localStore
       }
     }
 
-    // 2. LocalStore calculation
-    const localInvs = localStore.getInvoices(targetTenantId).filter((i) => {
-      const invDate = i.createdAt ? i.createdAt.split('T')[0] : '';
-      return invDate === requestedDate && i.status !== 'CANCELLED';
+    // Filter invoices matching target date (either YYYY-MM-DD prefix of ISO or date string)
+    const dayInvoices = allInvoices.filter((inv) => {
+      const invDateStr = inv.createdAt ? inv.createdAt.split('T')[0] : '';
+      return invDateStr === targetDate;
     });
 
-    const localPays = localStore.getPayments(targetTenantId).filter((p) => {
-      const pDate = p.createdAt ? p.createdAt.split('T')[0] : '';
-      return pDate === requestedDate;
+    // 3. Fetch payments matching target date
+    const allPayments = localStore.getPayments(targetTenantId) || [];
+    const dayPayments = allPayments.filter((p) => {
+      const pDateStr = p.createdAt ? p.createdAt.split('T')[0] : '';
+      return pDateStr === targetDate;
     });
 
-    let totalBilled = 0n;
-    for (const inv of localInvs) {
-      totalBilled += BigInt(inv.grandTotalPaise || 0);
-    }
+    // 4. Calculate day aggregates
+    let cashCollectedPaise = 0n;
+    let upiCollectedPaise = 0n;
+    let bankCollectedPaise = 0n;
 
-    let cashCollected = 0n;
-    let upiCollected = 0n;
-    let bankCollected = 0n;
-    const onlineTransactions: any[] = [];
-
-    for (const p of localPays) {
-      const amt = BigInt(p.amountPaise || 0);
-      const cust = p.customerId ? localStore.getCustomerById(p.customerId) : undefined;
-      const custName = cust?.name || cust?.shopName || 'Counter Customer';
-      const timeStr = p.createdAt ? new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-
+    for (const p of dayPayments) {
+      const amt = BigInt(p.amountPaise || '0');
       if (p.mode === 'CASH') {
-        cashCollected += amt;
+        cashCollectedPaise += amt;
       } else if (p.mode === 'UPI') {
-        upiCollected += amt;
-        onlineTransactions.push({
-          id: p.id,
-          mode: 'UPI',
-          amountPaise: amt.toString(),
-          referenceNumber: p.referenceNumber || 'UPI Ref',
-          customerName: custName,
-          time: timeStr,
-        });
+        upiCollectedPaise += amt;
+      } else if (p.mode === 'BANK') {
+        bankCollectedPaise += amt;
+      }
+    }
+
+    // If dayPayments didn't capture all paidNow on dayInvoices, cross-reference invoice paidNow
+    let invoiceGrossSalesPaise = 0n;
+    let invoiceKhataPaise = 0n;
+    for (const inv of dayInvoices) {
+      invoiceGrossSalesPaise += BigInt(inv.grandTotalPaise || '0');
+      invoiceKhataPaise += BigInt(inv.creditBalancePaise || '0');
+    }
+
+    // Determine Opening Float:
+    // If not saved, look up latest settlement before this date to find retainedFloat
+    let openingFloatPaise = '0';
+    if (savedSettlement) {
+      openingFloatPaise = savedSettlement.openingFloatPaise;
+    } else {
+      const allSettlements = localStore.getCashSettlements(targetTenantId) || [];
+      const pastSettlements = allSettlements
+        .filter((s) => s.date < targetDate)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      if (pastSettlements.length > 0 && pastSettlements[0].retainedFloatPaise) {
+        openingFloatPaise = pastSettlements[0].retainedFloatPaise;
       } else {
-        bankCollected += amt;
-        onlineTransactions.push({
-          id: p.id,
-          mode: p.mode || 'BANK',
-          amountPaise: amt.toString(),
-          referenceNumber: p.referenceNumber || 'Bank Ref',
-          customerName: custName,
-          time: timeStr,
-        });
+        openingFloatPaise = '200000'; // Default opening till float ₹2,000.00
       }
     }
 
-    // Check if any invoices had paidNow that were not captured in payments
-    const paidInvoiceNumbers = new Set<string>();
-    for (const p of localPays) {
-      for (const inv of localInvs) {
-        if (p.referenceNumber && p.referenceNumber.includes(inv.invoiceNumber)) {
-          paidInvoiceNumbers.add(inv.invoiceNumber);
-        }
-      }
-    }
-    for (const inv of localInvs) {
-      if (!paidInvoiceNumbers.has(inv.invoiceNumber)) {
-        const paid = BigInt(inv.paidNowPaise || '0');
-        if (paid > 0n) {
-          cashCollected += paid;
-        }
-      }
-    }
-
-    let newUdhaar = 0n;
-    for (const inv of localInvs) {
-      const gTotal = BigInt(inv.grandTotalPaise || '0');
-      const paid = BigInt(inv.paidNowPaise || '0');
-      if (gTotal > paid) {
-        newUdhaar += (gTotal - paid);
-      }
-    }
-
-    // If day was already settled, honor the locked figures
-    if (existingSettlement) {
-      cashCollected = BigInt(existingSettlement.cashSalesPaise || '0');
-      upiCollected = BigInt(existingSettlement.upiTotalPaise || '0');
-      bankCollected = BigInt(existingSettlement.bankTotalPaise || '0');
-    }
-
-    const totalCollected = cashCollected + upiCollected + bankCollected;
-    const totalCogs = (totalBilled * 75n) / 100n;
-    const grossProfit = totalBilled > totalCogs ? totalBilled - totalCogs : 0n;
-    const marginPct = totalBilled > 0n ? Number((grossProfit * 100n) / totalBilled) : 0;
+    const summary = {
+      openingFloatPaise,
+      cashCollectedPaise: cashCollectedPaise.toString(),
+      upiCollectedPaise: upiCollectedPaise.toString(),
+      bankCollectedPaise: bankCollectedPaise.toString(),
+      totalInvoicesCount: dayInvoices.length,
+      grossSalesPaise: invoiceGrossSalesPaise.toString(),
+      khataGivenPaise: invoiceKhataPaise.toString(),
+      cashExpensesPaise: savedSettlement?.cashExpensesPaise || '0',
+    };
 
     return NextResponse.json({
       success: true,
-      date: requestedDate,
-      summary: {
-        date: requestedDate,
-        openingFloatPaise: existingSettlement?.openingFloatPaise || defaultOpeningFloatPaise,
-        totalBilledPaise: totalBilled.toString(),
-        totalCogsPaise: totalCogs.toString(),
-        grossProfitPaise: grossProfit.toString(),
-        grossMarginPercent: marginPct,
-        totalTaxPaise: ((totalBilled * 18n) / 118n).toString(),
-        cashCollectedPaise: cashCollected.toString(),
-        upiCollectedPaise: upiCollected.toString(),
-        bankCollectedPaise: bankCollected.toString(),
-        totalCollectedPaise: totalCollected.toString(),
-        newCreditGivenPaise: newUdhaar.toString(),
-        invoicesCount: localInvs.length,
-        paymentsCount: localPays.length,
-      },
-      onlineTransactions,
-      isClosed: !!existingSettlement,
-      savedSettlement: existingSettlement || null,
-      recentSettlements: allSettlements.slice(0, 7),
-      invoices: localInvs.map((inv) => {
-        const cust = inv.customerId ? localStore.getCustomerById(inv.customerId) : undefined;
-        return {
-          id: inv.id,
-          number: inv.invoiceNumber,
-          grandTotalPaise: inv.grandTotalPaise,
-          status: inv.status || 'PAID',
-          customerName: cust?.name || cust?.shopName || 'Walk-in',
-          time: new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        };
-      }),
+      date: targetDate,
+      savedSettlement,
+      summary,
+      invoices: dayInvoices,
+      payments: dayPayments,
     });
   } catch (error: any) {
-    console.error('Error generating settlement report:', error);
-    return NextResponse.json({ error: error.message || 'Failed to generate settlement report' }, { status: 500 });
+    console.error('Error fetching settlement report:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to generate settlement report' },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-royal-1';
-
+    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
     const body = await req.json();
+
     const {
       date,
       openingFloatPaise = '0',
@@ -328,61 +151,41 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!date) {
-      return NextResponse.json({ error: 'Date is required' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Date is required for day-end settlement' }, { status: 400 });
     }
 
     const saved = localStore.saveCashSettlement({
       tenantId: targetTenantId,
       date,
-      openingFloatPaise: openingFloatPaise.toString(),
-      cashSalesPaise: cashSalesPaise.toString(),
-      cashReceiptsPaise: cashReceiptsPaise.toString(),
-      cashExpensesPaise: cashExpensesPaise.toString(),
-      expectedCashPaise: expectedCashPaise.toString(),
-      denominations,
-      countedCashPaise: countedCashPaise.toString(),
-      differencePaise: differencePaise.toString(),
-      retainedFloatPaise: retainedFloatPaise.toString(),
-      withdrawnPaise: withdrawnPaise.toString(),
-      upiTotalPaise: upiTotalPaise.toString(),
-      bankTotalPaise: bankTotalPaise.toString(),
+      openingFloatPaise: String(openingFloatPaise),
+      cashSalesPaise: String(cashSalesPaise),
+      cashReceiptsPaise: String(cashReceiptsPaise),
+      cashExpensesPaise: String(cashExpensesPaise),
+      expectedCashPaise: String(expectedCashPaise),
+      denominations: denominations || {},
+      countedCashPaise: String(countedCashPaise),
+      differencePaise: String(differencePaise),
+      retainedFloatPaise: String(retainedFloatPaise),
+      withdrawnPaise: String(withdrawnPaise),
+      upiTotalPaise: String(upiTotalPaise),
+      bankTotalPaise: String(bankTotalPaise),
       upiVerified: Boolean(upiVerified),
-      notes: notes || '',
-      status: status as 'BALANCED' | 'SHORT' | 'EXCESS',
-      closedByUserId: authUser?.id,
-      closedByName: authUser?.name || 'Store Owner',
+      notes: notes || undefined,
+      status: status || 'BALANCED',
+      closedByUserId: authUser?.id || undefined,
+      closedByName: authUser?.name || 'Counter Cashier',
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Day-end cash settlement recorded successfully',
+      message: 'Day-End Till Settlement saved successfully',
       settlement: saved,
     });
   } catch (error: any) {
-    console.error('Error saving cash settlement:', error);
-    return NextResponse.json({ error: error.message || 'Failed to save cash settlement' }, { status: 500 });
-  }
-}
-
-export async function DELETE(req: NextRequest) {
-  try {
-    const authUser = await getAuthenticatedUser(req);
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-royal-1';
-    const { searchParams } = new URL(req.url);
-    const idOrDate = searchParams.get('id') || searchParams.get('date');
-
-    if (!idOrDate) {
-      return NextResponse.json({ error: 'ID or date is required for deletion' }, { status: 400 });
-    }
-
-    const deleted = localStore.deleteCashSettlement(idOrDate, targetTenantId);
-    return NextResponse.json({
-      success: true,
-      deleted,
-      message: deleted ? 'Settlement record deleted and register re-opened' : 'No settlement found to delete',
-    });
-  } catch (error: any) {
-    console.error('Error deleting cash settlement:', error);
-    return NextResponse.json({ error: error.message || 'Failed to delete cash settlement' }, { status: 500 });
+    console.error('Error saving settlement:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to save settlement' },
+      { status: 500 }
+    );
   }
 }

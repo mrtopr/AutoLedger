@@ -649,28 +649,47 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
         isUnpriced: r.isUnpriced,
       }));
 
-      // Chunk in batches of 1,000 to keep network payloads fast, responsive & visible
-      const CHUNK_SIZE = 1000;
+      // Chunk in batches of 500 for lightning-fast network requests & instant visual progress
+      const CHUNK_SIZE = 500;
       let totalSynced = 0;
       setSyncProgress({ current: 0, total: payloadItems.length });
 
       for (let i = 0; i < payloadItems.length; i += CHUNK_SIZE) {
         const chunk = payloadItems.slice(i, i + CHUNK_SIZE);
-        const res = await fetch('/api/v1/products/bulk-import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: chunk }),
-        });
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Bulk import failed');
+        try {
+          const res = await fetch('/api/v1/products/bulk-import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: chunk }),
+            signal: controller.signal,
+          });
 
-        const count = (data.importedCount || 0) + (data.updatedCount || 0);
-        totalSynced += count;
-        setSyncProgress({
-          current: Math.min(i + chunk.length, payloadItems.length),
-          total: payloadItems.length,
-        });
+          clearTimeout(timeoutId);
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `Server responded with status ${res.status}`);
+          }
+
+          const data = await res.json();
+          const count = (data.importedCount || 0) + (data.updatedCount || 0);
+          totalSynced += count;
+
+          setSyncProgress({
+            current: Math.min(i + chunk.length, payloadItems.length),
+            total: payloadItems.length,
+          });
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          if (fetchErr.name === 'AbortError') {
+            throw new Error(`Batch ${Math.floor(i / CHUNK_SIZE) + 1} timed out. Your connection may be slow. Please try again.`);
+          }
+          throw fetchErr;
+        }
       }
 
       onSuccess(totalSynced);

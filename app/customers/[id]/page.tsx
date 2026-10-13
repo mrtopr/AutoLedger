@@ -4,12 +4,12 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-import { 
-  ArrowLeft, 
-  Receipt, 
-  CreditCard, 
-  Phone, 
-  MapPin, 
+import {
+  ArrowLeft,
+  Receipt,
+  CreditCard,
+  Phone,
+  MapPin,
   CheckCircle2,
   AlertCircle,
   Zap,
@@ -24,9 +24,14 @@ import {
   Eye,
   Plus,
   Copy,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck,
+  Award,
+  TrendingUp,
+  Sparkles
 } from 'lucide-react';
 import { formatPaiseToRupees, parseRupeesToPaise } from '@/server/lib/tax';
+import { calculateCustomerCreditScore } from '@/app/lib/creditScore';
 import RazorpayModal from '@/app/components/RazorpayModal';
 import ClientPortal from '@/app/components/ClientPortal';
 import EditCustomerModal from '@/app/components/EditCustomerModal';
@@ -55,6 +60,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const [selectedPreviewInvoice, setSelectedPreviewInvoice] = useState<InvoicePreviewData | null>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
   const [copiedReminder, setCopiedReminder] = useState<boolean>(false);
+  const [nurtureStage, setNurtureStage] = useState<'GENTLE' | 'DUE' | 'URGENT'>('GENTLE');
 
   // Edit customer modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
@@ -175,6 +181,19 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const days90Plus = isDue ? BigInt(aging.days90Plus || 0) : 0n;
   const customerInvoices = customer.invoices || [];
 
+  // Calculate Comprehensive B2B Credit Score (300 to 900 scale)
+  const overduePaise = days31to60 + days61to90 + days90Plus;
+  const daysOverdue = days90Plus > 0n ? 90 : days61to90 > 0n ? 60 : days31to60 > 0n ? 30 : 0;
+  const creditScore = calculateCustomerCreditScore({
+    balancePaise: customer.balancePaise,
+    creditLimitPaise: customer.creditLimitPaise,
+    overduePaise,
+    daysOverdue,
+    invoicesCount: customer.invoices?.length || 1,
+    paidOnTimeRate: customer.onTimeRate ? parseInt(customer.onTimeRate, 10) : 90,
+    termsDays: customer.termsDays || 15,
+  });
+
   const handlePreviewInvoice = (inv: any) => {
     const previewData: InvoicePreviewData = {
       id: inv.id,
@@ -198,7 +217,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         qty: it.qty,
         unit: it.unit || 'pcs',
         ratePaise: it.ratePaise,
-        gstRateBp: it.gstRateBp || 1800,
+        gstRateBp: 0,
         totalPaise: it.totalPaise,
       })) : [
         {
@@ -207,16 +226,16 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           qty: inv.itemsCount || 1,
           unit: 'pcs',
           ratePaise: inv.grandTotalPaise || '0',
-          gstRateBp: 1800,
+          gstRateBp: 0,
           totalPaise: inv.grandTotalPaise || '0',
         }
       ],
-      subtotalPaise: inv.taxableValuePaise || inv.grandTotalPaise || '0',
+      subtotalPaise: inv.grandTotalPaise || '0',
       discountTotalPaise: '0',
-      taxableValuePaise: inv.taxableValuePaise || inv.grandTotalPaise || '0',
-      cgstPaise: inv.cgstPaise || '0',
-      sgstPaise: inv.sgstPaise || '0',
-      totalTaxPaise: inv.totalTaxPaise || '0',
+      taxableValuePaise: inv.grandTotalPaise || '0',
+      cgstPaise: '0',
+      sgstPaise: '0',
+      totalTaxPaise: '0',
       grandTotalPaise: inv.grandTotalPaise || '0',
       paidNowPaise: inv.paidNowPaise || '0',
       creditBalancePaise: inv.creditBalancePaise || '0',
@@ -246,12 +265,54 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     const due = formatPaiseToRupees(BigInt(inv.creditBalancePaise || 0));
     const phone = (customer.phone || '').replace(/\D/g, '');
 
-    const text = `*Tax Invoice Details: ${invNo}*\nDear ${customer.shopName || customer.name},\nThank you for your business. Here is your bill summary:\n\n*Invoice Total:* ${total}\n*Amount Paid:* ${paid}\n*Balance Due:* ${due}\n*Date:* ${inv.date}\n\nFor queries or payments, please reach out to ${tenant?.name || 'our counter'}.\nThank you!`;
+    const text = `*Digital Bill Summary: ${invNo}*\nDear ${customer.shopName || customer.name},\nThank you for choosing ${tenant?.name || 'us'}. Here is your bill summary:\n\n*Total Bill:* ${total}\n*Amount Paid:* ${paid}\n*Balance on Khata:* ${due}\n*Date:* ${inv.date}\n\nFor queries or digital receipts, reach out anytime.\nThank you!`;
     const url = `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
 
-  const reminderText = `*Payment Reminder & Statement - ${tenant?.name || 'TradeLedger'}*\n\nDear ${customer?.shopName || customer?.name},\nThis is a friendly reminder that your current outstanding account balance is *${formatPaiseToRupees(absBalance)}*.\n\n*Payment Details:*\n• Bank: ${tenant?.bankDetails?.bankName || 'HDFC Bank'}\n• A/C No: ${tenant?.bankDetails?.accountNumber || '50200012345678'}\n• IFSC: ${tenant?.bankDetails?.ifscCode || 'HDFC0001234'}\n• UPI ID: ${tenant?.upiId || 'tradeledger@okhdfcbank'}\n\nPlease settle the balance at your earliest convenience. If already paid, kindly share the payment reference/screenshot.\n\nThank you for your valued partnership!`;
+  // 3-Tier Dynamic Payment Nurture Messages
+  const reminderText = React.useMemo(() => {
+    const custName = customer?.shopName || customer?.name || 'Valued Customer';
+    const storeName = tenant?.name || 'Apex Trade & Wholesale';
+    const bank = tenant?.bankDetails?.bankName || 'HDFC Bank';
+    const ac = tenant?.bankDetails?.accountNumber || '50200012345678';
+    const ifsc = tenant?.bankDetails?.ifscCode || 'HDFC0001234';
+    const upi = tenant?.upiId || 'tradeledger@okhdfcbank';
+
+    if (nurtureStage === 'GENTLE') {
+      return `*Friendly Payment Update - ${storeName}*\n\n` +
+        `Dear ${custName},\n` +
+        `Greetings from ${storeName}! Here is a friendly statement of your khata ledger.\n\n` +
+        `*Current Outstanding Balance:* ${formatPaiseToRupees(absBalance)}\n` +
+        `*Credit Limit:* ${formatPaiseToRupees(creditLimit)}\n\n` +
+        `*Instant Settlement Details:*\n` +
+        `• UPI ID: ${upi}\n` +
+        `• Bank: ${bank} | A/C: ${ac} | IFSC: ${ifsc}\n\n` +
+        `Kindly clear this at your earliest convenience or share transaction details if already settled.\nThank you for your business!`;
+    }
+
+    if (nurtureStage === 'DUE') {
+      return `*Payment Reminder: Pending Khata Due - ${storeName}*\n\n` +
+        `Dear ${custName},\n` +
+        `This is a reminder that your pending balance of *${formatPaiseToRupees(absBalance)}* is due under your credit terms (${customer?.termsDays || 15} days).\n\n` +
+        `To ensure uninterrupted spare parts billing and protect your credit score (${creditScore.score}/900), please settle the amount:\n\n` +
+        `*Pay via UPI / NetBanking:*\n` +
+        `• UPI ID: ${upi}\n` +
+        `• Bank: ${bank} (A/C: ${ac}, IFSC: ${ifsc})\n\n` +
+        `If payment was made today, please reply with the screenshot. Thank you!`;
+    }
+
+    // URGENT Stage
+    return `*URGENT: Overdue Account Notice - ${storeName}*\n\n` +
+      `ATTN: ${custName},\n` +
+      `Your account has an overdue khata balance of *${formatPaiseToRupees(absBalance)}* exceeding allowable payment terms.\n\n` +
+      `⚠️ *Action Required:* Please clear the overdue balance immediately to prevent temporary hold on credit purchases.\n\n` +
+      `*Settlement Account Details:*\n` +
+      `• UPI ID: ${upi}\n` +
+      `• Bank A/C: ${ac} (${bank}, IFSC: ${ifsc})\n\n` +
+      `For any billing assistance, reach our counter directly at ${tenant?.phone || 'our helpline'}.\n` +
+      `Sincerely,\n${storeName}`;
+  }, [customer, tenant, absBalance, creditLimit, nurtureStage, creditScore.score]);
 
   const handleSendReminderWhatsApp = () => {
     const phone = (customer?.phone || '').replace(/\D/g, '');
@@ -330,23 +391,21 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           <div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-lg font-bold text-[#0F172A] tracking-tight">{customer.shopName}</h1>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold border ${
-                customer.status === 'GREEN' 
-                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
-                  : customer.status === 'YELLOW' 
-                  ? 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]' 
-                  : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  customer.status === 'GREEN' ? 'bg-[#16A34A]' : customer.status === 'YELLOW' ? 'bg-[#D97706]' : 'bg-[#DC2626]'
-                }`} />
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold border ${customer.status === 'GREEN'
+                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+                  : customer.status === 'YELLOW'
+                    ? 'bg-[#FEFCE8] text-[#A16207] border-[#FEF08A]'
+                    : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]'
+                }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${customer.status === 'GREEN' ? 'bg-[#16A34A]' : customer.status === 'YELLOW' ? 'bg-[#D97706]' : 'bg-[#DC2626]'
+                  }`} />
                 {customer.status} HEALTH
               </span>
             </div>
             <div className="text-xs text-[#475569] mt-0.5">
               Proprietor: <span className="font-semibold text-[#0F172A]">{customer.name}</span>
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#64748B] mt-2 font-mono">
               <span className="flex items-center gap-1 text-[#0F172A]">
                 <Phone className="w-3 h-3 text-[#94A3B8]" />
@@ -366,22 +425,20 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           <div className="flex items-center gap-4 bg-[#F8FAFC] border border-[#E2E8F0] p-3.5 rounded-lg shadow-2xs">
             <div className="text-right">
               <div className="flex items-center justify-end gap-1.5 mb-0.5">
-                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                  isAdvance 
-                    ? 'bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]' 
-                    : isDue 
-                    ? 'bg-[#FEF2F2] text-[#DC2626] border border-[#FECACA]' 
-                    : 'bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]'
-                }`}>
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${isAdvance
+                    ? 'bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]'
+                    : isDue
+                      ? 'bg-[#FEF2F2] text-[#DC2626] border border-[#FECACA]'
+                      : 'bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]'
+                  }`}>
                   {isAdvance ? 'ADVANCE CREDIT' : isDue ? 'OUTSTANDING BALANCE' : 'SETTLED'}
                 </span>
                 <span className="text-[11px] uppercase tracking-wider text-[#64748B] font-semibold">
                   {isAdvance ? 'Advance Credit' : 'Account Balance'}
                 </span>
               </div>
-              <div className={`text-2xl font-bold font-mono tabular-nums ${
-                isAdvance ? 'text-[#15803D]' : isDue ? 'text-[#DC2626]' : 'text-[#0F172A]'
-              }`}>
+              <div className={`text-2xl font-bold font-mono tabular-nums ${isAdvance ? 'text-[#15803D]' : isDue ? 'text-[#DC2626]' : 'text-[#0F172A]'
+                }`}>
                 {formatPaiseToRupees(absBalance)} {isAdvance && <span className="text-xs font-bold text-[#16A34A] font-sans">(Cr)</span>}
               </div>
               <div className="text-[11px] text-[#64748B] font-mono mt-1">
@@ -391,8 +448,66 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           </div>
         </div>
 
-        {/* Aging Buckets Strip */}
+        {/* Credit Score & Risk Assessment Strip */}
         <div className="mt-4 pt-4 border-t border-[#E2E8F0]">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-50 border border-slate-200/80 rounded-lg p-3.5">
+            <div className="flex items-center gap-3.5">
+              <div className="flex flex-col items-center justify-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-2xs">
+                <span className="text-[10px] uppercase font-semibold text-slate-500 font-mono">B2B Score</span>
+                <span className="text-xl font-bold font-mono text-slate-900 leading-tight">
+                  {creditScore.score}
+                  <span className="text-[11px] font-normal text-slate-400">/900</span>
+                </span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${
+                    creditScore.color === 'emerald'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : creditScore.color === 'blue'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : creditScore.color === 'amber'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
+                    ★ {creditScore.ratingLabel}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-700">
+                    Credit Rating: {creditScore.rating}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                  <span>Limit Utilization: <strong className="text-slate-700">{creditScore.utilizationPct}%</strong></span>
+                  <span>•</span>
+                  <span>Max Credit Allowed: <strong className="text-slate-700 font-mono">₹{formatPaiseToRupees(creditLimit)}</strong></span>
+                  <span>•</span>
+                  <span>Repayment Terms: <strong className="text-slate-700">{customer.termsDays || 15} Days</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Drivers Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 self-stretch md:self-auto">
+              {creditScore.drivers.map((driver, idx) => (
+                <span
+                  key={idx}
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded border ${
+                    driver.type === 'POSITIVE'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : driver.type === 'NEUTRAL'
+                        ? 'bg-slate-100 text-slate-700 border-slate-200'
+                        : 'bg-rose-50 text-rose-800 border-rose-200'
+                  }`}
+                >
+                  {driver.text}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Aging Buckets Strip */}
+        <div className="mt-3 pt-3 border-t border-slate-100">
           {isAdvance ? (
             <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
               <div className="flex items-center gap-2 text-[#15803D]">
@@ -444,25 +559,22 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       <div className="border-b border-[#E2E8F0] flex items-center gap-4 text-xs">
         <button
           onClick={() => setActiveTab('LEDGER')}
-          className={`pb-2.5 font-medium border-b-2 transition cursor-pointer ${
-            activeTab === 'LEDGER' ? 'border-[#C81E1E] text-[#C81E1E] font-semibold' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
-          }`}
+          className={`pb-2.5 font-medium border-b-2 transition cursor-pointer ${activeTab === 'LEDGER' ? 'border-[#C81E1E] text-[#C81E1E] font-semibold' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
         >
           Append-Only Khata Ledger ({ledger.length})
         </button>
         <button
           onClick={() => setActiveTab('INVOICES')}
-          className={`pb-2.5 font-medium border-b-2 transition cursor-pointer ${
-            activeTab === 'INVOICES' ? 'border-[#C81E1E] text-[#C81E1E] font-semibold' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
-          }`}
+          className={`pb-2.5 font-medium border-b-2 transition cursor-pointer ${activeTab === 'INVOICES' ? 'border-[#C81E1E] text-[#C81E1E] font-semibold' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
         >
           Billed Invoices History ({customerInvoices.length})
         </button>
         <button
           onClick={() => setActiveTab('REMINDERS')}
-          className={`pb-2.5 font-medium border-b-2 transition cursor-pointer ${
-            activeTab === 'REMINDERS' ? 'border-[#C81E1E] text-[#C81E1E] font-semibold' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
-          }`}
+          className={`pb-2.5 font-medium border-b-2 transition cursor-pointer ${activeTab === 'REMINDERS' ? 'border-[#C81E1E] text-[#C81E1E] font-semibold' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
         >
           WhatsApp Payment Reminders {isDue && <span className="ml-1 px-1.5 py-0.2 bg-red-100 text-red-700 rounded-full text-[10px] font-bold">Due</span>}
         </button>
@@ -508,11 +620,10 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       <tr key={entry.id} className="hover:bg-[#F8F9FA] transition">
                         <td className="py-3 px-4 text-[#64748B]">{entry.date}</td>
                         <td className="py-3 px-4">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            entry.type === 'INVOICE' 
-                              ? 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]' 
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${entry.type === 'INVOICE'
+                              ? 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]'
                               : 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
-                          }`}>
+                            }`}>
                             {entry.type}
                           </span>
                         </td>
@@ -524,9 +635,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                         <td className="py-3 px-4 text-right font-semibold text-[#16A34A] tabular-nums">
                           {BigInt(entry.creditPaise || 0) > 0n ? formatPaiseToRupees(BigInt(entry.creditPaise)) : '-'}
                         </td>
-                        <td className={`py-3 px-4 text-right font-bold tabular-nums ${
-                          isEntryAdvance ? 'text-[#15803D]' : runBal > 0n ? 'text-[#DC2626]' : 'text-[#0F172A]'
-                        }`}>
+                        <td className={`py-3 px-4 text-right font-bold tabular-nums ${isEntryAdvance ? 'text-[#15803D]' : runBal > 0n ? 'text-[#DC2626]' : 'text-[#0F172A]'
+                          }`}>
                           {formatPaiseToRupees(absRunBal)}
                           {isEntryAdvance ? (
                             <span className="ml-1 text-[9px] font-bold text-[#16A34A] bg-[#F0FDF4] px-1 py-0.2 rounded border border-[#BBF7D0]">Cr</span>
@@ -629,13 +739,12 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                                 CANCELLED
                               </span>
                             ) : (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                isPaid 
-                                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]' 
-                                  : isPartial 
-                                  ? 'bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]' 
-                                  : 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]'
-                              }`}>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${isPaid
+                                  ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+                                  : isPartial
+                                    ? 'bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]'
+                                    : 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]'
+                                }`}>
                                 {isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID'}
                               </span>
                             )}
@@ -645,10 +754,10 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                               <button
                                 onClick={() => handlePreviewInvoice(inv)}
                                 className="h-7 px-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-[11px] rounded border border-slate-300 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer"
-                                title="Preview & Print Vector Invoice"
+                                title="View Paperless Digital Bill"
                               >
-                                <Printer className="w-3 h-3 text-slate-500" />
-                                <span>Print</span>
+                                <Eye className="w-3 h-3 text-slate-500" />
+                                <span>View Bill</span>
                               </button>
                               {!isCancelled && (
                                 <button
@@ -708,19 +817,59 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Left Column: Live WhatsApp Message Simulator */}
               <div className="lg:col-span-2 bg-white border border-[#E2E8F0] rounded-xl p-5 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-[#25D366]/15 flex items-center justify-center text-[#128C7E]">
                       <MessageCircle className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-slate-800">WhatsApp Collection Dispatcher</h3>
-                      <p className="text-[11px] text-slate-500">Auto-formatted with ledger balance, bank details & UPI</p>
+                      <h3 className="text-xs font-bold text-slate-800">Smart Payment Nurture Dispatcher</h3>
+                      <p className="text-[11px] text-slate-500">Auto-formatted with balance, payment terms, UPI & Bank details</p>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200 self-start sm:self-auto">
                     ₹{formatPaiseToRupees(absBalance)} Outstanding
                   </span>
+                </div>
+
+                {/* 3-Tier Nurture Stage Selector */}
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-semibold text-slate-600">Select Reminder Tone & Urgency:</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNurtureStage('GENTLE')}
+                      className={`py-2 px-3 rounded-lg border text-xs font-semibold transition cursor-pointer text-center ${
+                        nurtureStage === 'GENTLE'
+                          ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      🌱 Gentle Khata Update
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNurtureStage('DUE')}
+                      className={`py-2 px-3 rounded-lg border text-xs font-semibold transition cursor-pointer text-center ${
+                        nurtureStage === 'DUE'
+                          ? 'bg-amber-50 border-amber-400 text-amber-800 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      ⏳ Due Date Notice
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNurtureStage('URGENT')}
+                      className={`py-2 px-3 rounded-lg border text-xs font-semibold transition cursor-pointer text-center ${
+                        nurtureStage === 'URGENT'
+                          ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      🚨 Urgent Recovery
+                    </button>
+                  </div>
                 </div>
 
                 {/* WhatsApp Chat Preview Bubble */}
@@ -796,7 +945,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                 {isAdvance ? 'Customer Has Advance Credit Balance' : 'Account is 100% Settled'}
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-5">
-                {isAdvance 
+                {isAdvance
                   ? `This account currently holds ₹${formatPaiseToRupees(absBalance)} in advance credit. No payment reminders required.`
                   : `There are zero outstanding dues for ${customer.shopName || customer.name}. All invoices and ledger entries are fully paid.`
                 }

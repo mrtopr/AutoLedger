@@ -1,15 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  Store, 
-  User, 
-  Phone, 
-  MapPin, 
-  FileText, 
-  ShieldCheck, 
-  ShieldAlert, 
+import {
+  X,
+  Store,
+  User,
+  Phone,
+  MapPin,
+  FileText,
+  ShieldCheck,
+  ShieldAlert,
   AlertTriangle,
   Clock,
   IndianRupee,
@@ -172,7 +172,7 @@ export default function EditCustomerModal({
     <ClientPortal>
       <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
         <div className="bg-white border border-slate-200 rounded-lg max-w-xl w-full max-h-[92vh] overflow-y-auto shadow-2xl relative flex flex-col">
-          
+
           {/* Modal Header */}
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-10">
             <div className="flex items-center gap-3">
@@ -369,11 +369,10 @@ export default function EditCustomerModal({
                       key={seg.id}
                       type="button"
                       onClick={() => setFormData({ ...formData, customerType: seg.id })}
-                      className={`h-7.5 px-2 rounded-md text-[11px] font-semibold border transition text-center ${
-                        formData.customerType === seg.id
+                      className={`h-7.5 px-2 rounded-md text-[11px] font-semibold border transition text-center ${formData.customerType === seg.id
                           ? 'bg-slate-900 text-white border-slate-900'
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
                       {seg.label}
                     </button>

@@ -91,7 +91,8 @@ export default function DealershipDashboardPage() {
   const { user, tenant } = useAuth();
   const { t, language } = useLanguage();
 
-  // Date Range State
+  // Date & Period State
+  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'month' | 'year' | 'all'>('today');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [selectedRangePreset, setSelectedRangePreset] = useState<'today' | 'yesterday' | '7days' | '30days' | 'thisMonth'>('7days');
   const [rangeLabel, setRangeLabel] = useState('Last 7 Days');
@@ -129,11 +130,11 @@ export default function DealershipDashboardPage() {
   }, []);
 
   // Fetch real dynamic data from API
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (period: 'today' | 'month' | 'year' | 'all' = selectedPeriod) => {
     try {
       setLoading(true);
       const [dashRes, custRes, prodRes] = await Promise.all([
-        fetch('/api/v1/dashboard'),
+        fetch(`/api/v1/dashboard?period=${period}`),
         fetch('/api/v1/customers'),
         fetch('/api/v1/products')
       ]);
@@ -368,12 +369,71 @@ export default function DealershipDashboardPage() {
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Period Selector & Action Controls */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPeriod('today');
+                fetchDashboardData('today');
+              }}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                selectedPeriod === 'today'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPeriod('month');
+                fetchDashboardData('month');
+              }}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                selectedPeriod === 'month'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              This Month
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPeriod('year');
+                fetchDashboardData('year');
+              }}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                selectedPeriod === 'year'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              This Year
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPeriod('all');
+                fetchDashboardData('all');
+              }}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                selectedPeriod === 'all'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All Time
+            </button>
+          </div>
+
           <button
-            onClick={fetchDashboardData}
+            onClick={() => fetchDashboardData(selectedPeriod)}
             title="Refresh metrics"
-            className="h-8 px-3 bg-white hover:bg-[#F8F9FA] text-[#475569] hover:text-[#0F172A] rounded-md border border-[#CBD5E1] text-xs font-medium transition flex items-center gap-1.5 shadow-2xs"
+            className="h-8 px-3 bg-white hover:bg-[#F8F9FA] text-[#475569] hover:text-[#0F172A] rounded-md border border-[#CBD5E1] text-xs font-medium transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#C81E1E]' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
@@ -384,11 +444,11 @@ export default function DealershipDashboardPage() {
       {/* 2. ENTERPRISE 4-STAT METRIC STRIP */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         
-        {/* Metric 1: Cash & UPI Realized Today */}
+        {/* Metric 1: Cash & UPI Realized */}
         <div className="bg-white border border-[#E2E8F0] rounded-lg p-4 shadow-2xs space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-              {t('dash.cash_upi_realized', 'Collections Realized')}
+              Collections Realized ({selectedPeriod === 'today' ? 'Today' : selectedPeriod === 'month' ? 'This Month' : selectedPeriod === 'year' ? 'This Year' : 'All Time'})
             </span>
             <div className="w-7 h-7 rounded-md bg-[#F0FDF4] text-[#16A34A] flex items-center justify-center border border-[#DCFCE7]">
               <Wallet className="w-3.5 h-3.5" />
@@ -409,11 +469,11 @@ export default function DealershipDashboardPage() {
           </div>
         </div>
 
-        {/* Metric 2: Today's Billed Sales */}
+        {/* Metric 2: Billed Sales */}
         <div className="bg-white border border-[#E2E8F0] rounded-lg p-4 shadow-2xs space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-              {t('dash.today_billed_sales', "Today's Gross Sales")}
+              Gross Sales ({selectedPeriod === 'today' ? 'Today' : selectedPeriod === 'month' ? 'This Month' : selectedPeriod === 'year' ? 'This Year' : 'All Time'})
             </span>
             <div className="w-7 h-7 rounded-md bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center border border-[#DBEAFE]">
               <Receipt className="w-3.5 h-3.5" />

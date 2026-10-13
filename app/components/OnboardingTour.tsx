@@ -352,10 +352,10 @@ export default function OnboardingTour() {
                   key={idx}
                   onClick={() => setCurrentStepIdx(idx)}
                   className={`h-1.5 rounded-full transition-all ${idx === currentStepIdx
-                      ? 'w-4 bg-[#C81E1E]'
-                      : idx < currentStepIdx
-                        ? 'w-1.5 bg-[#94A3B8]'
-                        : 'w-1.5 bg-[#CBD5E1]'
+                    ? 'w-4 bg-[#C81E1E]'
+                    : idx < currentStepIdx
+                      ? 'w-1.5 bg-[#94A3B8]'
+                      : 'w-1.5 bg-[#CBD5E1]'
                     }`}
                   title={`Step ${idx + 1}`}
                 />
