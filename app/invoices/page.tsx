@@ -68,6 +68,17 @@ export default function InvoicesPage() {
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
+  useEffect(() => {
+    if (!invoiceToCancel) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isCancelling) {
+        setInvoiceToCancel(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [invoiceToCancel, isCancelling]);
+
   const handleCancelInvoice = async () => {
     if (!invoiceToCancel) return;
     try {
@@ -168,9 +179,9 @@ export default function InvoicesPage() {
     const custName = inv.customerShop || inv.customerName || inv.customer || 'Customer';
     const phone = (inv.customerPhone || '').replace(/\D/g, '');
 
-    const message = `*TAX INVOICE - ${(tenant?.name || 'TRADE SUPPLIES').toUpperCase()}*\n` +
+    const message = `*SALES BILL - ${(tenant?.name || 'TRADE SUPPLIES').toUpperCase()}*\n` +
       `--------------------------------\n` +
-      `*Invoice No:* ${invNo}\n` +
+      `*Bill No:* ${invNo}\n` +
       `*Client:* ${custName}\n` +
       `*Date:* ${inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : 'Today'}\n` +
       `*Grand Total:* ${total}\n` +
@@ -248,7 +259,7 @@ export default function InvoicesPage() {
               </span>
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
-              {t('invs.subtitle', 'GST compliant tax invoices, single-page A4 vector print, and WhatsApp dispatch.')}
+              {t('invs.subtitle', 'Fast non-GST sales billing, single-page A4 vector print, and WhatsApp dispatch.')}
             </p>
           </div>
         </div>
@@ -452,7 +463,7 @@ export default function InvoicesPage() {
                           <button
                             onClick={() => openPreview(inv)}
                             className="h-7 px-2.5 bg-white hover:bg-[#F1F5F9] text-[#334155] rounded-md border border-[#CBD5E1] transition flex items-center gap-1.5 text-[11px] shadow-2xs font-medium cursor-pointer"
-                            title="View Digital Paperless Bill"
+                            title="View Sales Bill"
                           >
                             <Eye className="w-3 h-3 text-[#64748B]" />
                             <span>View Bill</span>
@@ -507,17 +518,22 @@ export default function InvoicesPage() {
       {invoiceToCancel && (
         <ClientPortal>
           <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div 
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cancel-invoice-title"
+              className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4"
+            >
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 id="cancel-invoice-title" className="text-base font-bold text-slate-900">
                     Cancel Invoice #{invoiceToCancel.invoiceNumber || invoiceToCancel.number}?
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    GST compliant cancellation with automatic balance & stock reversal.
+                    Non-GST sales bill cancellation with automatic balance & stock reversal.
                   </p>
                 </div>
               </div>
@@ -529,7 +545,7 @@ export default function InvoicesPage() {
                 <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
                   <li><strong>Inventory Restocked:</strong> All billed line items will be returned to stock.</li>
                   <li><strong>Khata Reversed:</strong> Customer account ledger will be credited by {formatPaiseToRupees(BigInt(invoiceToCancel.grandTotalPaise || invoiceToCancel.amountPaise || 0))}.</li>
-                  <li><strong>Audit Trail Preserved:</strong> Invoice number remains registered with a <span className="font-bold text-red-700">CANCELLED</span> watermark for tax audit compliance.</li>
+                  <li><strong>Audit Trail Preserved:</strong> Sales Bill number remains registered with a <span className="font-bold text-red-700">CANCELLED</span> watermark for financial audit records.</li>
                 </ul>
               </div>
 

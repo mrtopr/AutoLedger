@@ -87,7 +87,7 @@ export default function SettingsPage() {
   // Invoice & Print Settings
   const [invoicePrefix, setInvoicePrefix] = useState('INV/2026-27/');
   const [terms, setTerms] = useState(
-    '1. Goods once sold will not be accepted back without original tax invoice.\n2. Parts covered under OEM warranty only. Interest @ 18% p.a. on overdue credit.'
+    '1. Goods once sold will not be accepted back without original sales bill / receipt.\n2. Parts covered under OEM warranty only. Interest @ 18% p.a. on overdue credit.'
   );
   const [defaultGstRate, setDefaultGstRate] = useState('18');
 
@@ -358,7 +358,7 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={() => setIsPreviewOpen(true)}
-            className="h-8 px-3.5 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#334155] font-medium text-xs rounded-none border border-[#CBD5E1] transition inline-flex items-center gap-1.5 shadow-2xs"
+            className="h-8 px-3.5 bg-[#F8F9FA] hover:bg-[#F1F5F9] text-[#334155] font-medium text-xs rounded-lg border border-[#CBD5E1] transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5 text-[#64748B]" />
             <span>Preview Invoice</span>
@@ -367,7 +367,7 @@ export default function SettingsPage() {
           <button
             type="submit"
             disabled={isSaving}
-            className="h-8 px-4 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-60 text-white font-semibold text-xs rounded-none shadow-2xs transition inline-flex items-center gap-1.5"
+            className="h-8 px-4 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-60 text-white font-semibold text-xs rounded-lg shadow-2xs transition inline-flex items-center gap-1.5 cursor-pointer"
           >
             {isSaving ? (
               <>
@@ -386,21 +386,21 @@ export default function SettingsPage() {
 
       {/* Notifications */}
       {saveSuccess && (
-        <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded-none flex items-center gap-2 text-[#15803D] text-xs font-medium">
+        <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded-xl flex items-center gap-2 text-[#15803D] text-xs font-medium">
           <Check className="w-4 h-4 text-[#16A34A] shrink-0" />
           <span>Settings saved successfully. All POS counter bills and invoices are now using your updated parameters.</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-none flex items-center gap-2 text-[#B91C1C] text-xs font-medium">
+        <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-xl flex items-center gap-2 text-[#B91C1C] text-xs font-medium">
           <AlertCircle className="w-4 h-4 text-[#DC2626] shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {/* 1. COMPANY & BUSINESS PROFILE */}
-      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 space-y-4 shadow-2xs">
         <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
             <Building2 className="w-4 h-4 text-[#C81E1E]" />
@@ -579,7 +579,7 @@ export default function SettingsPage() {
       </div>
 
       {/* 2. DIRECT BANK SETTLEMENT & UPI QR */}
-      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 space-y-4 shadow-2xs">
         <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
             <CreditCard className="w-4 h-4 text-[#2563EB]" />
@@ -678,7 +678,7 @@ export default function SettingsPage() {
       </div>
 
       {/* 3. RAZORPAY GATEWAY */}
-      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 space-y-4 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-[#16A34A]" />
@@ -811,7 +811,7 @@ export default function SettingsPage() {
       </div>
 
       {/* 4. INVOICE SERIES & TERMS */}
-      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 space-y-4 shadow-2xs">
         <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-[#C81E1E]" />
@@ -888,7 +888,7 @@ export default function SettingsPage() {
       </div>
 
       {/* 5. DATABASE BACKUP & DISASTER RECOVERY */}
-      <div className="bg-white border border-[#E2E8F0] rounded-none p-4 sm:p-5 space-y-4 shadow-2xs">
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 space-y-4 shadow-2xs">
         <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-[#2563EB]" />

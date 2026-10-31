@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
+import { createAuditLog } from '@/server/lib/audit';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -9,13 +10,20 @@ const isUuid = (id?: string | null): boolean =>
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUser(req);
+    if (!auth || !auth.tenantId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: missing authentication or tenant context' },
+        { status: 401 }
+      );
+    }
+
     const hasDb = await isPostgresAvailable();
 
-    if (hasDb) {
+    if (hasDb && isUuid(auth.tenantId)) {
       try {
-        let tenant = (auth?.tenantId && isUuid(auth.tenantId))
-          ? await prisma.tenant.findUnique({ where: { id: auth.tenantId } })
-          : await prisma.tenant.findFirst();
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: auth.tenantId },
+        });
 
         if (tenant) {
           return NextResponse.json({ success: true, tenant });
@@ -25,30 +33,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const localTenant = (auth?.tenantId && localStore.getTenantById(auth.tenantId)) || localStore.getTenants()[0];
-    return NextResponse.json({
-      success: true,
-      tenant: localTenant || {
-        id: 'tenant-default',
-        name: 'Shree Vishwakarma Honda',
-        legalName: 'Shree Honda',
-        gstin: '10ABCDE1234F1Z5',
-        address: 'Near Dak Bunglow, Takunatand, Rajauli, Bihar 805125',
-        stateCode: '10 - Bihar',
-        phone: '+91 9822100001',
-        email: 'Rishi@honda.com',
-        upiId: 'rishi@okhdfcbank',
-        bankDetails: {
-          bankName: 'HDFC Bank',
-          accountNumber: '50200012345678',
-          ifscCode: 'HDFC0001234',
-        },
-        settings: {
-          invoicePrefix: 'INV/2026-27/',
-          terms: '1. Goods once sold will not be accepted back without original tax invoice.\n2. Parts covered under OEM warranty only.',
-        },
-      },
-    });
+    const localTenant = localStore.getTenantById(auth.tenantId);
+    if (localTenant) {
+      return NextResponse.json({
+        success: true,
+        tenant: localTenant,
+      });
+    }
+
+    return NextResponse.json(
+      { success: false, error: 'Tenant profile not found' },
+      { status: 404 }
+    );
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -57,6 +53,20 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUser(req);
+    if (!auth || !auth.tenantId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: missing authentication or tenant context' },
+        { status: 401 }
+      );
+    }
+
+    if (auth.role !== 'OWNER' && auth.role !== 'MANAGER') {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: only OWNER or MANAGER can update dealership profile' },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const {
       name,
@@ -71,15 +81,22 @@ export async function PATCH(req: NextRequest) {
       settings,
     } = body;
 
+    // Financial protection: only OWNER can alter settlement bank accounts and UPI IDs
+    if ((bankDetails !== undefined || upiId !== undefined) && auth.role !== 'OWNER') {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: only business OWNER can alter settlement bank accounts and UPI IDs' },
+        { status: 403 }
+      );
+    }
+
     const hasDb = await isPostgresAvailable();
     let updatedTenant: any = null;
 
-    if (hasDb) {
+    if (hasDb && isUuid(auth.tenantId)) {
       try {
-        // Find existing tenant or create first primary tenant in Neon DB
-        let existingTenant = (auth?.tenantId && isUuid(auth.tenantId))
-          ? await prisma.tenant.findUnique({ where: { id: auth.tenantId } })
-          : await prisma.tenant.findFirst();
+        const existingTenant = await prisma.tenant.findUnique({
+          where: { id: auth.tenantId },
+        });
 
         const dataToSave = {
           ...(name !== undefined ? { name } : {}),
@@ -94,18 +111,19 @@ export async function PATCH(req: NextRequest) {
 
         if (existingTenant) {
           updatedTenant = await prisma.tenant.update({
-            where: { id: existingTenant.id },
+            where: { id: auth.tenantId },
             data: dataToSave,
           });
         } else {
           updatedTenant = await prisma.tenant.create({
             data: {
-              name: name || 'Honda Auto Spares & Wholesalers',
-              legalName: legalName || 'Shree Vishwakarma Honda Pvt Ltd',
+              id: auth.tenantId,
+              name: name || 'Dealership',
+              legalName: legalName || 'Dealership Pvt Ltd',
               gstin: gstin || '27ABCDE1234F1Z5',
-              address: address || 'Near Dak Bunglow, Takunatand, Rajauli, Bihar 805125',
+              address: address || '',
               stateCode: stateCode || '10 - Bihar',
-              upiId: upiId || 'rishi@okhdfcbank',
+              upiId: upiId || '',
               bankDetails: bankDetails || {},
               settings: settings || { phone, email },
             },
@@ -117,8 +135,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (!updatedTenant) {
-      const tenantId = auth?.tenantId || 'tenant-default';
-      updatedTenant = localStore.updateTenant(tenantId, {
+      updatedTenant = localStore.updateTenant(auth.tenantId, {
         ...(name !== undefined ? { name } : {}),
         ...(legalName !== undefined ? { legalName } : {}),
         ...(gstin !== undefined ? { gstin } : {}),
@@ -131,6 +148,21 @@ export async function PATCH(req: NextRequest) {
         ...(settings !== undefined ? { settings } : {}),
       });
     }
+
+    await createAuditLog({
+      tenantId: auth.tenantId,
+      userId: auth.id,
+      action: 'SETTINGS_UPDATED',
+      entity: 'TENANT',
+      entityId: auth.tenantId,
+      after: {
+        name,
+        legalName,
+        gstin,
+        address,
+        upiId,
+      },
+    });
 
     return NextResponse.json({
       success: true,

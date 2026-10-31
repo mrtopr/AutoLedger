@@ -61,10 +61,10 @@ export default function Topbar({ onToggleMobileMenu }: { onToggleMobileMenu?: ()
         >
           <div className="flex items-center gap-2">
             <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition" />
-            <span className="text-slate-500 font-normal">{t('app.search_placeholder', 'Search customer, invoice, part number, vehicle...')}</span>
+            <span className="text-slate-500 font-normal">{t('app.search_placeholder', 'Search parts, customers, bills...')}</span>
           </div>
           <kbd className="text-[10px] font-mono text-slate-500 bg-white border border-[#CBD5E1] px-1.5 py-0.5 rounded shadow-2xs">
-            {t('app.ctrl_k', 'Ctrl K')}
+            {t('app.ctrl_k', '⌘K / Ctrl K')}
           </kbd>
         </button>
       </div>

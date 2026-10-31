@@ -62,10 +62,53 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Subtle focus ring without giant shadows */
-input:focus, select:focus, textarea:focus, button:focus-visible {
-  outline: 2px solid #0F172A !important;
-  outline-offset: 1px !important;
+/* Subtle accessible focus ring without giant shadows */
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid #C81E1E !important;
+  outline-offset: 2px !important;
+}
+
+/* Interactive Button Polish & Subtle Pressed Feedback */
+button:not(:disabled), .btn:not(:disabled) {
+  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+button:active:not(:disabled), .btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+button:disabled, .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Subtle Receipt and Dialog Transitions */
+@keyframes subtleFadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-subtle-slide {
+  animation: subtleFadeSlide 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Reduced Motion Support for Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+    transform: none !important;
+  }
+  button:active:not(:disabled), .btn:active:not(:disabled) {
+    transform: none !important;
+  }
 }
 
 /* ERP Scrollbars */
@@ -85,7 +128,8 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
 }
 
 /* ============================================================
-   SINGLE-PAGE A4 PROFESSIONAL GST INVOICE PRINT STYLES
+   SINGLE-PAGE A4 PROFESSIONAL SALES BILL & REPORT PRINT STYLES
+   (A4 PORTRAIT & 80MM THERMAL RECEIPT ENGINE)
    ============================================================ */
 @media print {
   @page {
@@ -104,17 +148,28 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
     print-color-adjust: exact !important;
   }
 
+  /* Disable all animations and transitions on print */
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Prevent row and section clipping */
+  tr, .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
   /* Hide everything on page except printable invoice */
-  aside, header, nav, .no-print, [role="navigation"], .fixed.inset-0.bg-slate-950\/60, .fixed.inset-0.bg-black\/40 {
+  aside, header, nav, .no-print, [role="navigation"], .fixed.inset-0.bg-slate-950\/60, .fixed.inset-0.bg-black\/40, .fixed.inset-0.bg-slate-900\/50 {
     display: none !important;
   }
 
-  /* When invoice modal is present, ensure invoice fills A4 page cleanly */
+  /* When invoice modal is present, ensure invoice fills A4 or 80mm page cleanly */
   #printable-invoice-container {
     display: block !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    position: static !important;
     width: 100% !important;
     max-width: 100% !important;
     padding: 0 !important;

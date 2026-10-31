@@ -139,15 +139,17 @@ export async function POST(req: NextRequest) {
     // Send email dispatch
     await sendOtpEmail(rawEmail, otp, accountName);
 
+    const isNonProdDemo = process.env.NODE_ENV !== 'production' && (process.env.ALLOW_DEMO_OTP === 'true' || !process.env.NODE_ENV);
+
     return NextResponse.json({
       success: true,
       message: `Verification code sent to ${rawEmail}`,
-      demoOtp: otp, // Returned for instant 100% free testing without waiting for inbox
+      ...(isNonProdDemo ? { demoOtp: otp } : {}),
     });
   } catch (error: any) {
-    console.error('Error sending email OTP:', error);
+    console.error('Error sending email OTP:', error?.message || error);
     return NextResponse.json(
-      { error: error.message || 'Failed to send verification email. Please try again.' },
+      { error: 'Failed to send verification email. Please try again.' },
       { status: 500 }
     );
   }

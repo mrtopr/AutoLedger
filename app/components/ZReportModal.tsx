@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Printer,
   Download,
@@ -77,6 +77,15 @@ export default function ZReportModal({
   invoices,
 }: ZReportModalProps) {
   const [isPrinting, setIsPrinting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -227,7 +236,12 @@ Generated via TradeLedger Dual-Engine ERP`;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-slate-100 rounded-2xl shadow-2xl overflow-hidden border border-slate-700/50 flex flex-col max-h-[94vh]">
+      <div 
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="zreport-modal-title"
+        className="relative w-full max-w-4xl bg-slate-100 rounded-2xl shadow-2xl overflow-hidden border border-slate-700/50 flex flex-col max-h-[94vh]"
+      >
         {/* Top Control Bar */}
         <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -235,7 +249,7 @@ Generated via TradeLedger Dual-Engine ERP`;
               <Landmark className="w-4 h-4 text-red-400" />
             </div>
             <div>
-              <div className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+              <div id="zreport-modal-title" className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
                 <span>Day-End Z-Report Digital Summary</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
                   {date}
@@ -248,8 +262,8 @@ Generated via TradeLedger Dual-Engine ERP`;
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/60 text-emerald-400 text-[11px] font-semibold rounded-lg border border-emerald-800/60">
-              🌱 Paperless Digital Report
+            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 text-slate-300 text-[11px] font-semibold rounded-lg border border-slate-700">
+              Daily Settlement Summary
             </span>
 
             <button
@@ -272,6 +286,7 @@ Generated via TradeLedger Dual-Engine ERP`;
 
             <button
               onClick={onClose}
+              aria-label="Close day-end report"
               className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer ml-1"
             >
               <X className="w-5 h-5" />

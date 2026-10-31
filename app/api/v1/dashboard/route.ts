@@ -14,10 +14,18 @@ function toDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-default';
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: missing authentication or tenant context' },
+        { status: 401 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
 
     // Parse requested date or period from query param
     const { searchParams } = new URL(req.url);
@@ -99,9 +107,13 @@ export async function GET(req: NextRequest) {
       weekMap[toDateStr(d)] = { salesPaise: 0n, collPaise: 0n };
     }
 
+    let dbQueried = false;
+    const overdueCustomersList: any[] = [];
+    const lowStockPartsList: any[] = [];
     const hasDb = await isPostgresAvailable();
     if (hasDb && isUuid(targetTenantId)) {
       try {
+        dbQueried = true;
         // 1. Customers & Ledger
         const customers = await prisma.customer.findMany({
           where: { tenantId: targetTenantId, isActive: true },
@@ -110,7 +122,7 @@ export async function GET(req: NextRequest) {
             invoices: {
               where: { 
                 createdAt: { lte: dayEnd },
-                status: { not: 'CANCELLED' }
+                status: { notIn: ['CANCELLED', 'DRAFT'] }
               },
               select: { grandTotal: true, dueDate: true, status: true }
             }
@@ -129,6 +141,16 @@ export async function GET(req: NextRequest) {
           }
           if (bal > 0n) {
             totalOutstanding += bal;
+            overdueCustomersList.push({
+              id: c.id,
+              name: c.name,
+              shopName: c.shopName || c.name,
+              phone: c.phone || '',
+              balancePaise: bal.toString(),
+              balanceRupees: Math.round(Number(bal) / 100),
+              daysOverdue: 15,
+              status: c.status === 'RED' ? 'HIGH' : c.status === 'YELLOW' ? 'MEDIUM' : 'NORMAL',
+            });
           }
           totalOverdue += ovd;
         }
@@ -153,17 +175,20 @@ export async function GET(req: NextRequest) {
           }
           if (pDate === selectedDateStr) {
             dayCollectedPaise += p.amount;
-            if (p.mode === 'CASH') dayCashPaise += p.amount;
-            if (p.mode === 'UPI') dayUpiPaise += p.amount;
+            if (p.mode === 'CASH') {
+              dayCashPaise += p.amount;
+            } else {
+              dayUpiPaise += p.amount;
+            }
           }
         }
 
-        // 3. Invoices on target date & 7-day window (strictly excluding CANCELLED)
+        // 3. Invoices on target date & 7-day window (strictly excluding CANCELLED and DRAFT)
         const allRecentInvoices = await prisma.invoice.findMany({
           where: { 
             tenantId: targetTenantId,
             createdAt: { gte: sevenDaysAgo, lte: dayEnd },
-            status: { not: 'CANCELLED' }
+            status: { notIn: ['CANCELLED', 'DRAFT'] }
           },
           orderBy: { createdAt: 'desc' },
           include: { 
@@ -218,23 +243,46 @@ export async function GET(req: NextRequest) {
           const currentQty = pr.stockMovements.reduce((sum, m) => sum + m.qty, 0);
           if (currentQty <= (pr.reorderLevel || 10)) {
             lowStockCount++;
+            lowStockPartsList.push({
+              id: pr.id,
+              name: pr.name,
+              partNumber: pr.partNumber,
+              stockQty: currentQty,
+              reorderLevel: pr.reorderLevel || 10,
+              unit: pr.unit || 'pcs',
+              category: cat,
+            });
           }
         }
 
       } catch (err) {
         console.warn('Postgres query error in dashboard, localStore fallback:', err);
+        dbQueried = false;
       }
     }
 
-    // LocalStore fallback integration if Postgres returned zero or offline
-    if (daySalesPaise === 0n && recentTransactions.length === 0) {
+    // LocalStore desktop JSON mode: run ONLY when PostgreSQL was not queried
+    if (!dbQueried) {
       const localInvoices = localStore.getInvoices(targetTenantId);
       const localCusts = localStore.getCustomers(targetTenantId);
       const localProducts = localStore.getProducts(targetTenantId);
+      const localPayments = localStore.getPayments(targetTenantId);
 
       // Outstanding from local customers (only positive receivables)
       totalOutstanding = localCusts.reduce((sum, c) => {
         const b = BigInt(c.balancePaise || 0);
+        if (b > 0n) {
+          overdueCustomersList.push({
+            id: c.id,
+            name: c.name,
+            shopName: c.shopName || c.name,
+            phone: c.phone || '',
+            balancePaise: b.toString(),
+            balanceRupees: Math.round(Number(b) / 100),
+            daysOverdue: 15,
+            status: c.status === 'RED' ? 'HIGH' : c.status === 'YELLOW' ? 'MEDIUM' : 'NORMAL',
+          });
+        }
         return sum + (b > 0n ? b : 0n);
       }, 0n);
       totalOverdue = localCusts.reduce((sum, c) => sum + BigInt(c.overduePaise || 0), 0n);
@@ -244,11 +292,35 @@ export async function GET(req: NextRequest) {
         categoryMap[cat] = (categoryMap[cat] || 0) + 1;
         if (pr.stockQty <= (pr.reorderLevel || 10)) {
           lowStockCount++;
+          lowStockPartsList.push({
+            id: pr.id,
+            name: pr.name,
+            partNumber: pr.partNumber,
+            stockQty: pr.stockQty,
+            reorderLevel: pr.reorderLevel || 10,
+            unit: pr.unit || 'pcs',
+            category: cat,
+          });
+        }
+      }
+
+      // Payments from actual localStore payment records
+      for (const p of localPayments) {
+        const pDate = toDateStr(new Date(p.createdAt));
+        const pObjDate = new Date(p.createdAt);
+        const pAmt = BigInt(p.amountPaise || 0);
+        if (weekMap[pDate]) {
+          weekMap[pDate].collPaise += pAmt;
+        }
+        if (isMatchPeriod(pObjDate, pDate)) {
+          dayCollectedPaise += pAmt;
+          if (p.mode === 'CASH') dayCashPaise += pAmt;
+          if (p.mode === 'UPI') dayUpiPaise += pAmt;
         }
       }
 
       for (const inv of localInvoices) {
-        if (inv.status === 'CANCELLED') continue; // Skip voided/cancelled invoices
+        if (inv.status === 'CANCELLED' || inv.status === 'DRAFT') continue; // Skip voided/cancelled invoices and draft requisitions
         const invDate = toDateStr(new Date(inv.createdAt));
         const invObjDate = new Date(inv.createdAt);
         const gTotal = BigInt(inv.grandTotalPaise || 0);
@@ -256,21 +328,24 @@ export async function GET(req: NextRequest) {
 
         if (weekMap[invDate]) {
           weekMap[invDate].salesPaise += gTotal;
-          weekMap[invDate].collPaise += pNow;
+          if (localPayments.length === 0) {
+            weekMap[invDate].collPaise += pNow;
+          }
         }
         if (invDate === prevDayStr) {
           prevDaySalesPaise += gTotal;
         }
         if (isMatchPeriod(invObjDate, invDate)) {
           daySalesPaise += gTotal;
-          dayCollectedPaise += pNow;
+          if (localPayments.length === 0) {
+            dayCollectedPaise += pNow;
+            dayCashPaise += pNow;
+          }
           if (gTotal > pNow) {
             dayKhataPaise += gTotal - pNow;
           }
-          dayCashPaise += (pNow * 30n) / 100n;
-          dayUpiPaise += pNow - ((pNow * 30n) / 100n);
 
-          const cust = localStore.getCustomerById(inv.customerId || '');
+          const cust = localStore.getCustomerById(inv.customerId || '', targetTenantId);
           const isFull = pNow >= gTotal && gTotal > 0n;
           const isZero = pNow === 0n;
 
@@ -280,7 +355,7 @@ export async function GET(req: NextRequest) {
             customer: cust?.shopName || cust?.name || 'Retail Counter',
             amountPaise: inv.grandTotalPaise,
             paidPaise: inv.paidNowPaise,
-            paymentMode: isZero ? 'CREDIT' : (isFull ? 'UPI' : 'SPLIT'),
+            paymentMode: isZero ? 'CREDIT' : (isFull ? 'CASH' : 'PARTIAL'),
             status: isFull ? 'PAID' : (isZero ? 'OVERDUE' : 'PARTIAL'),
             date: new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           });
@@ -332,6 +407,10 @@ export async function GET(req: NextRequest) {
       categoryBreakdown.push({ name: 'General Spares', count: 0, percentage: 0, barColor: 'bg-emerald-600' });
     }
 
+    // Sort overdue accounts by highest balance, and low stock parts by lowest stock
+    overdueCustomersList.sort((a, b) => b.balanceRupees - a.balanceRupees);
+    lowStockPartsList.sort((a, b) => a.stockQty - b.stockQty);
+
     return NextResponse.json({
       success: true,
       selectedDate: selectedDateStr,
@@ -352,6 +431,8 @@ export async function GET(req: NextRequest) {
       chartDays,
       categoryBreakdown,
       recentTransactions,
+      overdueCustomers: overdueCustomersList.slice(0, 5),
+      lowStockParts: lowStockPartsList.slice(0, 5),
     });
   } catch (error: any) {
     console.error('Dashboard aggregation error:', error);

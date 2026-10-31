@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
@@ -8,6 +8,25 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 }
+
+// Native print handler for thermal and A4 bill printing
+ipcMain.on('print-page', (event, options = {}) => {
+  // Validate sender frame to prevent unapproved external or nested frames from invoking native printing
+  if (!event.senderFrame) return;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) {
+    const printOptions = {
+      silent: Boolean(options.silent),
+      printBackground: options.printBackground !== false,
+      deviceName: options.deviceName || '',
+    };
+    win.webContents.print(printOptions, (success, failureReason) => {
+      if (!success && failureReason !== 'cancelled') {
+        console.error('Electron print failed:', failureReason);
+      }
+    });
+  }
+});
 
 let mainWindow = null;
 let serverProcess = null;
@@ -131,6 +150,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
     autoHideMenuBar: true,
@@ -200,6 +220,27 @@ function createWindow() {
       return { action: 'deny' };
     }
     return { action: 'allow' };
+  });
+
+  // Restrict in-window navigation to local app or configured cloud origin
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    try {
+      if (navigationUrl.startsWith('data:')) return;
+      const parsed = new URL(navigationUrl);
+      const isLocal = (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') && String(parsed.port) === String(PORT);
+      let isCloud = false;
+      try {
+        const parsedCloud = new URL(DEFAULT_CLOUD_URL);
+        if (parsed.origin === parsedCloud.origin) isCloud = true;
+      } catch {}
+
+      if (!isLocal && !isCloud) {
+        event.preventDefault();
+        shell.openExternal(navigationUrl);
+      }
+    } catch {
+      event.preventDefault();
+    }
   });
 
   mainWindow.on('closed', () => {

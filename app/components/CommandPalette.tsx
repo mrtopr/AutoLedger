@@ -55,6 +55,7 @@ export default function CommandPalette() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'parts' | 'customers'>('all');
 
   // Quick Invoice Preview Modal inside Search
   const [selectedPreviewInvoice, setSelectedPreviewInvoice] = useState<InvoicePreviewData | null>(null);
@@ -332,12 +333,17 @@ export default function CommandPalette() {
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) {
+      const topCust = activeTab === 'parts' ? [] : customers.slice(0, 4);
+      const topParts = activeTab === 'customers' ? [] : products.slice(0, 4);
+      const topInvs = activeTab === 'all' ? invoices.slice(0, 3) : [];
+      const cmds = activeTab === 'all' ? defaultCommands : [];
+
       return {
-        matchedInvoices: [],
-        matchedCustomers: [],
-        matchedProducts: [],
-        matchedCommands: defaultCommands,
-        totalCount: defaultCommands.length,
+        matchedInvoices: topInvs,
+        matchedCustomers: topCust,
+        matchedProducts: topParts,
+        matchedCommands: cmds,
+        totalCount: topInvs.length + topCust.length + topParts.length + cmds.length,
       };
     }
 
@@ -345,7 +351,7 @@ export default function CommandPalette() {
     const digitQuery = q.replace(/\D/g, '');
 
     // 1. Matched Invoices (Match invoice number, customer name, phone, digits)
-    const matchedInvoices = invoices.filter((inv) => {
+    const matchedInvoices = activeTab === 'all' ? invoices.filter((inv) => {
       const invNum = (inv.invoiceNumber || inv.number || '').toLowerCase();
       const custName = (inv.customerName || inv.customer || '').toLowerCase();
       const custShop = (inv.customerShop || '').toLowerCase();
@@ -358,10 +364,10 @@ export default function CommandPalette() {
         custShop.includes(q) ||
         phone.includes(q)
       );
-    });
+    }) : [];
 
     // 2. Matched Customers (Match name, shop, phone, gstin)
-    const matchedCustomers = customers.filter((c) => {
+    const matchedCustomers = activeTab === 'parts' ? [] : customers.filter((c) => {
       const name = (c.name || '').toLowerCase();
       const shop = (c.shopName || '').toLowerCase();
       const phone = (c.phone || '').toLowerCase();
@@ -370,13 +376,13 @@ export default function CommandPalette() {
       return name.includes(q) || shop.includes(q) || phone.includes(q) || gstin.includes(q);
     });
 
-    // 3. Matched Products (Tally Multi-Token Engine)
-    const matchedProducts = searchTallyItems(products, q, 25);
+    // 3. Matched Products / Parts (Tally Multi-Token Engine)
+    const matchedProducts = activeTab === 'customers' ? [] : searchTallyItems(products, q, 25);
 
     // 4. Matched Commands
-    const matchedCommands = defaultCommands.filter((cmd) =>
+    const matchedCommands = activeTab === 'all' ? defaultCommands.filter((cmd) =>
       cmd.title.toLowerCase().includes(q) || cmd.category.toLowerCase().includes(q)
-    );
+    ) : [];
 
     const totalCount =
       matchedInvoices.length + matchedCustomers.length + matchedProducts.length + matchedCommands.length;
@@ -388,14 +394,15 @@ export default function CommandPalette() {
       matchedCommands,
       totalCount,
     };
-  }, [query, invoices, customers, products, defaultCommands]);
+  }, [query, invoices, customers, products, defaultCommands, activeTab]);
 
   const flatList = useMemo(() => {
-    const list: Array<{ type: 'INVOICE' | 'CUSTOMER' | 'PRODUCT' | 'COMMAND'; data: any }> = [];
+    const list: Array<{ type: 'CUSTOMER' | 'PRODUCT' | 'INVOICE' | 'COMMAND'; data: any }> = [];
 
-    searchResults.matchedInvoices.forEach((inv) => list.push({ type: 'INVOICE', data: inv }));
-    searchResults.matchedCustomers.forEach((c) => list.push({ type: 'CUSTOMER', data: c }));
+    // Prioritize Parts & Customers
     searchResults.matchedProducts.forEach((p) => list.push({ type: 'PRODUCT', data: p }));
+    searchResults.matchedCustomers.forEach((c) => list.push({ type: 'CUSTOMER', data: c }));
+    searchResults.matchedInvoices.forEach((inv) => list.push({ type: 'INVOICE', data: inv }));
     searchResults.matchedCommands.forEach((cmd) => list.push({ type: 'COMMAND', data: cmd }));
 
     return list;
@@ -422,7 +429,7 @@ export default function CommandPalette() {
         router.push(`/customers/${selected.data.id}`);
       } else if (selected.type === 'PRODUCT') {
         setIsOpen(false);
-        router.push(`/inventory`);
+        router.push(`/inventory?search=${encodeURIComponent(selected.data.partNumber || selected.data.name)}`);
       } else if (selected.type === 'COMMAND') {
         selected.data.action();
       }
@@ -435,6 +442,9 @@ export default function CommandPalette() {
     <ClientPortal>
       <div className="fixed inset-0 z-[100] flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
         <div 
+          role="dialog"
+          aria-modal="true"
+          aria-label="Quick search and command palette"
           className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden text-slate-800 animate-in zoom-in-95 duration-150"
           onClick={(e) => e.stopPropagation()}
         >
@@ -450,16 +460,18 @@ export default function CommandPalette() {
                 setSelectedIndex(0);
               }}
               onKeyDown={handleKeyDownInMenu}
-              placeholder="Search by bill/invoice # (e.g. 3947), customer, parts or command..."
-              className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 focus:outline-none"
+              placeholder="Search spare parts (SKU/name), customers, bills, or press 'ESC'..."
+              className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
             />
             {query && (
               <button 
+                type="button"
+                aria-label="Clear search input"
                 onClick={() => {
                   setQuery('');
                   setSelectedIndex(0);
                 }}
-                className="p-1 hover:bg-slate-200 rounded-md text-slate-400"
+                className="p-1 hover:bg-slate-200 rounded-md text-slate-400 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -469,43 +481,211 @@ export default function CommandPalette() {
             </kbd>
           </div>
 
+          {/* Category Filter Tabs */}
+          <div className="flex items-center gap-1 px-3 py-1.5 border-b border-slate-100 bg-slate-50/70 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('all');
+                setSelectedIndex(0);
+              }}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+                activeTab === 'all'
+                  ? 'bg-white shadow-2xs text-[#C81E1E] font-semibold border border-slate-200'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('parts');
+                setSelectedIndex(0);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+                activeTab === 'parts'
+                  ? 'bg-white shadow-2xs text-[#C81E1E] font-semibold border border-slate-200'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Boxes className="w-3 h-3 text-emerald-600" />
+              <span>Parts ({products.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('customers');
+                setSelectedIndex(0);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+                activeTab === 'customers'
+                  ? 'bg-white shadow-2xs text-[#C81E1E] font-semibold border border-slate-200'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Users className="w-3 h-3 text-amber-600" />
+              <span>Customers ({customers.length})</span>
+            </button>
+          </div>
+
           {/* Search Results Area */}
           <div className="max-h-96 overflow-y-auto p-2 space-y-3">
             {searchResults.totalCount === 0 ? (
               <div className="py-10 text-center text-slate-400 space-y-2">
                 <FileText className="w-8 h-8 text-slate-300 mx-auto" />
                 <div className="text-xs font-semibold text-slate-700">
-                  No bills, customers, or commands found for &ldquo;{query}&rdquo;
+                  No parts, customers, or bills found for &ldquo;{query}&rdquo;
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Try searching by bill number (e.g. 3947), customer name, or phone number.
+                  Try searching by part number (SKU), vehicle model, customer name, or phone number.
                 </p>
               </div>
             ) : (
               <>
-                {/* 1. MATCHED INVOICES & BILLS */}
-                {searchResults.matchedInvoices.length > 0 && (
+                {/* 1. MATCHED SPARE PARTS INVENTORY (PRIORITY) */}
+                {searchResults.matchedProducts.length > 0 && (
                   <div className="space-y-1">
+                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Boxes className="w-3 h-3 text-emerald-600" />
+                        <span>Inventory & Spare Parts ({searchResults.matchedProducts.length})</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 lowercase">↵ select part</span>
+                    </div>
+
+                    {searchResults.matchedProducts.slice(0, 8).map((p, pIdx) => {
+                      const mrpRs = Number(BigInt(p.salePricePaise || p.mrpPaise || 0)) / 100;
+                      const globalIndex = pIdx;
+                      const isSelected = selectedIndex === globalIndex;
+
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => {
+                            setIsOpen(false);
+                            router.push(`/inventory?search=${encodeURIComponent(p.partNumber || p.name)}`);
+                          }}
+                          className={`w-full flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-50/90 ring-1 ring-emerald-500/50 shadow-2xs'
+                              : 'hover:bg-emerald-50/60 border border-transparent hover:border-emerald-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 truncate">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                              <Package className="w-4 h-4" />
+                            </div>
+                            <div className="truncate">
+                              <div className="font-bold text-xs text-slate-900">{p.name}</div>
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                SKU: {p.partNumber || 'N/A'} · {p.category || 'Spares'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="font-mono font-bold text-xs text-slate-900">
+                              ₹{mrpRs.toFixed(2)}
+                            </div>
+                            <span className="text-[10px] text-emerald-700 font-bold">
+                              {p.stockQty || 0} {p.unit || 'pcs'} in stock
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 2. MATCHED CUSTOMERS & KHATA (PRIORITY) */}
+                {searchResults.matchedCustomers.length > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-slate-100">
+                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Users className="w-3 h-3 text-amber-600" />
+                        <span>Customer & Garage Khata ({searchResults.matchedCustomers.length})</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 lowercase">↵ open khata</span>
+                    </div>
+
+                    {searchResults.matchedCustomers.slice(0, 6).map((c, cIdx) => {
+                      const balanceRs = Number(BigInt(c.balancePaise || 0)) / 100;
+                      const globalIndex = searchResults.matchedProducts.length + cIdx;
+                      const isSelected = selectedIndex === globalIndex;
+
+                      return (
+                        <div
+                          key={c.id}
+                          onClick={() => {
+                            setIsOpen(false);
+                            router.push(`/customers/${c.id}`);
+                          }}
+                          className={`w-full flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-50/90 ring-1 ring-amber-500/50 shadow-2xs'
+                              : 'hover:bg-amber-50/60 border border-transparent hover:border-amber-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 truncate">
+                            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                              <User className="w-4 h-4" />
+                            </div>
+                            <div className="truncate">
+                              <div className="font-bold text-xs text-slate-900">{c.shopName || c.name}</div>
+                              <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                                <span>{c.name}</span>
+                                {c.phone && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="font-mono">{c.phone}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="font-mono font-bold text-xs text-amber-700">
+                              ₹{balanceRs.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </div>
+                            <span className="text-[10px] text-slate-400">Khata Balance</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 3. MATCHED INVOICES & BILLS */}
+                {searchResults.matchedInvoices.length > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-slate-100">
                     <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
                         <Receipt className="w-3 h-3 text-blue-600" />
                         <span>Past Invoices & Bills ({searchResults.matchedInvoices.length})</span>
                       </span>
-                      <span className="text-[10px] text-slate-400 lowercase">Click to preview & print</span>
+                      <span className="text-[10px] text-slate-400 lowercase">preview & print</span>
                     </div>
 
-                    {searchResults.matchedInvoices.map((inv) => {
+                    {searchResults.matchedInvoices.map((inv, invIdx) => {
                       const grandTotalRs = Number(BigInt(inv.grandTotalPaise || inv.amountPaise || 0)) / 100;
                       const isPaid = BigInt(inv.creditBalancePaise || 0) === 0n;
                       const dateStr = inv.createdAt 
                         ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
                         : 'Recent';
+                      const globalIndex = searchResults.matchedProducts.length + searchResults.matchedCustomers.length + invIdx;
+                      const isSelected = selectedIndex === globalIndex;
 
                       return (
                         <div
                           key={inv.id}
                           onClick={() => handleOpenInvoicePreview(inv)}
-                          className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50/80 border border-transparent hover:border-blue-200 transition cursor-pointer group"
+                          className={`w-full flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer group ${
+                            isSelected
+                              ? 'bg-blue-50/90 ring-1 ring-blue-500/50 shadow-2xs'
+                              : 'hover:bg-blue-50/70 border border-transparent hover:border-blue-200'
+                          }`}
                         >
                           <div className="flex items-center gap-3 truncate">
                             <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
@@ -562,100 +742,6 @@ export default function CommandPalette() {
                   </div>
                 )}
 
-                {/* 2. MATCHED CUSTOMERS & KHATA */}
-                {searchResults.matchedCustomers.length > 0 && (
-                  <div className="space-y-1 pt-1 border-t border-slate-100">
-                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Users className="w-3 h-3 text-amber-600" />
-                      <span>Customer & Garage Khata ({searchResults.matchedCustomers.length})</span>
-                    </div>
-
-                    {searchResults.matchedCustomers.slice(0, 4).map((c) => {
-                      const balanceRs = Number(BigInt(c.balancePaise || 0)) / 100;
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => {
-                            setIsOpen(false);
-                            router.push(`/customers/${c.id}`);
-                          }}
-                          className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-amber-50/70 border border-transparent hover:border-amber-200 transition cursor-pointer group"
-                        >
-                          <div className="flex items-center gap-3 truncate">
-                            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                              <User className="w-4 h-4" />
-                            </div>
-                            <div className="truncate">
-                              <div className="font-bold text-xs text-slate-900">{c.shopName || c.name}</div>
-                              <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                                <span>{c.name}</span>
-                                {c.phone && (
-                                  <>
-                                    <span>·</span>
-                                    <span className="font-mono">{c.phone}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="text-right shrink-0">
-                            <div className="font-mono font-bold text-xs text-amber-700">
-                              ₹{balanceRs.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </div>
-                            <span className="text-[10px] text-slate-400">Khata Balance</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* 3. MATCHED SPARE PARTS INVENTORY */}
-                {searchResults.matchedProducts.length > 0 && (
-                  <div className="space-y-1 pt-1 border-t border-slate-100">
-                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Boxes className="w-3 h-3 text-emerald-600" />
-                      <span>Inventory & Spare Parts ({searchResults.matchedProducts.length})</span>
-                    </div>
-
-                    {searchResults.matchedProducts.slice(0, 4).map((p) => {
-                      const mrpRs = Number(BigInt(p.salePricePaise || p.mrpPaise || 0)) / 100;
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => {
-                            setIsOpen(false);
-                            router.push(`/inventory`);
-                          }}
-                          className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-emerald-50/70 border border-transparent hover:border-emerald-200 transition cursor-pointer"
-                        >
-                          <div className="flex items-center gap-3 truncate">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                              <Package className="w-4 h-4" />
-                            </div>
-                            <div className="truncate">
-                              <div className="font-bold text-xs text-slate-900">{p.name}</div>
-                              <div className="text-[11px] text-slate-500 font-mono">
-                                SKU: {p.partNumber || 'N/A'} · {p.category || 'Spares'}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="text-right shrink-0">
-                            <div className="font-mono font-bold text-xs text-slate-900">
-                              ₹{mrpRs.toFixed(2)}
-                            </div>
-                            <span className="text-[10px] text-emerald-700 font-bold">
-                              {p.stockQty || 0} {p.unit || 'pcs'} in stock
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
                 {/* 4. ACTIONS & NAVIGATION COMMANDS */}
                 {searchResults.matchedCommands.length > 0 && (
                   <div className="space-y-1 pt-1 border-t border-slate-100">
@@ -663,13 +749,20 @@ export default function CommandPalette() {
                       Actions & Navigation
                     </div>
 
-                    {searchResults.matchedCommands.map((cmd) => {
+                    {searchResults.matchedCommands.map((cmd, cmdIdx) => {
                       const Icon = cmd.icon;
+                      const globalIndex = searchResults.matchedProducts.length + searchResults.matchedCustomers.length + searchResults.matchedInvoices.length + cmdIdx;
+                      const isSelected = selectedIndex === globalIndex;
+
                       return (
                         <button
                           key={cmd.id}
                           onClick={cmd.action}
-                          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs hover:bg-slate-100 text-slate-700 hover:text-slate-900 transition text-left"
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition text-left ${
+                            isSelected
+                              ? 'bg-slate-100 text-slate-950 font-medium ring-1 ring-slate-300'
+                              : 'hover:bg-slate-100 text-slate-700 hover:text-slate-900'
+                          }`}
                         >
                           <div className="flex items-center gap-3 truncate">
                             <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600">

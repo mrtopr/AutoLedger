@@ -45,25 +45,37 @@ export function getRazorpayClient(customKeyId?: string, customSecret?: string) {
 /**
  * Verify Razorpay Webhook HMAC SHA256 Signature
  */
+/**
+ * Verify Razorpay Webhook HMAC SHA256 Signature
+ * Uses timingSafeEqual and requires an explicit webhook secret (no hardcoded fallback)
+ */
 export function verifyRazorpaySignature(
   rawBody: string,
   signature: string,
   secret?: string
 ): boolean {
-  const webhookSecret = secret || process.env.RAZORPAY_WEBHOOK_SECRET || 'tradeledger_webhook_secret_2026';
+  const webhookSecret = secret || process.env.RAZORPAY_WEBHOOK_SECRET;
   
+  if (!webhookSecret || !signature || !rawBody) {
+    return false;
+  }
+
   try {
     const expectedSignature = crypto
       .createHmac('sha256', webhookSecret)
       .update(rawBody)
       .digest('hex');
 
-    return crypto.timingSafeEqual(
-      Buffer.from(expectedSignature, 'utf-8'),
-      Buffer.from(signature, 'utf-8')
-    );
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
+    const signatureBuffer = Buffer.from(signature, 'utf-8');
+
+    // timingSafeEqual requires buffers of identical length
+    if (expectedBuffer.length !== signatureBuffer.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
   } catch (err) {
-    console.error('Webhook signature verification error:', err);
     return false;
   }
 }

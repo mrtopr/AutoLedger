@@ -88,6 +88,15 @@ export default function RazorpayModal({
     };
   }, [isOpen, defaultAmountRupees, invoiceNumber, customerName]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !loading && !checkingStatus) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, loading, checkingStatus]);
+
   // Automatic real-time status polling when QR / Payment link is ready
   useEffect(() => {
     if (!paymentLinkData?.id || paymentStatus === 'paid' || paymentStatus === 'failed') {
@@ -293,7 +302,12 @@ export default function RazorpayModal({
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
-        <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="razorpay-modal-title"
+          className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150"
+        >
           
           {/* Top Header */}
           <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
@@ -302,13 +316,14 @@ export default function RazorpayModal({
                 <Zap className="w-4 h-4 text-blue-400" />
               </div>
               <div>
-                <h2 className="text-sm font-bold tracking-tight">Razorpay Instant Payment Gateway</h2>
+                <h2 id="razorpay-modal-title" className="text-sm font-bold tracking-tight">Razorpay Instant Payment Gateway</h2>
                 <p className="text-[11px] text-slate-400">Dynamic UPI QR & WhatsApp Link Generator</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition"
+              aria-label="Close payment gateway dialog"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

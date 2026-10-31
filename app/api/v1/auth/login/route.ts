@@ -41,9 +41,16 @@ export async function POST(req: NextRequest) {
       user = localStore.findUser(cleanLoginId);
       if (user && hasDb) {
         try {
-          const targetTenantId = (user.tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.tenantId))
+          let targetTenantId = (user.tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.tenantId))
             ? user.tenantId
-            : (await prisma.tenant.findFirst({ select: { id: true } }))?.id;
+            : null;
+          if (!targetTenantId && user.tenantId) {
+            const localT = localStore.getTenantById(user.tenantId);
+            if (localT) {
+              const matchedTenant = await prisma.tenant.findFirst({ where: { name: localT.name }, select: { id: true } });
+              if (matchedTenant) targetTenantId = matchedTenant.id;
+            }
+          }
           if (targetTenantId) {
             const syncedUser = await prisma.user.create({
               data: {
@@ -83,7 +90,9 @@ export async function POST(req: NextRequest) {
     if (user.password) {
       isValidPassword = await comparePassword(password, user.password);
     } else {
-      isValidPassword = password === 'admin123' || password === 'password123';
+      // In production with PostgreSQL, passwordless accounts must fail closed
+      const isDevFallback = process.env.NODE_ENV !== 'production' && (process.env.ALLOW_DEV_PASSWORDS === 'true' || !process.env.NODE_ENV);
+      isValidPassword = isDevFallback && (password === 'admin123' || password === 'password123');
     }
 
     if (!isValidPassword) {
@@ -139,9 +148,9 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error: any) {
-    console.error('Login error:', error);
+    console.error('Login error:', error?.message || error);
     return NextResponse.json(
-      { error: error.message || 'Login failed. Please try again.' },
+      { error: 'Login failed. Please check your credentials and try again.' },
       { status: 500 }
     );
   }

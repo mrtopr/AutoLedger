@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
+import { prisma, isPostgresAvailable, getStorageMode } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { CreditStatus, CustomerType } from '@prisma/client';
@@ -10,6 +10,11 @@ const isUuid = (id?: string | null): boolean =>
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
+
     const { searchParams } = new URL(req.url);
     const query = searchParams.get('q') || '';
     const status = searchParams.get('status') || '';
@@ -19,13 +24,7 @@ export async function GET(req: NextRequest) {
 
     // 1. Try Prisma first if Postgres is available
     const hasDb = await isPostgresAvailable();
-    let effectiveTenantId = isUuid(authUser?.tenantId) ? (authUser?.tenantId as string) : null;
-    if (!effectiveTenantId && hasDb) {
-      try {
-        const first = await prisma.tenant.findFirst({ select: { id: true } });
-        if (first) effectiveTenantId = first.id;
-      } catch {}
-    }
+    const effectiveTenantId = isUuid(targetTenantId) ? (targetTenantId as string) : null;
 
     if (hasDb && effectiveTenantId) {
       try {
@@ -85,7 +84,7 @@ export async function GET(req: NextRequest) {
 
     // 2. If DB offline or query failed, use localStore
     if (!dbSuccess) {
-      const localCusts = localStore.getCustomers(authUser?.tenantId);
+      const localCusts = localStore.getCustomers(targetTenantId);
       formatted = localCusts.map((c) => ({
         id: c.id,
         name: c.name,
@@ -127,6 +126,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
+
     const body = await req.json();
 
     const {
@@ -135,7 +139,8 @@ export async function POST(req: NextRequest) {
       phone,
       address,
       gstin,
-      creditLimitPaise = 5000000n,
+      creditLimitPaise: rawCreditLimitPaise,
+      creditLimitRupees,
       paymentTermsDays = 15,
       customerType = 'RETAILER',
       openingBalancePaise = '0',
@@ -144,14 +149,20 @@ export async function POST(req: NextRequest) {
       openingBalanceNarration,
     } = body;
 
-    if (!shopName || !phone) {
+    const creditLimitPaise = rawCreditLimitPaise !== undefined
+      ? BigInt(rawCreditLimitPaise)
+      : (creditLimitRupees !== undefined ? BigInt(Math.round(Number(creditLimitRupees) * 100)) : 5000000n);
+
+    const effectiveName = name || shopName;
+    const effectiveShopName = shopName || name;
+
+    if (!effectiveName || !phone) {
       return NextResponse.json(
-        { error: 'Shop name and phone number are required' },
+        { error: 'Customer name and phone number are required' },
         { status: 400 }
       );
     }
 
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-apex-1';
     let createdCust: any = null;
     const initialBalPaise = BigInt(openingBalancePaise || 0);
     const isDueBal = openingBalanceType === 'DUE';
@@ -161,19 +172,21 @@ export async function POST(req: NextRequest) {
 
     // 1. Try Prisma if available
     const hasDb = await isPostgresAvailable();
-    let dbTenantId = isUuid(targetTenantId) ? targetTenantId : null;
-    if (!dbTenantId && hasDb) {
-      try {
-        const first = await prisma.tenant.findFirst({ select: { id: true } });
-        if (first) dbTenantId = first.id;
-      } catch {}
-    }
+    const dbTenantId = isUuid(targetTenantId) ? targetTenantId : null;
 
     let cType: CustomerType = CustomerType.GARAGE;
     if (customerType === 'RETAILER' || customerType === 'DISTRIBUTOR' || customerType === 'WHOLESALER') {
       cType = CustomerType.RETAILER;
     } else if (customerType === 'WALK_IN') {
       cType = CustomerType.WALK_IN;
+    }
+
+    // Fail-safe: In production / PostgreSQL storage mode, never silently fall back to localStore
+    if (getStorageMode() === 'POSTGRES' && !hasDb) {
+      return NextResponse.json(
+        { error: 'Database service unavailable. Customer record cannot be safely saved.' },
+        { status: 503 }
+      );
     }
 
     if (hasDb && dbTenantId) {
@@ -216,7 +229,14 @@ export async function POST(req: NextRequest) {
           balancePaise: netBalPaise.toString(),
           creditLimitPaise: customer.creditLimit.toString(),
         };
-      } catch (dbErr) {
+      } catch (dbErr: any) {
+        if (getStorageMode() === 'POSTGRES') {
+          console.error('Postgres error during customer create:', dbErr?.message);
+          return NextResponse.json(
+            { error: 'Failed to create customer in database' },
+            { status: 500 }
+          );
+        }
         console.warn('Postgres unavailable during customer create, using localStore fallback');
       }
     }

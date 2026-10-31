@@ -47,21 +47,21 @@ export async function isPostgresAvailable(): Promise<boolean> {
   try {
     const checkQuery = prisma.$queryRaw`SELECT 1`;
     const timeout = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('DB Timeout')), 2500)
+      setTimeout(() => reject(new Error('DB Timeout')), 6000)
     );
     await Promise.race([checkQuery, timeout]);
     globalForPrisma._dbAvailable = true;
     globalForPrisma._lastDbCheck = Date.now();
     return true;
   } catch (err: any) {
-    // If closed due to idle scale-to-zero, trigger a silent reconnect with strict timeout
+    // If closed due to idle scale-to-zero, trigger a silent reconnect with serverless wake allowance
     try {
       const reconnect = async () => {
         await prisma.$connect();
         await prisma.$queryRaw`SELECT 1`;
       };
       const timeout = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('DB Reconnect Timeout')), 2500)
+        setTimeout(() => reject(new Error('DB Reconnect Timeout')), 6000)
       );
       await Promise.race([reconnect(), timeout]);
       globalForPrisma._dbAvailable = true;
@@ -73,6 +73,19 @@ export async function isPostgresAvailable(): Promise<boolean> {
       return false;
     }
   }
+}
+
+/**
+ * Determines effective storage mode and guards against silent localStore fallbacks in production.
+ */
+export function getStorageMode(): 'POSTGRES' | 'LOCAL_OFFLINE' {
+  if (process.env.STORAGE_MODE === 'local' || process.env.OFFLINE_MODE === 'true') {
+    return 'LOCAL_OFFLINE';
+  }
+  if (process.env.NODE_ENV === 'production' || process.env.STORAGE_MODE === 'postgres') {
+    return 'POSTGRES';
+  }
+  return 'LOCAL_OFFLINE';
 }
 
 export default prisma;

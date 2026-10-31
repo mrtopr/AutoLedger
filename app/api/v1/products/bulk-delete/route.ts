@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
+import { createAuditLog } from '@/server/lib/audit';
 
 const isValidUuid = (val: any): boolean => {
   return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
@@ -10,28 +11,30 @@ const isValidUuid = (val: any): boolean => {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+
+    if (authUser.role !== 'OWNER' && authUser.role !== 'MANAGER') {
+      return NextResponse.json(
+        { error: 'Forbidden: only OWNER or MANAGER can perform bulk product deletions' },
+        { status: 403 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
+
     const body = await req.json();
     const { action, productIds, filter, confirmAll } = body;
 
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
-    const hasDb = await isPostgresAvailable();
-
-    // Resolve valid database tenant UUID if available
-    let dbTenantId: string | null = null;
-    if (hasDb) {
-      if (authUser?.tenantId && isValidUuid(authUser.tenantId)) {
-        dbTenantId = authUser.tenantId;
-      } else {
-        try {
-          const firstTenant = await prisma.tenant.findFirst({ select: { id: true } });
-          if (firstTenant && isValidUuid(firstTenant.id)) {
-            dbTenantId = firstTenant.id;
-          }
-        } catch {
-          // ignore
-        }
-      }
+    if (action === 'ALL' && authUser.role !== 'OWNER') {
+      return NextResponse.json(
+        { error: 'Forbidden: only business OWNER can perform a full inventory wipe' },
+        { status: 403 }
+      );
     }
+
+    const hasDb = await isPostgresAvailable();
+    const dbTenantId = isValidUuid(targetTenantId) ? targetTenantId : null;
 
     let deletedCount = 0;
 
@@ -42,7 +45,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'No product IDs provided' }, { status: 400 });
       }
 
-      // Soft-delete in PostgreSQL
+      // Soft-delete in PostgreSQL scoped to dbTenantId
       if (hasDb && dbTenantId) {
         const validUuids = ids.filter(id => isValidUuid(id));
         if (validUuids.length > 0) {
@@ -61,9 +64,17 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Remove from localStore fallback
-      const localCount = localStore.deleteProducts(ids);
+      // Remove from localStore scoped to targetTenantId
+      const localCount = localStore.deleteProducts(ids, targetTenantId);
       deletedCount = Math.max(deletedCount, localCount, ids.length);
+
+      await createAuditLog({
+        tenantId: targetTenantId,
+        userId: authUser.id,
+        action: 'PRODUCT_BULK_DELETED',
+        entity: 'PRODUCT',
+        after: { action: 'SELECTED', count: ids.length, productIds: ids.slice(0, 10) },
+      });
 
       return NextResponse.json({
         success: true,
@@ -95,6 +106,14 @@ export async function POST(req: NextRequest) {
 
       const localCount = localStore.deleteProductsByFilter(targetTenantId, { all: true });
       deletedCount = Math.max(deletedCount, localCount);
+
+      await createAuditLog({
+        tenantId: targetTenantId,
+        userId: authUser.id,
+        action: 'PRODUCT_BULK_DELETED',
+        entity: 'PRODUCT',
+        after: { action: 'ALL', count: deletedCount },
+      });
 
       return NextResponse.json({
         success: true,
@@ -147,6 +166,14 @@ export async function POST(req: NextRequest) {
         search,
       });
       deletedCount = Math.max(deletedCount, localCount);
+
+      await createAuditLog({
+        tenantId: targetTenantId,
+        userId: authUser.id,
+        action: 'PRODUCT_BULK_DELETED',
+        entity: 'PRODUCT',
+        after: { action: 'FILTER', count: deletedCount, filter },
+      });
 
       return NextResponse.json({
         success: true,

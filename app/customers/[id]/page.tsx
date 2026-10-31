@@ -754,7 +754,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                               <button
                                 onClick={() => handlePreviewInvoice(inv)}
                                 className="h-7 px-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-[11px] rounded border border-slate-300 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer"
-                                title="View Paperless Digital Bill"
+                                title="View Sales Bill"
                               >
                                 <Eye className="w-3 h-3 text-slate-500" />
                                 <span>View Bill</span>

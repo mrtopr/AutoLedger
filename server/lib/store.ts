@@ -92,8 +92,12 @@ export interface LocalInvoice {
   customerPhone?: string;
   customerGstin?: string;
   invoiceNumber: string;
+  number?: number;
+  seriesCode?: string;
+  fy?: string;
   status?: string;
   cancelReason?: string;
+  idempotencyKey?: string;
   grandTotalPaise: string;
   paidNowPaise: string;
   creditBalancePaise: string;
@@ -104,10 +108,11 @@ export interface LocalInvoice {
 export interface LocalPayment {
   id: string;
   tenantId: string;
-  customerId: string;
+  customerId?: string;
   amountPaise: string;
   mode: string;
   referenceNumber: string;
+  idempotencyKey?: string;
   createdAt: string;
 }
 
@@ -135,6 +140,19 @@ export interface LocalCashSettlement {
   createdAt: string;
 }
 
+export interface LocalAuditLog {
+  id: string;
+  tenantId: string;
+  userId?: string | null;
+  action: string;
+  entity: string;
+  entityId: string;
+  before?: any;
+  after?: any;
+  ip?: string | null;
+  createdAt: string;
+}
+
 export interface LocalStoreData {
   tenants: LocalTenant[];
   users: LocalUser[];
@@ -144,7 +162,9 @@ export interface LocalStoreData {
   invoices: LocalInvoice[];
   payments: LocalPayment[];
   cashSettlements?: LocalCashSettlement[];
+  auditLogs?: LocalAuditLog[];
   paymentAttempts?: Record<string, { status: 'paid' | 'failed' | 'pending'; reason?: string; paymentId?: string; updatedAt: string }>;
+  invoiceSeries?: Record<string, { lastNumber: number; prefix: string }>;
   hasSeededProducts?: Record<string, boolean>;
   hasSeededCustomers?: Record<string, boolean>;
 }
@@ -159,6 +179,7 @@ function getInitialData(): LocalStoreData {
     invoices: [],
     payments: [],
     cashSettlements: [],
+    auditLogs: [],
     paymentAttempts: {},
     hasSeededProducts: {},
     hasSeededCustomers: {},
@@ -301,8 +322,8 @@ class LocalStore {
     return { ...user, tenant };
   }
 
-  updateUser(id: string, updates: Partial<LocalUser>): LocalUser | null {
-    const idx = this.data.users.findIndex((u) => u.id === id);
+  updateUser(id: string, updates: Partial<LocalUser>, tenantId?: string): LocalUser | null {
+    const idx = this.data.users.findIndex((u) => u.id === id && (!tenantId || u.tenantId === tenantId));
     if (idx === -1) return null;
     this.data.users[idx] = { ...this.data.users[idx], ...updates };
     this.save();
@@ -316,14 +337,10 @@ class LocalStore {
       if (filtered.length > 0) {
         return filtered;
       }
-      // If store already has products under another tenant or imported earlier, return them
-      if (this.data.products.length > 0) {
-        return this.data.products;
-      }
 
       this.data.hasSeededProducts = this.data.hasSeededProducts || {};
       if (this.data.hasSeededProducts[tenantId]) {
-        return this.data.products;
+        return [];
       }
 
       this.data.hasSeededProducts[tenantId] = true;
@@ -421,10 +438,10 @@ class LocalStore {
     return this.data.products;
   }
 
-  createProduct(product: Omit<LocalProduct, 'id' | 'createdAt'>): LocalProduct {
+  createProduct(product: Omit<LocalProduct, 'id' | 'createdAt'> & { id?: string }): LocalProduct {
     const newProduct: LocalProduct = {
       ...product,
-      id: `p-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: product.id || `p-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       createdAt: new Date().toISOString(),
     };
     this.data.products.unshift(newProduct);
@@ -432,16 +449,20 @@ class LocalStore {
     return newProduct;
   }
 
-  adjustProductStock(id: string, deltaQty: number): LocalProduct | null {
-    const p = this.data.products.find((prod) => prod.id === id);
+  getProductById(id: string, tenantId?: string): LocalProduct | undefined {
+    return this.data.products.find((prod) => prod.id === id && (!tenantId || prod.tenantId === tenantId));
+  }
+
+  adjustProductStock(id: string, deltaQty: number, tenantId?: string): LocalProduct | null {
+    const p = this.data.products.find((prod) => prod.id === id && (!tenantId || prod.tenantId === tenantId));
     if (!p) return null;
     p.stockQty += deltaQty;
     this.save();
     return p;
   }
 
-  updateProduct(id: string, updates: Partial<LocalProduct>): LocalProduct | null {
-    const idx = this.data.products.findIndex((prod) => prod.id === id);
+  updateProduct(id: string, updates: Partial<LocalProduct>, tenantId?: string): LocalProduct | null {
+    const idx = this.data.products.findIndex((prod) => prod.id === id && (!tenantId || prod.tenantId === tenantId));
     if (idx === -1) return null;
     this.data.products[idx] = { ...this.data.products[idx], ...updates };
     this.save();
@@ -570,9 +591,9 @@ class LocalStore {
     return this.data.products[idx];
   }
 
-  deleteProduct(id: string): boolean {
+  deleteProduct(id: string, tenantId?: string): boolean {
     const beforeLen = this.data.products.length;
-    this.data.products = this.data.products.filter((prod) => prod.id !== id);
+    this.data.products = this.data.products.filter((prod) => !(prod.id === id && (!tenantId || prod.tenantId === tenantId)));
     if (this.data.products.length !== beforeLen) {
       this.save();
       return true;
@@ -580,10 +601,10 @@ class LocalStore {
     return false;
   }
 
-  deleteProducts(ids: string[]): number {
+  deleteProducts(ids: string[], tenantId?: string): number {
     const idSet = new Set(ids);
     const beforeLen = this.data.products.length;
-    this.data.products = this.data.products.filter((prod) => !idSet.has(prod.id));
+    this.data.products = this.data.products.filter((prod) => !(idSet.has(prod.id) && (!tenantId || prod.tenantId === tenantId)));
     const deletedCount = beforeLen - this.data.products.length;
     if (deletedCount > 0) {
       this.save();
@@ -695,23 +716,23 @@ class LocalStore {
     return this.data.customers;
   }
 
-  getCustomerById(id: string): LocalCustomer | undefined {
-    return this.data.customers.find((c) => c.id === id);
+  getCustomerById(id: string, tenantId?: string): LocalCustomer | undefined {
+    return this.data.customers.find((c) => c.id === id && (!tenantId || c.tenantId === tenantId));
   }
 
-  getCustomerByPhone(phone: string): LocalCustomer | undefined {
+  getCustomerByPhone(phone: string, tenantId?: string): LocalCustomer | undefined {
     const clean = phone.replace(/[^0-9]/g, '').slice(-10);
     if (!clean) return undefined;
     return this.data.customers.find((c) => {
       const cClean = (c.phone || '').replace(/[^0-9]/g, '').slice(-10);
-      return cClean === clean;
+      return cClean === clean && (!tenantId || c.tenantId === tenantId);
     });
   }
 
-  createCustomer(customer: Omit<LocalCustomer, 'id' | 'createdAt'>): LocalCustomer {
+  createCustomer(customer: Omit<LocalCustomer, 'id' | 'createdAt'> & { id?: string }): LocalCustomer {
     const newCustomer: LocalCustomer = {
       ...customer,
-      id: `cust-${Date.now()}`,
+      id: customer.id || `cust-${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
     this.data.customers.unshift(newCustomer);
@@ -719,8 +740,8 @@ class LocalStore {
     return newCustomer;
   }
 
-  updateCustomer(id: string, updates: Partial<LocalCustomer>): LocalCustomer | null {
-    const idx = this.data.customers.findIndex((c) => c.id === id);
+  updateCustomer(id: string, updates: Partial<LocalCustomer>, tenantId?: string): LocalCustomer | null {
+    const idx = this.data.customers.findIndex((c) => c.id === id && (!tenantId || c.tenantId === tenantId));
     if (idx === -1) return null;
     this.data.customers[idx] = { ...this.data.customers[idx], ...updates };
     this.save();
@@ -755,9 +776,9 @@ class LocalStore {
     return this.data.customers[idx];
   }
 
-  deleteCustomer(id: string): boolean {
+  deleteCustomer(id: string, tenantId?: string): boolean {
     const beforeLen = this.data.customers.length;
-    this.data.customers = this.data.customers.filter((c) => c.id !== id);
+    this.data.customers = this.data.customers.filter((c) => !(c.id === id && (!tenantId || c.tenantId === tenantId)));
     if (this.data.customers.length !== beforeLen) {
       this.save();
       return true;
@@ -766,9 +787,9 @@ class LocalStore {
   }
 
   // Ledger & Invoices
-  getLedger(customerId: string): LocalLedgerEntry[] {
+  getLedger(customerId: string, tenantId?: string): LocalLedgerEntry[] {
     const entries = this.data.ledgerEntries
-      .filter((l) => l.customerId === customerId)
+      .filter((l) => l.customerId === customerId && (!tenantId || l.tenantId === tenantId))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     let running = 0n;
@@ -813,6 +834,48 @@ class LocalStore {
     return newEntry;
   }
 
+  getNextInvoiceNumber(
+    tenantId: string,
+    seriesCode: string = 'INV',
+    fy: string,
+    prefix?: string,
+    padLength: number = 5
+  ): { invoiceNumber: string; seriesCode: string; fy: string; sequenceNumber: number } {
+    this.data.invoiceSeries = this.data.invoiceSeries || {};
+    const effectivePrefix = prefix || `${seriesCode}/${fy}/`;
+    const key = `${tenantId}:${seriesCode}:${fy}`;
+
+    if (!this.data.invoiceSeries[key]) {
+      // Find highest existing invoice number for this tenant & prefix in legacy records
+      let maxNum = 0;
+      for (const inv of this.data.invoices) {
+        if (inv.tenantId === tenantId && inv.invoiceNumber && inv.invoiceNumber.startsWith(effectivePrefix)) {
+          const suffix = inv.invoiceNumber.slice(effectivePrefix.length);
+          const parsed = parseInt(suffix, 10);
+          if (!isNaN(parsed) && parsed > maxNum) {
+            maxNum = parsed;
+          }
+        }
+      }
+      this.data.invoiceSeries[key] = {
+        lastNumber: maxNum,
+        prefix: effectivePrefix,
+      };
+    }
+
+    const series = this.data.invoiceSeries[key];
+    series.lastNumber += 1;
+    this.save();
+
+    const formatted = `${series.prefix}${String(series.lastNumber).padStart(padLength, '0')}`;
+    return {
+      invoiceNumber: formatted,
+      seriesCode,
+      fy,
+      sequenceNumber: series.lastNumber,
+    };
+  }
+
   createInvoice(invoice: Omit<LocalInvoice, 'id' | 'createdAt'> & { createdAt?: string }): LocalInvoice {
     const newInvoice: LocalInvoice = {
       ...invoice,
@@ -822,10 +885,12 @@ class LocalStore {
     };
     this.data.invoices.unshift(newInvoice);
 
-    // Decrement product stock
-    for (const item of invoice.items) {
-      if (item.productId) {
-        this.adjustProductStock(item.productId, -(item.qty || 1));
+    // Decrement product stock with exact validated quantity (only for confirmed bills, not DRAFT requisitions)
+    if (newInvoice.status !== 'DRAFT') {
+      for (const item of invoice.items) {
+        if (item.productId) {
+          this.adjustProductStock(item.productId, -(Number(item.qty) || 1), invoice.tenantId);
+        }
       }
     }
 
@@ -833,25 +898,35 @@ class LocalStore {
     return newInvoice;
   }
 
-  cancelInvoice(id: string, reason?: string): LocalInvoice | null {
-    const inv = this.data.invoices.find((i) => i.id === id || i.invoiceNumber === id);
+  getInvoiceById(id: string, tenantId?: string): LocalInvoice | undefined {
+    return this.data.invoices.find((i) => (i.id === id || i.invoiceNumber === id) && (!tenantId || i.tenantId === tenantId));
+  }
+
+  getInvoiceByIdempotencyKey(tenantId: string, idempotencyKey: string): LocalInvoice | undefined {
+    return this.data.invoices.find((i) => i.tenantId === tenantId && i.idempotencyKey === idempotencyKey);
+  }
+
+  cancelInvoice(id: string, reason?: string, tenantId?: string): LocalInvoice | null {
+    const inv = this.data.invoices.find((i) => (i.id === id || i.invoiceNumber === id) && (!tenantId || i.tenantId === tenantId));
     if (!inv) return null;
     if (inv.status === 'CANCELLED') return inv;
 
+    const previousStatus = inv.status;
     inv.status = 'CANCELLED';
     inv.cancelReason = reason || 'Customer / Billing cancellation';
+    inv.creditBalancePaise = '0';
 
-    // 1. Restore product stock
-    if (inv.items && Array.isArray(inv.items)) {
+    // 1. Restore product stock only if invoice was previously confirmed (not DRAFT)
+    if (previousStatus !== 'DRAFT' && inv.items && Array.isArray(inv.items)) {
       for (const item of inv.items) {
         if (item.productId) {
-          this.adjustProductStock(item.productId, item.qty || 1);
+          this.adjustProductStock(item.productId, item.qty || 1, inv.tenantId);
         }
       }
     }
 
-    // 2. Reverse Khata balance if customer linked
-    if (inv.customerId) {
+    // 2. Reverse Khata balance if customer linked and invoice was previously confirmed (not DRAFT)
+    if (previousStatus !== 'DRAFT' && inv.customerId) {
       this.addLedgerEntry({
         tenantId: inv.tenantId,
         customerId: inv.customerId,
@@ -879,6 +954,10 @@ class LocalStore {
       return this.data.payments.filter((p) => p.tenantId === tenantId);
     }
     return this.data.payments;
+  }
+
+  getPaymentByIdempotencyKey(tenantId: string, idempotencyKey: string): LocalPayment | undefined {
+    return this.data.payments.find((p) => p.tenantId === tenantId && p.idempotencyKey === idempotencyKey);
   }
 
   createPayment(payment: Omit<LocalPayment, 'id' | 'createdAt'> & { createdAt?: string }): LocalPayment {
@@ -963,6 +1042,28 @@ class LocalStore {
       this.save();
     }
     return deleted;
+  }
+
+  addAuditLog(entry: Omit<LocalAuditLog, 'id' | 'createdAt'>): LocalAuditLog {
+    if (!this.data.auditLogs) {
+      this.data.auditLogs = [];
+    }
+    const log: LocalAuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      ...entry,
+      createdAt: new Date().toISOString(),
+    };
+    this.data.auditLogs.unshift(log);
+    if (this.data.auditLogs.length > 10000) {
+      this.data.auditLogs.length = 10000;
+    }
+    this.save();
+    return log;
+  }
+
+  getAuditLogs(tenantId: string): LocalAuditLog[] {
+    if (!this.data.auditLogs) return [];
+    return this.data.auditLogs.filter((l) => l.tenantId === tenantId);
   }
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Plus,
@@ -43,6 +43,17 @@ export default function AddLedgerEntryModal({
   const [narration, setNarration] = useState('Previous register ledger balance');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, submitting, onClose]);
 
   if (!isOpen) return null;
 
@@ -100,12 +111,12 @@ export default function AddLedgerEntryModal({
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
-        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+        <div role="dialog" aria-modal="true" aria-labelledby="add-ledger-entry-title" className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
 
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+              <h3 id="add-ledger-entry-title" className="text-sm sm:text-base font-bold text-white tracking-tight">
                 Add Manual Udhar / Ledger Entry
               </h3>
               <p className="text-xs text-slate-300 mt-0.5">
@@ -113,9 +124,11 @@ export default function AddLedgerEntryModal({
               </p>
             </div>
             <button
+              type="button"
+              aria-label="Close modal"
               onClick={onClose}
               disabled={submitting}
-              className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+              className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

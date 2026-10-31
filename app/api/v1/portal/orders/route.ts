@@ -1,28 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
+import { parseCustomerSession } from '@/server/lib/portalAuth';
 
-function parseCustomerSession(req: NextRequest): { customerId?: string; phone?: string; tenantId?: string } | null {
-  const cookieToken = req.cookies.get('autoledger_customer_token')?.value;
-  const authHeader = req.headers.get('authorization');
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-  const rawToken = cookieToken || bearerToken || req.headers.get('x-customer-token');
-
-  if (rawToken) {
-    try {
-      return JSON.parse(Buffer.from(rawToken, 'base64').toString('utf-8'));
-    } catch {
-      // Fallback
-    }
-  }
-
-  const phone = req.headers.get('x-customer-phone');
-  if (phone) {
-    return { phone: phone.replace(/[^0-9]/g, '').slice(-10) };
-  }
-
-  return null;
-}
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
@@ -103,8 +84,8 @@ export async function POST(req: NextRequest) {
         quantity: Number(qty),
         unitPricePaise: unitPricePaise.toString(),
         totalPaise: totalPaise.toString(),
-        hsnCode: item.hsnCode || '87141090',
-        gstRateBp: item.gstRateBp || 1800,
+        hsnCode: item.hsnCode || null,
+        gstRateBp: 0,
       });
     }
 
@@ -123,7 +104,7 @@ export async function POST(req: NextRequest) {
             customerId: customer.id,
             number: invoiceNumber,
             seriesCode: 'REQ',
-            invoiceType: 'TAX_INVOICE',
+            invoiceType: 'RETAIL_BILL',
             status: 'DRAFT',
             issueDate: new Date(),
             placeOfSupply: '27 - Maharashtra',
@@ -147,10 +128,10 @@ export async function POST(req: NextRequest) {
                 rate: BigInt(li.unitPricePaise || 0),
                 discount: 0n,
                 taxableValue: BigInt(li.totalPaise || 0),
-                gstRateBp: li.gstRateBp || 1800,
+                gstRateBp: 0,
                 taxAmount: 0n,
                 lineTotal: BigInt(li.totalPaise || 0),
-                hsnCode: li.hsnCode || '87141090',
+                hsnCode: li.hsnCode || null,
               })),
             },
           },
@@ -161,11 +142,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!customer.tenantId && !tenant?.id) {
+      return NextResponse.json(
+        { error: 'Customer account has no associated dealership/tenant context.' },
+        { status: 400 }
+      );
+    }
+
     if (!orderRecord) {
       orderRecord = localStore.createInvoice({
-        tenantId: customer.tenantId || tenant?.id || 'tenant-honda-1',
+        tenantId: customer.tenantId || tenant?.id,
         customerId: customer.id,
         invoiceNumber,
+        status: 'DRAFT',
         grandTotalPaise: grandTotalPaise.toString(),
         paidNowPaise: '0',
         creditBalancePaise: grandTotalPaise.toString(),

@@ -13,6 +13,10 @@ export async function POST(
 ) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
     const customerId = params.id;
     const body = await req.json();
 
@@ -24,52 +28,61 @@ export async function POST(
 
     const amt = BigInt(amountPaise);
     const ref = referenceNumber || `${mode}/${Date.now()}`;
-    const targetTenantId = authUser?.tenantId || 'tenant-royal-1';
 
     // 1. Try Prisma first if DB available
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(customerId)) {
+    let dbSuccess = false;
+
+    if (hasDb && isUuid(customerId) && isUuid(targetTenantId)) {
       try {
-        const customer = await prisma.customer.findUnique({
-          where: { id: customerId },
+        const customer = await prisma.customer.findFirst({
+          where: { id: customerId, tenantId: targetTenantId },
         });
 
-        if (customer) {
-          let paymentModeEnum: PaymentMode = PaymentMode.UPI;
-          if (mode === 'CASH') paymentModeEnum = PaymentMode.CASH;
-          else if (mode === 'BANK') paymentModeEnum = PaymentMode.BANK;
-          else if (mode === 'CHEQUE') paymentModeEnum = PaymentMode.CHEQUE;
-
-          const payment = await prisma.payment.create({
-            data: {
-              tenantId: customer.tenantId,
-              customerId: customer.id,
-              amount: amt,
-              mode: paymentModeEnum,
-              reference: ref,
-              status: PaymentStatus.CLEARED,
-              receivedBy: authUser?.id || null,
-            }
-          });
-
-          await prisma.ledgerEntry.create({
-            data: {
-              tenantId: customer.tenantId,
-              customerId: customer.id,
-              entryType: LedgerEntryType.PAYMENT,
-              refId: payment.id,
-              debit: 0n,
-              credit: amt,
-              narration: `Payment received via ${mode} (Ref: ${ref})`,
-            }
-          });
+        if (!customer) {
+          return NextResponse.json({ error: 'Customer not found in your organization' }, { status: 404 });
         }
+
+        let paymentModeEnum: PaymentMode = PaymentMode.UPI;
+        if (mode === 'CASH') paymentModeEnum = PaymentMode.CASH;
+        else if (mode === 'BANK') paymentModeEnum = PaymentMode.BANK;
+        else if (mode === 'CHEQUE') paymentModeEnum = PaymentMode.CHEQUE;
+
+        const payment = await prisma.payment.create({
+          data: {
+            tenantId: customer.tenantId,
+            customerId: customer.id,
+            amount: amt,
+            mode: paymentModeEnum,
+            reference: ref,
+            status: PaymentStatus.CLEARED,
+            receivedBy: (authUser?.id && isUuid(authUser.id)) ? authUser.id : null,
+          }
+        });
+
+        await prisma.ledgerEntry.create({
+          data: {
+            tenantId: customer.tenantId,
+            customerId: customer.id,
+            entryType: LedgerEntryType.PAYMENT,
+            refId: payment.id,
+            debit: 0n,
+            credit: amt,
+            narration: `Payment received via ${mode} (Ref: ${ref})`,
+          }
+        });
+        dbSuccess = true;
       } catch (dbErr) {
-        console.warn('Postgres unavailable during payment, using localStore fallback');
+        console.warn('Postgres unavailable during payment, using localStore fallback:', dbErr);
       }
     }
 
-    // 2. Always persist payment & ledger in localStore
+    // 2. Validate tenant ownership in localStore
+    const localCust = localStore.getCustomerById(customerId, targetTenantId);
+    if (!dbSuccess && !localCust) {
+      return NextResponse.json({ error: 'Customer not found in your organization' }, { status: 404 });
+    }
+
     localStore.createPayment({
       tenantId: targetTenantId,
       customerId,
@@ -78,7 +91,6 @@ export async function POST(
       referenceNumber: ref,
     });
 
-    const localCust = localStore.getCustomerById(customerId);
     const currentBal = BigInt(localCust?.balancePaise || '0');
     const newBal = currentBal >= amt ? currentBal - amt : 0n;
 

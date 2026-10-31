@@ -23,6 +23,8 @@ const DEFAULT_MODELS = [
   { make: 'Royal Enfield', model: 'Bullet 350' },
 ];
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const hasDb = await isPostgresAvailable();
@@ -40,12 +42,7 @@ export async function GET(req: NextRequest) {
     }
 
     const authUser = await getAuthenticatedUser(req);
-    let targetTenantId = authUser?.tenantId;
-
-    if (!targetTenantId) {
-      const firstTenant = await prisma.tenant.findFirst();
-      if (firstTenant) targetTenantId = firstTenant.id;
-    }
+    const targetTenantId = authUser?.tenantId;
 
     let bikeModels: any[] = [];
     if (targetTenantId) {

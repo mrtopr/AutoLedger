@@ -1,33 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
+import { parseCustomerSession } from '@/server/lib/portalAuth';
 
-function parseCustomerSession(req: NextRequest): { customerId?: string; phone?: string; tenantId?: string } | null {
-  // 1. Try Cookie
-  const cookieToken = req.cookies.get('autoledger_customer_token')?.value;
-  // 2. Try Authorization header
-  const authHeader = req.headers.get('authorization');
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-  // 3. Try custom header
-  const rawToken = cookieToken || bearerToken || req.headers.get('x-customer-token');
-
-  if (rawToken) {
-    try {
-      const decoded = JSON.parse(Buffer.from(rawToken, 'base64').toString('utf-8'));
-      return decoded;
-    } catch {
-      // Fallback if not base64 JSON
-    }
-  }
-
-  // 4. Fallback to phone header if provided directly in client dev mode
-  const phone = req.headers.get('x-customer-phone');
-  if (phone) {
-    return { phone: phone.replace(/[^0-9]/g, '').slice(-10) };
-  }
-
-  return null;
-}
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {

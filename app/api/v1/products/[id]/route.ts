@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
+import { createAuditLog } from '@/server/lib/audit';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -12,13 +13,17 @@ export async function GET(
 ) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
     const productId = params.id;
 
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(productId)) {
+    if (hasDb && isUuid(productId) && isUuid(targetTenantId)) {
       try {
-        const product = await prisma.product.findUnique({
-          where: { id: productId },
+        const product = await prisma.product.findFirst({
+          where: { id: productId, tenantId: targetTenantId },
           include: {
             compatibilities: { include: { bikeModel: true } },
             stockMovements: { select: { qty: true } },
@@ -54,9 +59,9 @@ export async function GET(
       }
     }
 
-    const localProd = localStore.getProducts(authUser?.tenantId).find((p) => p.id === productId);
+    const localProd = localStore.getProductById(productId, targetTenantId);
     if (!localProd) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Product not found in your organization' }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -78,6 +83,17 @@ export async function PATCH(
 ) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+
+    if (authUser.role !== 'OWNER' && authUser.role !== 'MANAGER') {
+      return NextResponse.json(
+        { error: 'Forbidden: only OWNER or MANAGER can modify catalog products' },
+        { status: 403 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
     const productId = params.id;
     const body = await req.json();
 
@@ -97,8 +113,18 @@ export async function PATCH(
     } = body;
 
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(productId)) {
+    let dbUpdated = false;
+
+    if (hasDb && isUuid(productId) && isUuid(targetTenantId)) {
       try {
+        const existing = await prisma.product.findFirst({
+          where: { id: productId, tenantId: targetTenantId },
+        });
+
+        if (!existing) {
+          return NextResponse.json({ error: 'Product not found in your organization' }, { status: 404 });
+        }
+
         await prisma.product.update({
           where: { id: productId },
           data: {
@@ -115,6 +141,7 @@ export async function PATCH(
             ...(reorderLevel !== undefined ? { reorderLevel: parseInt(reorderLevel, 10) } : {}),
           },
         });
+        dbUpdated = true;
       } catch (dbErr) {
         console.warn('Postgres product update error, continuing with local store:', dbErr);
       }
@@ -133,11 +160,31 @@ export async function PATCH(
       ...(mrpPaise !== undefined ? { mrpPaise: String(mrpPaise) } : {}),
       ...(reorderLevel !== undefined ? { reorderLevel: parseInt(reorderLevel, 10) } : {}),
       ...(models !== undefined ? { models } : {}),
+    }, targetTenantId);
+
+    if (!dbUpdated && !updated) {
+      return NextResponse.json({ error: 'Product not found in your organization' }, { status: 404 });
+    }
+
+    await createAuditLog({
+      tenantId: targetTenantId,
+      userId: authUser.id,
+      action: 'PRODUCT_UPDATED',
+      entity: 'PRODUCT',
+      entityId: productId,
+      after: {
+        name,
+        partNumber,
+        salePricePaise,
+        purchasePricePaise,
+        mrpPaise,
+        reorderLevel,
+      },
     });
 
     return NextResponse.json({
       success: true,
-      product: updated,
+      product: updated || { id: productId, ...body },
     });
   } catch (error: any) {
     console.error('Error updating product:', error);
@@ -151,21 +198,54 @@ export async function DELETE(
 ) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+
+    if (authUser.role !== 'OWNER' && authUser.role !== 'MANAGER') {
+      return NextResponse.json(
+        { error: 'Forbidden: only OWNER or MANAGER can delete catalog products' },
+        { status: 403 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
     const productId = params.id;
 
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(productId)) {
+    let dbDeleted = false;
+
+    if (hasDb && isUuid(productId) && isUuid(targetTenantId)) {
       try {
+        const existing = await prisma.product.findFirst({
+          where: { id: productId, tenantId: targetTenantId },
+        });
+
+        if (!existing) {
+          return NextResponse.json({ error: 'Product not found in your organization' }, { status: 404 });
+        }
+
         await prisma.product.update({
           where: { id: productId },
           data: { isActive: false },
         });
+        dbDeleted = true;
       } catch (dbErr) {
         console.warn('Postgres delete product error, falling back:', dbErr);
       }
     }
 
-    localStore.deleteProduct(productId);
+    const localDeleted = localStore.deleteProduct(productId, targetTenantId);
+    if (!dbDeleted && !localDeleted) {
+      return NextResponse.json({ error: 'Product not found in your organization' }, { status: 404 });
+    }
+
+    await createAuditLog({
+      tenantId: targetTenantId,
+      userId: authUser.id,
+      action: 'PRODUCT_DELETED',
+      entity: 'PRODUCT',
+      entityId: productId,
+    });
 
     return NextResponse.json({
       success: true,

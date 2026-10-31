@@ -145,6 +145,25 @@ export default function InventoryPage() {
     loadProducts();
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isAddModalOpen) setIsAddModalOpen(false);
+        else if (isAdjustModalOpen) setIsAdjustModalOpen(false);
+        else if (isEditModalOpen) setIsEditModalOpen(false);
+        else if (isDeleteModalOpen) {
+          setIsDeleteModalOpen(false);
+          setSelectedProduct(null);
+        } else if (isBulkDeleteModalOpen) {
+          setIsBulkDeleteModalOpen(false);
+          setConfirmDeleteText('');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAddModalOpen, isAdjustModalOpen, isEditModalOpen, isDeleteModalOpen, isBulkDeleteModalOpen]);
+
   // Aggregated KPIs
   const totalValuation = useMemo(() => {
     return products.reduce((sum, p) => sum + BigInt(p.salePricePaise || 0) * BigInt(Math.max(0, p.stockQty || 0)), 0n);
@@ -872,10 +891,10 @@ export default function InventoryPage() {
       {isAddModalOpen && (
         <ClientPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-            <div className="bg-white rounded-lg max-w-lg w-full border border-[#CBD5E1] shadow-2xl overflow-hidden text-xs">
+            <div role="dialog" aria-modal="true" aria-labelledby="add-part-title" className="bg-white rounded-xl max-w-lg w-full border border-[#CBD5E1] shadow-2xl overflow-hidden text-xs">
               <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
-                <h3 className="text-sm font-bold text-[#0F172A]">Add New Spare Part</h3>
-                <button onClick={() => setIsAddModalOpen(false)} className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition">
+                <h3 id="add-part-title" className="text-sm font-bold text-[#0F172A]">Add New Spare Part</h3>
+                <button type="button" onClick={() => setIsAddModalOpen(false)} aria-label="Close modal" className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1031,13 +1050,13 @@ export default function InventoryPage() {
       {isAdjustModalOpen && selectedProduct && (
         <ClientPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-            <div className="bg-white rounded-lg max-w-sm w-full border border-[#CBD5E1] shadow-2xl overflow-hidden text-xs">
+            <div role="dialog" aria-modal="true" aria-labelledby="adjust-stock-title" className="bg-white rounded-xl max-w-sm w-full border border-[#CBD5E1] shadow-2xl overflow-hidden text-xs">
               <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-[#0F172A]">Adjust Stock</h3>
+                  <h3 id="adjust-stock-title" className="text-sm font-bold text-[#0F172A]">Adjust Stock</h3>
                   <p className="text-[11px] text-[#64748B] truncate max-w-[220px]">{selectedProduct.name}</p>
                 </div>
-                <button onClick={() => setIsAdjustModalOpen(false)} className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition">
+                <button type="button" onClick={() => setIsAdjustModalOpen(false)} aria-label="Close modal" className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1134,10 +1153,10 @@ export default function InventoryPage() {
       {isEditModalOpen && selectedProduct && (
         <ClientPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-            <div className="bg-white rounded-lg max-w-lg w-full border border-[#CBD5E1] shadow-2xl overflow-hidden text-xs">
+            <div role="dialog" aria-modal="true" aria-labelledby="edit-part-title" className="bg-white rounded-xl max-w-lg w-full border border-[#CBD5E1] shadow-2xl overflow-hidden text-xs">
               <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
-                <h3 className="text-sm font-bold text-[#0F172A]">Edit Spare Part</h3>
-                <button onClick={() => setIsEditModalOpen(false)} className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition">
+                <h3 id="edit-part-title" className="text-sm font-bold text-[#0F172A]">Edit Spare Part</h3>
+                <button type="button" onClick={() => setIsEditModalOpen(false)} aria-label="Close modal" className="p-1 rounded-md text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1262,25 +1281,27 @@ export default function InventoryPage() {
       {isDeleteModalOpen && selectedProduct && (
         <ClientPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-            <div className="bg-white rounded-lg max-w-xs w-full border border-[#CBD5E1] shadow-2xl p-5 text-center text-xs space-y-3.5">
-              <h3 className="text-sm font-bold text-[#0F172A]">Delete Part</h3>
+            <div role="dialog" aria-modal="true" aria-labelledby="delete-part-title" className="bg-white rounded-xl max-w-xs w-full border border-[#CBD5E1] shadow-2xl p-5 text-center text-xs space-y-3.5">
+              <h3 id="delete-part-title" className="text-sm font-bold text-[#0F172A]">Delete Part</h3>
               <p className="text-xs text-[#64748B]">
                 Remove <span className="font-semibold text-[#0F172A]">{selectedProduct.name}</span> from inventory?
               </p>
               <div className="flex items-center justify-center gap-2.5 pt-1">
                 <button
+                  type="button"
                   onClick={() => {
                     setIsDeleteModalOpen(false);
                     setSelectedProduct(null);
                   }}
-                  className="h-8.5 px-4 border border-[#CBD5E1] text-[#475569] rounded-md hover:bg-[#F1F5F9] font-medium transition"
+                  className="h-8.5 px-4 border border-[#CBD5E1] text-[#475569] rounded-md hover:bg-[#F1F5F9] font-medium transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleDeleteProduct}
                   disabled={submitting}
-                  className="h-8.5 px-5 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-md font-semibold shadow-xs transition"
+                  className="h-8.5 px-5 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-md font-semibold shadow-xs transition cursor-pointer"
                 >
                   {submitting ? 'Deleting...' : 'Delete'}
                 </button>
@@ -1294,20 +1315,22 @@ export default function InventoryPage() {
       {isBulkDeleteModalOpen && (
         <ClientPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-xl max-w-md w-full border border-[#CBD5E1] shadow-2xl p-6 text-xs space-y-4">
+            <div role="dialog" aria-modal="true" aria-labelledby="bulk-delete-title" className="bg-white rounded-xl max-w-md w-full border border-[#CBD5E1] shadow-2xl p-6 text-xs space-y-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-lg bg-[#FEF2F2] border border-[#FECACA] flex items-center justify-center text-[#DC2626]">
                     <Trash2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[#0F172A]">Delete Stock / Inventory</h3>
+                    <h3 id="bulk-delete-title" className="text-sm font-bold text-[#0F172A]">Delete Stock / Inventory</h3>
                     <p className="text-[11px] text-[#64748B]">Remove stock in bulk, by active filter, or purge catalog</p>
                   </div>
                 </div>
                 <button
+                  type="button"
+                  aria-label="Close dialog"
                   onClick={() => setIsBulkDeleteModalOpen(false)}
-                  className="text-[#94A3B8] hover:text-[#0F172A] p-1 transition"
+                  className="text-[#94A3B8] hover:text-[#0F172A] p-1 transition cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>

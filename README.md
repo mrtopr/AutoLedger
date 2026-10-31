@@ -41,10 +41,10 @@
 
 * **Sub-10ms Counter Billing:** Ultra-fast part search with barcode scanning, SKU lookup, and vehicle compatibility filters (*Activa, Shine, Splendor, Pulsar, etc.*).
 * **Dual-Engine Zero-Downtime Mode:** Connects to PostgreSQL (Neon Serverless) for cloud sync, with an instant fallback to an atomic local store (`.data/db_store.json`) when offline.
-* **Dual GST Tax Engine:** Real-time intra-state (CGST 9% + SGST 9%) and inter-state (IGST 18%) computations with HSN validation and itemized tax breakdowns.
+* **Non-GST Sales Bill Engine:** Clean price calculation with line discounts, itemized quantities, and auto round-off adjustment without tax markup.
 * **Strict Khata Credit Guardrails:** Real-time credit limits, overdue day tracking (30/60/90+ days), and automated credit status classification (`GREEN`, `YELLOW`, `RED`).
-* **Multi-Format Invoices:** Instant A4 / A5 Tax Invoices and 3-inch Thermal Receipts with dynamic UPI payment QR codes and bank details.
-* **1-Click WhatsApp Invoicing:** Instant dispatch of payment receipts, tax invoices, and Khata balance reminders directly to customer mobile numbers.
+* **Multi-Format Sales Bills:** Instant A4 Sales Bills and 3-inch Thermal Receipts with dynamic UPI payment QR codes and bank details.
+* **1-Click WhatsApp Invoicing:** Instant dispatch of payment receipts, sales bills, and Khata balance reminders directly to customer mobile numbers.
 * **Full Database Backup & Disaster Recovery:** 1-click JSON database backup and restore directly from the settings panel.
 
 ---
@@ -75,7 +75,7 @@
 * **Live Part Lookup:** Search by SKU, Part Name, OEM Code, or Vehicle Model.
 * **Cart Calculations:** Real-time discount (₹ or %), HSN codes, quantity controls, and auto round-off adjustment.
 * **Split & Flexible Payments:** Accepts **CASH**, **UPI / QR**, **CREDIT (KHATA)**, or **SPLIT / MIXED**.
-* **Real-Time A4 & Thermal Print:** Instant modal preview and dual print support (3-inch Thermal Slip or A4 Tax Invoice).
+* **Real-Time A4 & Thermal Print:** Instant modal preview and dual print support (3-inch Thermal Slip or A4 Sales Bill).
 
 ### 3. Customer Khata & Digital Ledger (`/customers`)
 * **360° Customer Profile:** Workshop, Retailer, and Walk-in customer management.
@@ -89,20 +89,49 @@
 * **Bike Model Compatibility:** Filter parts by compatible vehicle models.
 
 ### 5. Invoices & Billing History (`/invoices`)
-* **Central Billing Registry:** Search and filter invoices by invoice number, customer name, date, or status.
-* **Interactive GST A4 Preview:** Official GST tax invoice with showroom details, buyer GSTIN, HSN breakdown, bank details, and dynamic payment QR code.
+* **Central Billing Registry:** Search and filter bills by bill number, customer name, date, or status.
+* **Interactive A4 Sales Bill Preview:** Clean non-GST sales bill / cash receipt with showroom details, line items, net totals, bank details, and dynamic payment QR code.
 * **Direct Actions:** Print, Download, or Share via WhatsApp.
 
-### 6. Daily Cash Settlement & GST Reports (`/reports`)
+### 6. Daily Cash Settlement & Reconciliation (`/reports`)
 * **Day-End Cash Reconciliation:** Realized cash in drawer, UPI collections, credit given, and credit recovered.
-* **GSTR-1 & GSTR-3B Tax Summaries:** Taxable values, CGST, SGST, IGST totals formatted for tax filing.
+* **Cash Desk Balancing:** Fast end-of-day closing with denomination counting and variance tracking. *(Note: Statutory GSTR-1 tax return filing is scoped out as this system is configured for basic non-GST sales bills).*
 
-### 7. Dealership Settings & Full System Backups (`/settings`)
+### 7. Dealership Settings & Disaster Recovery Backups (`/settings`)
 * **Business Profile:** Configure showroom name, legal entity name, GSTIN, contact numbers, and bank account details.
-* **Complete System Backup:** Download entire database snapshot as a timestamped JSON file (`AutoLedger_ERP_Backup_*.json`).
-* **Crash Recovery / Restore:** Upload and restore from any previously exported backup file.
+* **Consistent System Backup (`GET /api/v1/backup`):**
+  - Exports a transactionally consistent point-in-time snapshot using PostgreSQL `RepeatableRead` transaction isolation.
+  - Complete data capture: includes invoices, invoice items, products, bike models, stock movements, customers, payments, payment allocations, Khata ledger entries, invoice audit events, invoice series counters, and tenant settings.
+  - Excludes sensitive credentials (passwords, TOTP secrets are scrubbed).
+  - Downloaded with attachment filename header `tradeledger-backup-<tenantId>-<date>.json`.
+* **Safe Idempotent Restore (`POST /api/v1/backup`):**
+  - **Semantics:** Transactional Idempotent Upsert. Merges missing records, updates attributes, preserves original IDs and foreign-key relationships.
+  - **Atomicity:** Entire restore runs inside a single database transaction with automatic 100% rollback on failure.
+  - **Tenant Boundary Safety:** Restores strictly into the authenticated OWNER's tenant. Rejects cross-tenant ID collisions with HTTP 409 and broken foreign keys with HTTP 400.
+  - **Sequence Watermark:** `InvoiceSeries` counter is preserved monotonically (`GREATEST(existing, backup)`) to prevent duplicate bill numbers.
 
 ---
+
+## 🛡️ Fresh Database Provisioning & Disaster Recovery Architecture
+
+### 1. Fresh Database Provisioning (Zero-to-Running)
+To provision an isolated staging or disposable recovery database from scratch:
+```powershell
+# Option A (Recommended for development/staging environments):
+npx prisma db push
+
+# Option B (Pure SQL Baseline execution for cold PostgreSQL instances):
+# Execute the generated baseline DDL script containing all 37 tables, enums, indexes:
+psql $DATABASE_URL -f prisma/baseline_init.sql
+
+# Mark migrations as deployed on top of baseline:
+npm run prisma:migrate:deploy
+```
+
+### 2. Production Disaster Recovery Recommendations
+* **Automated Offsite Snapshots:** In addition to manual JSON exports via the app UI, production deployments should enable managed daily logical backups (`pg_dump -Fc`) uploaded to private cloud storage (AWS S3 / GCS) with 30-day lifecycle retention.
+* **Point-in-Time Recovery (PITR):** Enable WAL archiving / continuous backup on PostgreSQL (enabled by default on AWS RDS / Neon / Supabase Pro) for 7-day granular rollback in case of physical disk failure.
+* **Regular Recovery Drills:** Run monthly restore dry-runs into disposable staging databases to continuously verify backup validity and financial reconciliation.
 
 ## 🔄 Dual-Engine Data Resilience (Zero Downtime)
 
@@ -198,16 +227,16 @@ B2B_Platform/
 │   │   ├── auth/               # Login, session, token verification
 │   │   ├── backup/             # Full JSON database export & restore
 │   │   ├── customers/          # Khata ledger, payments, credit limits
-│   │   ├── invoices/           # POS bill creation & tax invoices
+│   │   ├── invoices/           # POS bill creation & sales bills
 │   │   ├── products/           # Inventory catalog & stock adjustments
-│   │   └── settings/           # Dealership profile & GST configurations
+│   │   └── settings/           # Dealership profile & store configurations
 │   ├── components/             # Reusable UI components & Topbar/Sidebar
 │   ├── context/                # Auth & Bilingual Language Contexts
 │   ├── pos/                    # High-speed POS Counter Billing
 │   ├── customers/              # Customer Khata & Digital Ledger
 │   ├── inventory/              # Spare Parts Catalog & Stock Management
-│   ├── invoices/               # Invoice History & GST Printables
-│   ├── reports/                # Daybook & GST Tax Summaries
+│   ├── invoices/               # Bill History & Sales Bill Printables
+│   ├── reports/                # Daybook & Cash Settlement Summaries
 │   └── settings/               # Dealership Settings & Database Backup
 ├── electron/                   # Desktop application wrapper
 │   ├── main.js                 # Electron main process & splash screen

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Store,
@@ -41,6 +41,15 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: AddCust
     openingBalanceType: 'DUE' as 'DUE' | 'ADVANCE',
     openingBalanceNarration: 'Initial account setup opening balance',
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, submitting]);
 
   if (!isOpen) return null;
 
@@ -102,7 +111,12 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: AddCust
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-        <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-150">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-customer-modal-title"
+          className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-150"
+        >
 
           {/* Header */}
           <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
@@ -111,13 +125,14 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: AddCust
                 <Store className="w-4.5 h-4.5 text-[#C81E1E]" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 leading-tight">Add New Customer Account</h3>
+                <h3 id="add-customer-modal-title" className="text-sm font-bold text-slate-900 leading-tight">Add New Customer Account</h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">Register client, wholesale buyer, or retailer into trade directory</p>
               </div>
             </div>
             <button
               onClick={onClose}
               type="button"
+              aria-label="Close add customer dialog"
               className="w-8 h-8 rounded-lg hover:bg-slate-200/70 text-slate-400 hover:text-slate-700 transition flex items-center justify-center cursor-pointer"
             >
               <X className="w-4 h-4" />

@@ -3,6 +3,7 @@ import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { LedgerEntryType } from '@prisma/client';
+import { createAuditLog } from '@/server/lib/audit';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -13,56 +14,79 @@ export async function POST(
 ) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+
+    if (authUser.role !== 'OWNER' && authUser.role !== 'MANAGER') {
+      return NextResponse.json(
+        { error: 'Forbidden: only OWNER or MANAGER can make manual ledger adjustments' },
+        { status: 403 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
     const customerId = params.id;
     const body = await req.json();
 
     const {
       type = 'DEBIT', // 'DEBIT' (Udhar / Receivable) or 'CREDIT' (Payment / Advance / Payable)
       amountPaise,
+      debitPaise,
+      creditPaise,
       date,
       refNo,
       narration,
     } = body;
 
-    if (!amountPaise || BigInt(amountPaise) <= 0n) {
+    const rawAmt = amountPaise || debitPaise || creditPaise;
+    if (!rawAmt || BigInt(rawAmt) <= 0n) {
       return NextResponse.json({ error: 'A valid amount is required' }, { status: 400 });
     }
 
-    const amt = BigInt(amountPaise);
+    const amt = BigInt(rawAmt);
     const isDebit = type === 'DEBIT' || type === 'DUE';
     const entryDate = date ? new Date(date) : new Date();
     const cleanRef = refNo || (isDebit ? `UDHAR-${Date.now()}` : `CREDIT-${Date.now()}`);
     const cleanNarration = narration || (isDebit ? 'Manual Debit / Past Udhar Entry' : 'Manual Credit / Advance Entry');
-    const targetTenantId = authUser?.tenantId || 'tenant-apex-1';
 
     // 1. Try Postgres DB if available
     const hasDb = await isPostgresAvailable();
-    if (hasDb && isUuid(customerId)) {
+    let dbSuccess = false;
+
+    if (hasDb && isUuid(customerId) && isUuid(targetTenantId)) {
       try {
-        const customer = await prisma.customer.findUnique({
-          where: { id: customerId },
+        const customer = await prisma.customer.findFirst({
+          where: { id: customerId, tenantId: targetTenantId },
         });
 
-        if (customer) {
-          await prisma.ledgerEntry.create({
-            data: {
-              tenantId: customer.tenantId,
-              customerId: customer.id,
-              entryType: isDebit ? LedgerEntryType.DEBIT_NOTE : LedgerEntryType.ADJUSTMENT,
-              debit: isDebit ? amt : 0n,
-              credit: isDebit ? 0n : amt,
-              entryDate: entryDate,
-              refId: null,
-              narration: cleanNarration,
-            }
-          });
+        if (!customer) {
+          return NextResponse.json({ error: 'Customer not found in your organization' }, { status: 404 });
         }
+
+        await prisma.ledgerEntry.create({
+          data: {
+            tenantId: customer.tenantId,
+            customerId: customer.id,
+            entryType: isDebit ? LedgerEntryType.DEBIT_NOTE : LedgerEntryType.ADJUSTMENT,
+            debit: isDebit ? amt : 0n,
+            credit: isDebit ? 0n : amt,
+            entryDate: entryDate,
+            refId: null,
+            narration: cleanNarration,
+          }
+        });
+        dbSuccess = true;
       } catch (dbErr) {
         console.warn('Postgres unavailable during manual ledger entry, using localStore fallback:', dbErr);
       }
     }
 
-    // 2. Always persist into localStore
+    // 2. Validate tenant ownership in localStore
+    const localCust = localStore.getCustomerById(customerId, targetTenantId);
+    if (!dbSuccess && !localCust) {
+      return NextResponse.json({ error: 'Customer not found in your organization' }, { status: 404 });
+    }
+
     const entry = localStore.addLedgerEntry({
       tenantId: targetTenantId,
       customerId,
@@ -74,13 +98,28 @@ export async function POST(
       creditPaise: isDebit ? '0' : amt.toString(),
     });
 
-    const localCust = localStore.getCustomerById(customerId);
+    const updatedCust = localStore.getCustomerById(customerId, targetTenantId);
+
+    await createAuditLog({
+      tenantId: targetTenantId,
+      userId: authUser.id,
+      action: 'LEDGER_MANUAL_ENTRY',
+      entity: 'CUSTOMER',
+      entityId: customerId,
+      after: {
+        type: isDebit ? 'MANUAL_DEBIT' : 'MANUAL_CREDIT',
+        amountPaise: amt.toString(),
+        refNo: cleanRef,
+        narration: cleanNarration,
+        newBalancePaise: updatedCust?.balancePaise || '0',
+      },
+    });
 
     return NextResponse.json({
       success: true,
       message: isDebit ? 'Debit / Udhar entry recorded successfully' : 'Credit / Advance entry recorded successfully',
       ledgerEntry: entry,
-      newBalancePaise: localCust?.balancePaise || '0',
+      newBalancePaise: updatedCust?.balancePaise || '0',
     }, { status: 201 });
   } catch (error: any) {
     console.error('Error recording manual ledger entry:', error);

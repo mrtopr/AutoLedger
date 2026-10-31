@@ -7,6 +7,11 @@ import { localStore } from '@/server/lib/store';
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
+
     const body = await req.json();
 
     const {
@@ -32,7 +37,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-default';
     const showroomName = authUser?.tenant?.name || 'Apex Trade Supplies';
 
     // 1. Generate Razorpay Link

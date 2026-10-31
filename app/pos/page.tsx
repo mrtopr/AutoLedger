@@ -135,6 +135,7 @@ export default function QuickBillPosPage() {
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState<boolean>(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState<boolean>(false);
   const [isSubmittingBill, setIsSubmittingBill] = useState<boolean>(false);
+  const [billIdempotencyKey, setBillIdempotencyKey] = useState<string>(() => `pos-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
   const [isSuccessModal, setIsSuccessModal] = useState<boolean>(false);
   const [issuedInvoiceData, setIssuedInvoiceData] = useState<any>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
@@ -237,7 +238,7 @@ export default function QuickBillPosPage() {
     loadData();
   }, []);
 
-  // Keyboard shortcut listener: F2 for new line item, F3/Alt+S for Tally search
+  // Keyboard shortcut listener: F2 for new line item, F3/Alt+S for Tally search, Escape to dismiss
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
@@ -248,11 +249,17 @@ export default function QuickBillPosPage() {
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
         setIsSearchOpen(true);
+      } else if (e.key === 'Escape') {
+        if (isSearchOpen) {
+          setIsSearchOpen(false);
+        } else if (isSuccessModal) {
+          setIsSuccessModal(false);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isSearchOpen, isSuccessModal]);
 
   // Close search dropdown on click outside
   useEffect(() => {
@@ -319,7 +326,7 @@ export default function QuickBillPosPage() {
     };
   }, [customers, selectedCustomerId, isWalkIn, walkInName, walkInPhone, walkInVehicle]);
 
-  // Calculation Engine via tax library
+  // Calculation Engine via tax library (Non-GST Sales Bill)
   const taxSummary = useMemo(() => {
     const lines: LineItemInput[] = items
       .filter(it => it.name.trim() !== '')
@@ -328,10 +335,10 @@ export default function QuickBillPosPage() {
         return {
           rate,
           qty: it.qty,
-          gstRateBp: it.gstRateBp,
+          gstRateBp: 0, // Basic Non-GST Billing
           discountPercent: 0,
           discountPaise: 0n,
-          isTaxInclusive: it.isTaxInclusive,
+          isTaxInclusive: false,
         };
       });
 
@@ -616,6 +623,7 @@ export default function QuickBillPosPage() {
 
   // Handle Complete Bill Submission
   const handleIssueInvoice = async () => {
+    if (isSubmittingBill) return; // Prevent double execution
     const validItems = items.filter(it => it.name.trim() !== '');
     if (validItems.length === 0) {
       alert('Please add at least 1 spare part to generate invoice.');
@@ -646,11 +654,15 @@ export default function QuickBillPosPage() {
         upiPaidPaise: upiPaise.toString(),
         upiRef: upiRef || undefined,
         creditBalancePaise: balanceOnCreditPaise.toString(),
+        idempotencyKey: billIdempotencyKey,
       };
 
       const res = await fetch('/api/v1/invoices', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': billIdempotencyKey,
+        },
         body: JSON.stringify(payload),
       });
 
@@ -672,6 +684,8 @@ export default function QuickBillPosPage() {
         invoiceDate,
       });
 
+      // Regenerate idempotency key immediately so subsequent bills are safe from key collision
+      setBillIdempotencyKey(`pos-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
       setIsSuccessModal(true);
       refreshCustomers();
       refreshCounterCash(invoiceDate);
@@ -685,6 +699,7 @@ export default function QuickBillPosPage() {
 
   const startNextBill = () => {
     setIsSuccessModal(false);
+    setBillIdempotencyKey(`pos-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
     setInvoiceDate(new Date().toISOString().split('T')[0]);
     setItems([]);
     setCashAmount('');
@@ -798,9 +813,9 @@ export default function QuickBillPosPage() {
     const paid = formatPaiseToRupees(issuedInvoiceData?.paidNowPaise || 0);
     const balance = formatPaiseToRupees(issuedInvoiceData?.creditBalancePaise || 0);
 
-    const message = `*TAX INVOICE - ${tenant?.name || 'TradeLedger'}*\n` +
+    const message = `*SALES BILL - ${tenant?.name || 'TradeLedger'}*\n` +
       `--------------------------------\n` +
-      `*Invoice No:* ${invNo}\n` +
+      `*Bill No:* ${invNo}\n` +
       `*Customer:* ${issuedInvoiceData?.customer?.shopName || selectedCustomer?.shopName || 'Customer'}\n` +
       `*Grand Total:* ${total}\n` +
       `*Paid Amount:* ${paid}\n` +
@@ -1811,7 +1826,7 @@ export default function QuickBillPosPage() {
               type="button"
               onClick={handleIssueInvoice}
               disabled={isSubmittingBill}
-              className="w-full h-11 bg-[#C81E1E] hover:bg-[#A81818] active:scale-[0.99] disabled:opacity-60 text-white font-bold text-[13px] rounded-lg shadow-sm hover:shadow transition flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full h-11 bg-[#C81E1E] hover:bg-[#A81818] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-[13px] rounded-lg shadow-sm hover:shadow transition flex items-center justify-center gap-2 cursor-pointer"
             >
               {isSubmittingBill ? (
                 <>
@@ -1861,7 +1876,7 @@ export default function QuickBillPosPage() {
       {isSuccessModal && issuedInvoiceData && (
         <ClientPortal>
           <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150 print:hidden">
-            <div className="bg-white border border-[#CBD5E1] rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-150 print:hidden">
+            <div role="dialog" aria-modal="true" aria-labelledby="pos-success-modal-title" className="bg-white border border-[#CBD5E1] rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-150 print:hidden">
 
               {/* Header */}
               <div className="flex items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3.5">
@@ -1870,7 +1885,7 @@ export default function QuickBillPosPage() {
                     <CheckCircle2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[#0F172A] leading-tight">Sale Bill Issued Successfully</h3>
+                    <h3 id="pos-success-modal-title" className="text-sm font-bold text-[#0F172A] leading-tight">Sale Bill Issued Successfully</h3>
                     <div className="flex items-center gap-1.5 mt-1">
                       <span className="text-[11px] font-mono font-bold text-[#1D4ED8] bg-[#EFF6FF] border border-[#BFDBFE] px-2 py-0.5 rounded">
                         {issuedInvoiceData.invoiceNumber}
@@ -1881,8 +1896,9 @@ export default function QuickBillPosPage() {
                 </div>
                 <button
                   type="button"
+                  aria-label="Close bill confirmation"
                   onClick={() => setIsSuccessModal(false)}
-                  className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition"
+                  className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition cursor-pointer"
                   title="Close"
                 >
                   <X className="w-4 h-4" />

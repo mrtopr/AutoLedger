@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { queueCloudSync } from '@/server/lib/cloudSync';
 import { prisma } from '@/server/lib/prisma';
+import { createAuditLog } from '@/server/lib/audit';
 
 export interface BulkImportItem {
   name: string;
@@ -27,6 +28,18 @@ export interface BulkImportItem {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+
+    if (authUser.role !== 'OWNER' && authUser.role !== 'MANAGER') {
+      return NextResponse.json(
+        { error: 'Forbidden: only OWNER or MANAGER can perform bulk product imports' },
+        { status: 403 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
+
     const body = await req.json();
     const items: BulkImportItem[] = Array.isArray(body.items) ? body.items : [];
 
@@ -40,8 +53,6 @@ export async function POST(req: NextRequest) {
     const isValidUuid = (val: any): boolean => {
       return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
     };
-
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
 
     // 1. Fast in-memory bulk upsert with single atomic disk write in localStore (runs in ~10ms)
     const localStorePayload = items.map((item, i) => {
@@ -77,16 +88,23 @@ export async function POST(req: NextRequest) {
     const localSummary = localStore.bulkUpsertProducts(targetTenantId, localStorePayload);
 
     // 2. Background cloud synchronization: queue non-blocking sync with automatic retries
-    let syncTenantId = authUser?.tenantId && isValidUuid(authUser.tenantId) ? authUser.tenantId : null;
-    if (!syncTenantId) {
-      try {
-        const found = await prisma.tenant.findFirst({ select: { id: true } });
-        if (found) syncTenantId = found.id;
-      } catch {}
-    }
+    const syncTenantId = isValidUuid(targetTenantId) ? targetTenantId : null;
     if (syncTenantId) {
       queueCloudSync(syncTenantId, items, (authUser?.id && isValidUuid(authUser.id)) ? authUser.id : null);
     }
+
+    await createAuditLog({
+      tenantId: targetTenantId,
+      userId: authUser.id,
+      action: 'PRODUCT_BULK_IMPORTED',
+      entity: 'PRODUCT',
+      after: {
+        importedCount: localSummary.importedCount,
+        updatedCount: localSummary.updatedCount,
+        skippedCount: localSummary.skippedCount,
+        totalRows: items.length,
+      },
+    });
 
     return NextResponse.json({
       success: true,

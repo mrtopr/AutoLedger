@@ -156,6 +156,17 @@ export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImpo
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isProcessing) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isProcessing, onClose]);
+
   // Sample CSV Template download
   const sampleCSV = `Item Description,Pack / Qty,MRP (INR),Net Rate (INR),Part No,Brand,Category,GST %
 Castrol 4T 20W40 900ml,24,410,350,CAS-20W40,Castrol,Lubricants & Oils,18
@@ -778,7 +789,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-2xl max-w-7xl w-full h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+        <div role="dialog" aria-modal="true" aria-labelledby="bulk-import-modal-title" className="bg-white border border-[#E2E8F0] rounded-2xl shadow-2xl max-w-7xl w-full h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
           
           {/* Header */}
           <div className="px-5 py-3 border-b border-[#E2E8F0] bg-[#F8F9FA] flex items-center justify-between">
@@ -788,7 +799,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-[#0F172A]">Tally Stock Summary & Inventory Feeder</h2>
+                  <h2 id="bulk-import-modal-title" className="text-sm font-bold text-[#0F172A]">Tally Stock Summary & Inventory Feeder</h2>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <Sparkles className="w-3 h-3 text-emerald-600" />
                     <span>Auto-Hierarchy & Smart Sync</span>
@@ -798,6 +809,8 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
             </div>
 
             <button
+              type="button"
+              aria-label="Close bulk import dialog"
               onClick={onClose}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-[#64748B] hover:text-[#0F172A] hover:bg-slate-200 transition cursor-pointer"
             >

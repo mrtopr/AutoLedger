@@ -1,28 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
+import { parseCustomerSession } from '@/server/lib/portalAuth';
 
-function parseCustomerSession(req: NextRequest): { customerId?: string; phone?: string; tenantId?: string } | null {
-  const cookieToken = req.cookies.get('autoledger_customer_token')?.value;
-  const authHeader = req.headers.get('authorization');
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-  const rawToken = cookieToken || bearerToken || req.headers.get('x-customer-token');
-
-  if (rawToken) {
-    try {
-      return JSON.parse(Buffer.from(rawToken, 'base64').toString('utf-8'));
-    } catch {
-      // Fallback
-    }
-  }
-
-  const phone = req.headers.get('x-customer-phone');
-  if (phone) {
-    return { phone: phone.replace(/[^0-9]/g, '').slice(-10) };
-  }
-
-  return null;
-}
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,13 +20,26 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get('category') || '';
     const model = searchParams.get('model') || '';
 
+    let targetTenantId = session.tenantId;
     const hasDb = await isPostgresAvailable();
+
+    if (!targetTenantId) {
+      if (hasDb && session.customerId) {
+        const cust = await prisma.customer.findUnique({ where: { id: session.customerId }, select: { tenantId: true } });
+        if (cust) targetTenantId = cust.tenantId;
+      } else if (session.customerId) {
+        const cust = localStore.getCustomerById(session.customerId);
+        if (cust) targetTenantId = cust.tenantId;
+      }
+    }
+
     let products: any[] = [];
 
-    if (hasDb) {
+    if (hasDb && targetTenantId) {
       try {
         const dbProducts = await prisma.product.findMany({
           where: {
+            tenantId: targetTenantId,
             isActive: true,
             ...(category && category !== 'ALL' ? { category: { equals: category, mode: 'insensitive' } } : {}),
             ...(query ? {
@@ -77,8 +71,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (products.length === 0) {
-      const allLocal = localStore.getProducts();
+    if (products.length === 0 && targetTenantId) {
+      const allLocal = localStore.getProducts(targetTenantId);
       products = allLocal.map((p) => ({
         id: p.id,
         name: p.name,

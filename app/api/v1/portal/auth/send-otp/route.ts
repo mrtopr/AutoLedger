@@ -57,8 +57,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate 4-digit OTP (Default 1234 for seamless instant demo)
-    const generatedOtp = '1234';
+    // Generate secure 4-digit OTP (1234 demo code allowed only in development)
+    const isNonProdDemo = process.env.NODE_ENV !== 'production' && (process.env.ALLOW_DEMO_OTP === 'true' || !process.env.NODE_ENV);
+    const generatedOtp = isNonProdDemo ? '1234' : Math.floor(1000 + Math.random() * 9000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     activeOtpStore.set(cleanPhone, {
@@ -78,12 +79,12 @@ export async function POST(req: NextRequest) {
         phone: customer.phone,
         dealership: tenantName,
       },
-      demoOtp: generatedOtp, // Provided for instant verification
+      ...(isNonProdDemo ? { demoOtp: generatedOtp } : {}),
     });
   } catch (error: any) {
-    console.error('Error sending portal OTP:', error);
+    console.error('Error sending portal OTP:', error?.message || error);
     return NextResponse.json(
-      { error: error.message || 'Failed to send OTP. Please try again.' },
+      { error: 'Failed to send OTP. Please try again.' },
       { status: 500 }
     );
   }

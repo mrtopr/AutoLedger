@@ -28,9 +28,10 @@ export async function POST(req: NextRequest) {
     const cacheKey = `email:${rawEmail}`;
     const session = activeOtpStore.get(cacheKey);
 
-    // Validate OTP (matches generated code or universal test code 123456)
+    // Validate OTP against session; universal demo code only allowed if explicitly configured in non-production
+    const allowTestBypass = process.env.NODE_ENV !== 'production' && (process.env.ALLOW_TEST_OTP === 'true' || !process.env.NODE_ENV);
     const isValid =
-      enteredOtp === '123456' ||
+      (allowTestBypass && enteredOtp === '123456') ||
       (session && session.otp === enteredOtp && Date.now() < session.expiresAt);
 
     if (!isValid) {
@@ -67,9 +68,16 @@ export async function POST(req: NextRequest) {
         user = localStore.findUser(rawEmail);
         if (user && hasDb) {
           try {
-            const targetTenantId = (user.tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.tenantId))
+            let targetTenantId = (user.tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.tenantId))
               ? user.tenantId
-              : (await prisma.tenant.findFirst({ select: { id: true } }))?.id;
+              : null;
+            if (!targetTenantId && user.tenantId) {
+              const localT = localStore.getTenantById(user.tenantId);
+              if (localT) {
+                const matchedTenant = await prisma.tenant.findFirst({ where: { name: localT.name }, select: { id: true } });
+                if (matchedTenant) targetTenantId = matchedTenant.id;
+              }
+            }
             if (targetTenantId) {
               const synced = await prisma.user.create({
                 data: {
@@ -172,7 +180,7 @@ export async function POST(req: NextRequest) {
     if (!customer) {
       customer = localStore.getCustomers().find(
         (c) => (c as any).email?.toLowerCase() === rawEmail || c.phone.includes(rawEmail)
-      ) || localStore.getCustomers()[0];
+      );
       if (customer) {
         tenant = localStore.getTenant(customer.tenantId);
       }

@@ -1,0 +1,55 @@
+name: TradeLedger ERP — Production CI/CD Gate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verification-gate:
+    name: Production Release & Reliability Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Verify TypeScript Types (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Run Test Suite (Unit, Security, SRE & Invariants)
+        run: npm run test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-jwt-secret-key-at-least-32-chars-long-for-ci
+          ALLOW_TEST_OTP: 'true'
+
+      - name: Verify Next.js Production Build (next build)
+        run: npm run build
+        env:
+          NODE_ENV: production
+          JWT_SECRET: production-ci-build-signing-key-minimum-32-characters
+
+      - name: Verify Secret & Leak Prevention (Git Diff Inspection)
+        run: |
+          echo "Scanning for accidental secret leaks in repository..."
+          ! grep -rn "DATABASE_URL=.*password" .env.example || exit 1
+          ! grep -rn "JWT_SECRET=your-super-secret" .env.example || exit 1
+          echo "No committed production secrets detected."

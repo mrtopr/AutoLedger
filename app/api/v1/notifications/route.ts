@@ -8,7 +8,13 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const tenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-default';
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: missing authentication or tenant context' },
+        { status: 401 }
+      );
+    }
+    const tenantId = authUser.tenantId;
 
     const notifications: Array<{
       id: string;

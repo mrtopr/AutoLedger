@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
+import { prisma, isPostgresAvailable, getStorageMode } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { allocatePayment, OpenInvoice, ManualAllocationLine } from '@/server/lib/allocation';
 import { LedgerEntryType, PaymentMode, PaymentStatus } from '@prisma/client';
+import { createAuditLog } from '@/server/lib/audit';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -11,19 +12,17 @@ const isUuid = (id?: string | null): boolean =>
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
+
     const { searchParams } = new URL(req.url);
     const customerId = searchParams.get('customerId');
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-royal-1';
 
     let payments: any[] = [];
     const hasDb = await isPostgresAvailable();
-    let effectiveTenantId = isUuid(targetTenantId) ? targetTenantId : null;
-    if (!effectiveTenantId && hasDb) {
-      try {
-        const found = await prisma.tenant.findFirst({ select: { id: true } });
-        if (found) effectiveTenantId = found.id;
-      } catch {}
-    }
+    const effectiveTenantId = isUuid(targetTenantId) ? targetTenantId : null;
 
     if (hasDb && effectiveTenantId && (!customerId || isUuid(customerId))) {
       try {
@@ -77,7 +76,7 @@ export async function GET(req: NextRequest) {
         localPays = localPays.filter((p) => p.customerId === customerId);
       }
       payments = localPays.map((p) => {
-        const cust = localStore.getCustomerById(p.customerId);
+        const cust = p.customerId ? localStore.getCustomerById(p.customerId, targetTenantId) : undefined;
         return {
           id: p.id,
           customerId: p.customerId,
@@ -101,32 +100,87 @@ export async function GET(req: NextRequest) {
   }
 }
 
+const paymentIdempotencyCache = new Map<string, {
+  paymentId: string;
+  customerId?: string;
+  ledgerEntryId?: string;
+  amountPaise: string;
+  newBalancePaise: string;
+  allocations: { invoiceId: string; amountPaise: string }[];
+  unallocatedAdvancePaise: string;
+  timestamp: number;
+}>();
+
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
+
     const body = await req.json();
 
     const {
       customerId,
       amountPaise,
-      mode = 'UPI',
       referenceNumber,
       notes,
       strategy = 'OLDEST_FIRST',
       allocations: requestedAllocations = [],
     } = body;
 
+    const effectiveAmountPaise = (amountPaise !== undefined && amountPaise !== null && amountPaise !== '')
+      ? String(amountPaise)
+      : (body.amountRupees !== undefined ? String(Math.round(Number(body.amountRupees) * 100)) : '');
+    const mode = body.mode || body.paymentMode || 'UPI';
+
+    const idempotencyKey = (
+      req.headers.get('idempotency-key') ||
+      body.idempotencyKey ||
+      body.clientRequestId ||
+      ''
+    ).trim();
+
+    if (idempotencyKey) {
+      const cacheKey = `${targetTenantId}:${idempotencyKey}`;
+      const cached = paymentIdempotencyCache.get(cacheKey);
+      if (cached && (Date.now() - cached.timestamp < 24 * 60 * 60 * 1000)) {
+        if (customerId && cached.customerId && customerId !== cached.customerId) {
+          return NextResponse.json(
+            { error: 'Idempotency key conflict: This key was previously used for a payment to a different customer' },
+            { status: 409 }
+          );
+        }
+        if (effectiveAmountPaise && cached.amountPaise && BigInt(effectiveAmountPaise) !== BigInt(cached.amountPaise)) {
+          return NextResponse.json(
+            { error: 'Idempotency key conflict: Payment amount does not match original transaction' },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({
+          success: true,
+          isDuplicate: true,
+          paymentId: cached.paymentId,
+          ledgerEntryId: cached.ledgerEntryId,
+          newBalancePaise: cached.newBalancePaise,
+          allocations: cached.allocations,
+          unallocatedAdvancePaise: cached.unallocatedAdvancePaise,
+        }, { status: 200 });
+      }
+    }
+
     if (!customerId) {
       return NextResponse.json({ error: 'customerId is required' }, { status: 400 });
     }
 
-    if (!amountPaise || BigInt(amountPaise) <= 0n) {
+    const numAmt = Number(effectiveAmountPaise);
+    if (!effectiveAmountPaise || !Number.isFinite(numAmt) || BigInt(effectiveAmountPaise) <= 0n) {
       return NextResponse.json({ error: 'Valid payment amount in paise is required' }, { status: 400 });
     }
 
-    const amt = BigInt(amountPaise);
+    const amt = BigInt(effectiveAmountPaise);
     const ref = referenceNumber || `${mode}/${Date.now()}`;
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-royal-1';
 
     let paymentModeEnum: PaymentMode = PaymentMode.UPI;
     if (mode === 'CASH') paymentModeEnum = PaymentMode.CASH;
@@ -138,33 +192,57 @@ export async function POST(req: NextRequest) {
     let unallocatedAdvance = amt;
 
     const hasDb = await isPostgresAvailable();
-    let dbCustomerId = isUuid(customerId) ? customerId : null;
-    if (!dbCustomerId && hasDb) {
-      try {
-        const localCust = localStore.getCustomerById(customerId);
-        if (localCust?.phone) {
-          const found = await prisma.customer.findFirst({
-            where: { phone: localCust.phone },
-            select: { id: true }
-          });
-          if (found) dbCustomerId = found.id;
-        }
-      } catch {}
-    }
+    const dbCustomerId = isUuid(customerId) ? customerId : null;
 
-    if (hasDb && dbCustomerId) {
+    if (hasDb && dbCustomerId && isUuid(targetTenantId)) {
       try {
-        const customer = await prisma.customer.findUnique({
-          where: { id: dbCustomerId },
+        if (idempotencyKey) {
+          const existingPayment = await prisma.payment.findFirst({
+            where: { tenantId: targetTenantId, idempotencyKey },
+            include: { allocations: true },
+          });
+          if (existingPayment) {
+            if (customerId && existingPayment.customerId !== customerId) {
+              return NextResponse.json(
+                { error: 'Idempotency key conflict: This key was previously used for a payment to a different customer' },
+                { status: 409 }
+              );
+            }
+            if (amountPaise && existingPayment.amount !== amt) {
+              return NextResponse.json(
+                { error: 'Idempotency key conflict: Payment amount does not match original transaction' },
+                { status: 409 }
+              );
+            }
+            return NextResponse.json({
+              success: true,
+              isDuplicate: true,
+              paymentId: existingPayment.id,
+              amountPaise: existingPayment.amount.toString(),
+              allocations: existingPayment.allocations.map((a) => ({
+                invoiceId: a.invoiceId,
+                amountPaise: a.amount.toString(),
+              })),
+            }, { status: 200 });
+          }
+        }
+
+        const customer = await prisma.customer.findFirst({
+          where: { id: dbCustomerId, tenantId: targetTenantId },
         });
 
+        if (!customer) {
+          return NextResponse.json({ error: 'Customer not found in your organization' }, { status: 404 });
+        }
+
         if (customer) {
-          // Fetch open invoices with positive balance
+          // Fetch open invoices with positive balance (excluding cancelled invoices and draft requisitions)
           const openInvoices = await prisma.invoice.findMany({
             where: {
               customerId: dbCustomerId,
-              tenantId: customer.tenantId,
+              tenantId: targetTenantId,
               balanceDue: { gt: 0n },
+              status: { notIn: ['CANCELLED', 'DRAFT'] },
             },
             orderBy: { dueDate: 'asc' },
           });
@@ -191,7 +269,7 @@ export async function POST(req: NextRequest) {
           computedAllocations = allocResult.allocations;
           unallocatedAdvance = allocResult.unallocatedAdvance;
 
-          // Prisma transaction
+          // Prisma transaction with safety timeout
           const payment = await prisma.$transaction(async (tx) => {
             const p = await tx.payment.create({
               data: {
@@ -201,6 +279,7 @@ export async function POST(req: NextRequest) {
                 mode: paymentModeEnum,
                 reference: ref,
                 status: PaymentStatus.CLEARED,
+                idempotencyKey: idempotencyKey || null,
                 notes: notes || null,
                 receivedBy: (authUser?.id && isUuid(authUser.id)) ? authUser.id : null,
               },
@@ -245,31 +324,140 @@ export async function POST(req: NextRequest) {
               },
             });
 
+            // Immutable Audit Trail Entry
+            await createAuditLog({
+              tenantId: customer.tenantId,
+              userId: authUser.id,
+              action: 'PAYMENT_RECEIVED',
+              entity: 'PAYMENT',
+              entityId: p.id,
+              after: {
+                customerId: customer.id,
+                amountPaise: amt.toString(),
+                mode,
+                reference: ref,
+                allocatedCount: computedAllocations.length,
+              },
+            }, tx);
+
             return p;
-          });
+          }, { maxWait: 10000, timeout: 25000 });
 
           createdPaymentId = payment.id;
-
-          // Double-Entry General Ledger (Tally GL Parity)
-          // (Handled via customer ledgerEntry & payment records above)
         }
-      } catch (dbErr) {
-        console.warn('Postgres unavailable for payment create, using localStore fallback', dbErr);
+      } catch (dbErr: any) {
+        if (dbErr?.code === 'P2002' && idempotencyKey) {
+          // Concurrent race won by another request with the same idempotency key
+          let winningPayment = await prisma.payment.findFirst({
+            where: { tenantId: targetTenantId, idempotencyKey },
+            include: { allocations: true },
+          });
+          if (!winningPayment) {
+            await new Promise((r) => setTimeout(r, 200));
+            winningPayment = await prisma.payment.findFirst({
+              where: { tenantId: targetTenantId, idempotencyKey },
+              include: { allocations: true },
+            });
+          }
+          if (winningPayment) {
+            return NextResponse.json({
+              success: true,
+              isDuplicate: true,
+              paymentId: winningPayment.id,
+              amountPaise: winningPayment.amount.toString(),
+              allocations: winningPayment.allocations.map((a) => ({
+                invoiceId: a.invoiceId,
+                amountPaise: a.amount.toString(),
+              })),
+            }, { status: 200 });
+          }
+        }
+        console.error('Postgres transaction failed for payment create:', dbErr?.message || dbErr);
+        return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 });
+      }
+    } else {
+      // Offline / LocalStore fallback path: check idempotency
+      if (idempotencyKey) {
+        const existingLocal = localStore.getPaymentByIdempotencyKey(targetTenantId, idempotencyKey);
+        if (existingLocal) {
+          if (customerId && existingLocal.customerId !== customerId) {
+            return NextResponse.json(
+              { error: 'Idempotency key conflict: This key was previously used for a payment to a different customer' },
+              { status: 409 }
+            );
+          }
+          if (amountPaise && existingLocal.amountPaise !== amt.toString()) {
+            return NextResponse.json(
+              { error: 'Idempotency key conflict: Payment amount does not match original transaction' },
+              { status: 409 }
+            );
+          }
+          return NextResponse.json({
+            success: true,
+            isDuplicate: true,
+            paymentId: existingLocal.id,
+            amountPaise: existingLocal.amountPaise,
+            storage: 'localStore',
+          }, { status: 200 });
+        }
       }
     }
 
-    // Always update localStore
+    // Fail-safe: In production / PostgreSQL storage mode, never silently fall back to localStore
+    if (getStorageMode() === 'POSTGRES' && !hasDb) {
+      return NextResponse.json(
+        { error: 'Database service unavailable. Payment cannot be safely recorded.' },
+        { status: 503 }
+      );
+    }
+
+    // Update localStore mirror
     localStore.createPayment({
       tenantId: targetTenantId,
       customerId,
       amountPaise: amt.toString(),
       mode,
       referenceNumber: ref,
+      idempotencyKey: idempotencyKey || undefined,
     });
 
-    const localCust = localStore.getCustomerById(customerId);
+    const localCust = localStore.getCustomerById(customerId, targetTenantId);
+    if (!hasDb && !localCust) {
+      return NextResponse.json({ error: 'Customer not found in your organization' }, { status: 404 });
+    }
     const currentBal = BigInt(localCust?.balancePaise || '0');
     const newBal = currentBal >= amt ? currentBal - amt : 0n;
+
+    // Update localStore open invoices
+    const targetInvoiceId = body.invoiceId || (requestedAllocations && requestedAllocations[0]?.invoiceId);
+    if (targetInvoiceId) {
+      const inv = localStore.getInvoiceById(targetInvoiceId, targetTenantId);
+      if (inv) {
+        const prevBal = BigInt(inv.creditBalancePaise || '0');
+        const prevPaid = BigInt(inv.paidNowPaise || '0');
+        const alloc = prevBal > amt ? amt : prevBal;
+        inv.paidNowPaise = (prevPaid + alloc).toString();
+        inv.creditBalancePaise = (prevBal - alloc).toString();
+        inv.status = inv.creditBalancePaise === '0' ? 'PAID' : 'PARTIALLY_PAID';
+        localStore.save();
+      }
+    } else {
+      let remaining = amt;
+      const localInvoices = localStore.getInvoices(targetTenantId)
+        .filter(i => i.customerId === customerId && i.status !== 'CANCELLED' && BigInt(i.creditBalancePaise || '0') > 0n)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      for (const inv of localInvoices) {
+        if (remaining <= 0n) break;
+        const bal = BigInt(inv.creditBalancePaise || '0');
+        const prevPaid = BigInt(inv.paidNowPaise || '0');
+        const alloc = bal > remaining ? remaining : bal;
+        inv.paidNowPaise = (prevPaid + alloc).toString();
+        inv.creditBalancePaise = (bal - alloc).toString();
+        inv.status = inv.creditBalancePaise === '0' ? 'PAID' : 'PARTIALLY_PAID';
+        remaining -= alloc;
+      }
+      localStore.save();
+    }
 
     const entry = localStore.addLedgerEntry({
       tenantId: targetTenantId,
@@ -280,6 +468,37 @@ export async function POST(req: NextRequest) {
       narration: `Payment received via ${mode} (Ref: ${ref})`,
       debitPaise: '0',
       creditPaise: amt.toString(),
+    });
+
+    if (idempotencyKey) {
+      paymentIdempotencyCache.set(`${targetTenantId}:${idempotencyKey}`, {
+        paymentId: createdPaymentId,
+        customerId: customerId || undefined,
+        ledgerEntryId: entry.id,
+        amountPaise: amt.toString(),
+        newBalancePaise: newBal.toString(),
+        allocations: computedAllocations.map((a) => ({
+          invoiceId: a.invoiceId,
+          amountPaise: a.amount.toString(),
+        })),
+        unallocatedAdvancePaise: unallocatedAdvance.toString(),
+        timestamp: Date.now(),
+      });
+    }
+
+    await createAuditLog({
+      tenantId: targetTenantId,
+      userId: authUser.id,
+      action: 'PAYMENT_RECEIVED',
+      entity: 'PAYMENT',
+      entityId: createdPaymentId,
+      after: {
+        customerId,
+        amountPaise: amt.toString(),
+        mode,
+        reference: ref,
+        allocatedCount: computedAllocations.length,
+      },
     });
 
     return NextResponse.json(

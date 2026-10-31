@@ -10,6 +10,11 @@ const isUuid = (id?: string | null): boolean =>
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
+
     const body = await req.json();
     const { entries = [] } = body;
 
@@ -17,7 +22,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'At least one customer balance entry is required' }, { status: 400 });
     }
 
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-apex-1';
     const hasDb = await isPostgresAvailable();
 
     const processedResults = [];
@@ -46,18 +50,31 @@ export async function POST(req: NextRequest) {
       const entryDate = date ? new Date(date) : new Date();
       const defaultNote = narration || (isDue ? 'Previous Register Udhar Migration' : 'Opening Advance Deposit');
 
-      if (isDue) {
-        totalMigratedDebitPaise += amt;
-      } else {
-        totalMigratedCreditPaise += amt;
-      }
-
       let activeCustId = customerId;
 
-      // 1. If customer exists, append ledger entry. If new, create customer first.
+      // If customerId supplied, verify it belongs to this tenant
+      if (activeCustId) {
+        if (hasDb && isUuid(activeCustId) && isUuid(targetTenantId)) {
+          const dbCust = await prisma.customer.findFirst({
+            where: { id: activeCustId, tenantId: targetTenantId },
+            select: { id: true },
+          });
+          if (!dbCust) {
+            // Customer does not belong to this tenant, skip to prevent cross-tenant corruption
+            continue;
+          }
+        } else {
+          const localCust = localStore.getCustomerById(activeCustId, targetTenantId);
+          if (!localCust) {
+            continue;
+          }
+        }
+      }
+
+      // 1. If customer doesn't exist, create within this tenant
       if (!activeCustId && phone && (shopName || name)) {
-        // Find existing or create
-        const existingLocal = localStore.getCustomerByPhone(phone);
+        // Find existing or create scoped to targetTenantId
+        const existingLocal = localStore.getCustomerByPhone(phone, targetTenantId);
         if (existingLocal) {
           activeCustId = existingLocal.id;
         } else {
@@ -104,8 +121,14 @@ export async function POST(req: NextRequest) {
 
       if (!activeCustId) continue;
 
+      if (isDue) {
+        totalMigratedDebitPaise += amt;
+      } else {
+        totalMigratedCreditPaise += amt;
+      }
+
       // Persist in Prisma if available
-      if (hasDb && isUuid(activeCustId)) {
+      if (hasDb && isUuid(activeCustId) && isUuid(targetTenantId)) {
         try {
           await prisma.ledgerEntry.create({
             data: {

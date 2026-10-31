@@ -89,6 +89,15 @@ export default function EditCustomerModal({
     }
   }, [customer, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, submitting]);
+
   if (!isOpen || !customer) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -171,16 +180,21 @@ export default function EditCustomerModal({
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-        <div className="bg-white border border-slate-200 rounded-lg max-w-xl w-full max-h-[92vh] overflow-y-auto shadow-2xl relative flex flex-col">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-customer-modal-title"
+          className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full max-h-[92vh] overflow-y-auto shadow-2xl relative flex flex-col"
+        >
 
           {/* Modal Header */}
-          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-10">
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-10 rounded-t-2xl">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-md bg-red-50 text-[#C81E1E] flex items-center justify-center border border-red-100 shadow-2xs">
+              <div className="w-9 h-9 rounded-xl bg-red-50 text-[#C81E1E] flex items-center justify-center border border-red-100 shadow-2xs">
                 <Store className="w-4.5 h-4.5" />
               </div>
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                <h3 id="edit-customer-modal-title" className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
                   Edit Customer Account
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -199,7 +213,8 @@ export default function EditCustomerModal({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition flex items-center justify-center"
+              aria-label="Close edit customer dialog"
+              className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition flex items-center justify-center cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

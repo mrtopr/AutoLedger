@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { localStore } from '@/server/lib/store';
 import { activeOtpStore } from '@/server/lib/otpStore';
+import { signCustomerToken } from '@/server/lib/portalAuth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,13 +25,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify OTP
+    // Verify OTP against active store session
     const session = activeOtpStore.get(cleanPhone);
-    const isValidOtp = otp === '1234' || (session && session.otp === otp && Date.now() < session.expiresAt);
+    const allowTestBypass = process.env.NODE_ENV !== 'production' && (process.env.ALLOW_TEST_OTP === 'true' || !process.env.NODE_ENV);
+    const isValidOtp = (allowTestBypass && otp === '1234') || (session && session.otp === otp && Date.now() < session.expiresAt);
 
     if (!isValidOtp) {
       return NextResponse.json(
-        { error: 'Invalid or expired OTP. Please enter 1234 or request a new code.' },
+        { error: 'Invalid or expired OTP. Please check the code or request a new one.' },
         { status: 401 }
       );
     }
@@ -75,15 +77,14 @@ export async function POST(req: NextRequest) {
     // Clear used OTP
     activeOtpStore.delete(cleanPhone);
 
-    // Simple signed customer session token (base64 encoded JSON for lightweight edge auth)
-    const sessionPayload = {
+    // Cryptographically signed customer session JWT
+    const sessionToken = signCustomerToken({
       customerId: customer.id,
       phone: cleanPhone,
       tenantId: customer.tenantId || tenant?.id || 'tenant-honda-1',
       loginTime: Date.now(),
       role: 'CUSTOMER',
-    };
-    const sessionToken = Buffer.from(JSON.stringify(sessionPayload)).toString('base64');
+    });
 
     const response = NextResponse.json({
       success: true,

@@ -1089,7 +1089,7 @@ export default function CustomerPortalPage() {
                               {inv.invoiceNumber}
                             </span>
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              TAX INVOICE
+                              SALES BILL
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 font-mono mt-1 flex items-center gap-2">

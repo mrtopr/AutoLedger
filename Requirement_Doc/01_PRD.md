@@ -36,15 +36,15 @@ Convert the informal paper raseed/khata used between motorbike-parts wholesalers
 - Low-stock alert; warn (do not block) on selling below zero stock.
 - Per-customer purchase history by product.
 
-### FR-3 Invoicing
-- Types: `TAX_INVOICE` (B2B GST), `BILL_OF_SUPPLY`, `RETAIL_BILL` (B2C). The format used is chosen per sale, with tenant defaults.
+### FR-3 Invoicing / Sales Bills
+- Classification: `RETAIL_BILL` (Standard non-GST counter sales bill / receipt). `TAX_INVOICE` and `BILL_OF_SUPPLY` are preserved in schema for legacy compatibility.
 - Quick-bill mode: pick customer, add items (search or scan), enter "paid now", balance is auto-computed on credit, due date defaults from customer terms.
-- "Copy last invoice" for repeat orders.
-- Sequential numbering per FY and series. Discounts per line and per invoice. GST split CGST/SGST vs IGST based on place of supply. Rounding line. Amount in words.
-- Lifecycle: `DRAFT → ISSUED → PARTIALLY_PAID → PAID`, plus `OVERDUE` (derived), `DISPUTED`, `CANCELLED`, `CREDIT_NOTED`.
-- Issued invoices are immutable (see AGENTS.md rule 2).
-- Output: A4 professional PDF, 80mm thermal/A5 compact for B2C, share via WhatsApp/SMS/email, public view link (no login, tokenised, revocable).
-- Invoice shows paid now, balance due, optional previous outstanding, UPI QR, terms, delivery acknowledgement block.
+- Pure price calculation: Line total = $\text{Quantity} \times \text{Rate} - \text{Discount}$ without GST calculation or CGST/SGST/IGST splitting.
+- Sequential numbering per FY and series (e.g. `INV/2026-27/00001`).
+- Lifecycle: `DRAFT → ISSUED → PARTIALLY_PAID → PAID`, plus `OVERDUE` (derived), `CANCELLED`.
+- Issued bills are immutable (see AGENTS.md rule 2).
+- Output: Single-page A4 PDF / print ready, thermal cash receipt, share via WhatsApp.
+- Document displays paid now, balance due, previous outstanding, UPI QR, bank details, and delivery acknowledgement. Note: Statutory GSTR-1 tax reporting is out of active scope.
 
 ### FR-4 Payments and allocation
 - Modes: cash, UPI, bank transfer, cheque, other. Reference number, date, received by.

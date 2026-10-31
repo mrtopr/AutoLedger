@@ -334,6 +334,7 @@ model Invoice {
   
   version       Int           @default(1)
   cancelReason  String?       @map("cancel_reason")
+  idempotencyKey String?      @map("idempotency_key")
   notes         String?
   terms         String?
   createdBy     String?       @map("created_by") @db.Uuid
@@ -354,6 +355,7 @@ model Invoice {
   messages    Message[]
 
   @@unique([tenantId, seriesCode, fy, number])
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, customerId, status, dueDate])
   @@map("invoices")
 }
@@ -446,7 +448,7 @@ model Payment {
   receivedBy        String?       @map("received_by") @db.Uuid
   status            PaymentStatus @default(CLEARED)
   gatewayRef        String?       @unique @map("gateway_ref")
-  idempotencyKey    String?       @unique @map("idempotency_key")
+  idempotencyKey    String?       @map("idempotency_key")
   notes             String?
   reversesPaymentId String?       @map("reverses_payment_id") @db.Uuid
   createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz
@@ -457,6 +459,7 @@ model Payment {
   receiver    User?               @relation("ReceivedPayments", fields: [receivedBy], references: [id], onDelete: SetNull)
   allocations PaymentAllocation[]
 
+  @@unique([tenantId, idempotencyKey])
   @@map("payments")
 }
 

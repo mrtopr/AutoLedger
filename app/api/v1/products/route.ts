@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
+import { prisma, isPostgresAvailable, getStorageMode } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { StockReason } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { createAuditLog } from '@/server/lib/audit';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -11,6 +12,11 @@ const isUuid = (id?: string | null): boolean =>
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const targetTenantId = authUser.tenantId;
+
     const { searchParams } = new URL(req.url);
     const query = searchParams.get('q') || '';
     const make = searchParams.get('make') || '';
@@ -21,7 +27,7 @@ export async function GET(req: NextRequest) {
     let dbSuccess = false;
 
     // 1. LOCAL-FIRST: Always fetch from local database first (instant <5ms, exact stock & pricing from Excel)
-    const localProducts = localStore.getProducts(authUser?.tenantId);
+    const localProducts = localStore.getProducts(targetTenantId);
     if (localProducts.length > 0) {
       formatted = localProducts.map((p) => ({
         id: p.id,
@@ -50,11 +56,11 @@ export async function GET(req: NextRequest) {
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000)),
       ]);
 
-      if (hasDb && (!authUser?.tenantId || isUuid(authUser?.tenantId))) {
+      if (hasDb && isUuid(targetTenantId)) {
         try {
           const products = await prisma.product.findMany({
             where: {
-              ...(authUser?.tenantId && isUuid(authUser.tenantId) ? { tenantId: authUser.tenantId } : {}),
+              tenantId: targetTenantId,
               isActive: true,
               ...(query ? {
                 OR: [
@@ -132,6 +138,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+
+    if (authUser.role !== 'OWNER' && authUser.role !== 'MANAGER') {
+      return NextResponse.json(
+        { error: 'Forbidden: only OWNER or MANAGER can create catalog products' },
+        { status: 403 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
+
     const body = await req.json();
 
     const {
@@ -142,13 +160,24 @@ export async function POST(req: NextRequest) {
       hsnCode = '8714',
       gstRateBp = 1800,
       unit = 'pcs',
-      purchasePricePaise = 0,
-      salePricePaise,
-      mrpPaise = 0,
-      openingStock = 0,
       reorderLevel = 10,
       bikeModelIds = [],
     } = body;
+
+    const openingStock = body.openingStock !== undefined ? body.openingStock : (body.stockQty !== undefined ? body.stockQty : 0);
+
+    let salePricePaise = body.salePricePaise;
+    if (salePricePaise === undefined && body.salePriceRupees !== undefined) {
+      salePricePaise = Math.round(Number(body.salePriceRupees) * 100);
+    }
+    let purchasePricePaise = body.purchasePricePaise !== undefined ? body.purchasePricePaise : 0;
+    if (purchasePricePaise === 0 && body.purchasePriceRupees !== undefined) {
+      purchasePricePaise = Math.round(Number(body.purchasePriceRupees) * 100);
+    }
+    let mrpPaise = body.mrpPaise !== undefined ? body.mrpPaise : 0;
+    if (mrpPaise === 0 && body.mrpRupees !== undefined) {
+      mrpPaise = Math.round(Number(body.mrpRupees) * 100);
+    }
 
     if (!name || salePricePaise === undefined) {
       return NextResponse.json(
@@ -157,23 +186,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
     let createdProd: any = null;
 
-    // 1. Try Prisma first if available and targetTenantId is a valid UUID (or find default DB tenant)
+    // 1. Try Prisma first if available and targetTenantId is a valid UUID
     const hasDb = await isPostgresAvailable();
-    let dbTenantId: string | null = null;
-    if (hasDb) {
-      if (isUuid(targetTenantId)) {
-        dbTenantId = targetTenantId;
-      } else {
-        try {
-          const firstTenant = await prisma.tenant.findFirst({ select: { id: true } });
-          if (firstTenant && isUuid(firstTenant.id)) {
-            dbTenantId = firstTenant.id;
-          }
-        } catch {}
-      }
+    const dbTenantId = isUuid(targetTenantId) ? targetTenantId : null;
+
+    // Fail-safe: In production / PostgreSQL storage mode, never silently fall back to localStore
+    if (getStorageMode() === 'POSTGRES' && !hasDb) {
+      return NextResponse.json(
+        { error: 'Database service unavailable. Product record cannot be safely saved.' },
+        { status: 503 }
+      );
     }
 
     if (hasDb && dbTenantId) {
@@ -216,7 +240,14 @@ export async function POST(req: NextRequest) {
           salePricePaise: product.salePrice?.toString(),
           stockQty: parseInt(openingStock, 10) || 0,
         };
-      } catch (dbErr) {
+      } catch (dbErr: any) {
+        if (getStorageMode() === 'POSTGRES') {
+          console.error('Postgres error during product create:', dbErr?.message);
+          return NextResponse.json(
+            { error: 'Failed to create product in database' },
+            { status: 500 }
+          );
+        }
         console.warn('Postgres unavailable during product create, using localStore fallback');
       }
     }
@@ -239,9 +270,25 @@ export async function POST(req: NextRequest) {
       models: Array.isArray(bikeModelIds) && bikeModelIds.length > 0 ? bikeModelIds : ['Universal / Multi-Fit'],
     });
 
+    const resultProd = createdProd || localProd;
+
+    await createAuditLog({
+      tenantId: targetTenantId,
+      userId: authUser.id,
+      action: 'PRODUCT_CREATED',
+      entity: 'PRODUCT',
+      entityId: resultProd.id,
+      after: {
+        name: resultProd.name,
+        partNumber: resultProd.partNumber,
+        salePricePaise: resultProd.salePricePaise,
+        stockQty: resultProd.stockQty,
+      },
+    });
+
     return NextResponse.json({
       success: true,
-      product: createdProd || localProd,
+      product: resultProd,
     }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating product:', error);

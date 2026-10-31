@@ -3,12 +3,20 @@ import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 
+const isUuid = (id?: string | null): boolean =>
+  typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: missing authentication or tenant context' },
+        { status: 401 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
     const { searchParams } = new URL(req.url);
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
-
     const targetDate = searchParams.get('date') || new Date().toISOString().split('T')[0];
 
     // 1. Check for existing saved settlement on this date
@@ -17,10 +25,10 @@ export async function GET(req: NextRequest) {
     // 2. Fetch invoices for this date from localStore (and DB if available)
     let allInvoices: any[] = localStore.getInvoices(targetTenantId) || [];
     const hasDb = await isPostgresAvailable();
-    if (hasDb) {
+    if (hasDb && isUuid(targetTenantId)) {
       try {
         const dbInvoices = await prisma.invoice.findMany({
-          where: { tenantId: targetTenantId },
+          where: { tenantId: targetTenantId, status: { notIn: ['CANCELLED', 'DRAFT'] } },
           include: { customer: true, items: true },
           orderBy: { createdAt: 'desc' },
         });
@@ -33,6 +41,7 @@ export async function GET(req: NextRequest) {
             customerName: inv.customer?.name || inv.customer?.shopName || 'Walk-in Retail',
             customerShop: inv.customer?.shopName || 'Walk-in Retail',
             customerPhone: inv.customer?.phone || '',
+            status: inv.status,
             grandTotalPaise: inv.grandTotal.toString(),
             paidNowPaise: (inv.paidNow || 0n).toString(),
             creditBalancePaise: (inv.balanceDue || 0n).toString(),
@@ -45,9 +54,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filter invoices matching target date (either YYYY-MM-DD prefix of ISO or date string)
+    // Filter active invoices matching target date (strictly excluding CANCELLED and DRAFT)
+    let cancelledCount = 0;
     const dayInvoices = allInvoices.filter((inv) => {
       const invDateStr = inv.createdAt ? inv.createdAt.split('T')[0] : '';
+      if (invDateStr === targetDate && inv.status === 'CANCELLED') {
+        cancelledCount++;
+      }
+      if (inv.status === 'CANCELLED' || inv.status === 'DRAFT') return false;
       return invDateStr === targetDate;
     });
 
@@ -106,6 +120,8 @@ export async function GET(req: NextRequest) {
       bankCollectedPaise: bankCollectedPaise.toString(),
       totalInvoicesCount: dayInvoices.length,
       grossSalesPaise: invoiceGrossSalesPaise.toString(),
+      totalSalesPaise: invoiceGrossSalesPaise.toString(),
+      cancelledCount,
       khataGivenPaise: invoiceKhataPaise.toString(),
       cashExpensesPaise: savedSettlement?.cashExpensesPaise || '0',
     };
@@ -130,7 +146,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const targetTenantId = authUser?.tenantId || localStore.getTenants()[0]?.id || 'tenant-honda-1';
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: missing authentication or tenant context' },
+        { status: 401 }
+      );
+    }
+    const targetTenantId = authUser.tenantId;
     const body = await req.json();
 
     const {

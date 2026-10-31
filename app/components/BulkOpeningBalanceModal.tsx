@@ -116,6 +116,17 @@ export default function BulkOpeningBalanceModal({
     }
   }, [isOpen, existingCustomers]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, submitting, onClose]);
+
   if (!isOpen) return null;
 
   const handleAddRow = () => {
@@ -221,7 +232,7 @@ export default function BulkOpeningBalanceModal({
   return (
     <ClientPortal>
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
-        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div role="dialog" aria-modal="true" aria-labelledby="bulk-opening-balance-title" className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
 
           {/* Header */}
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800 text-white">
@@ -231,7 +242,7 @@ export default function BulkOpeningBalanceModal({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-white tracking-tight">
+                  <h3 id="bulk-opening-balance-title" className="text-base font-bold text-white tracking-tight">
                     Batch Opening Balances & Previous Udhar Onboarding
                   </h3>
                   <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-mono font-bold border border-amber-400/30">
@@ -245,9 +256,11 @@ export default function BulkOpeningBalanceModal({
             </div>
 
             <button
+              type="button"
+              aria-label="Close modal"
               onClick={onClose}
               disabled={submitting}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg transition"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

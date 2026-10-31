@@ -4,7 +4,8 @@ import { prisma, isPostgresAvailable } from './prisma';
 import { localStore } from './store';
 import { NextRequest } from 'next/server';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'b2b-khata-jwt-super-secret-key-2026';
+import { getJwtSecret } from './env';
+
 const TOKEN_COOKIE_NAME = 'auth_token';
 
 export interface AuthPayload {
@@ -25,12 +26,12 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 export function signToken(payload: AuthPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: '7d' });
 }
 
 export function verifyToken(token: string): AuthPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as AuthPayload;
+    return jwt.verify(token, getJwtSecret()) as AuthPayload;
   } catch (err) {
     return null;
   }
@@ -77,7 +78,10 @@ export async function getAuthenticatedUser(req: NextRequest | Request) {
               })
             : null);
 
-      if (user && user.isActive) {
+      if (user) {
+        if (!user.isActive) {
+          return null; // Disabled user fails closed immediately
+        }
         return {
           id: user.id,
           name: user.name,
@@ -94,7 +98,10 @@ export async function getAuthenticatedUser(req: NextRequest | Request) {
   }
 
   const localUser = localStore.findUserById(payload.userId);
-  if (localUser && localUser.isActive) {
+  if (localUser) {
+    if (!localUser.isActive) {
+      return null; // Disabled user in localStore fails closed immediately
+    }
     return {
       id: localUser.id,
       name: localUser.name,
@@ -104,27 +111,15 @@ export async function getAuthenticatedUser(req: NextRequest | Request) {
       tenantId: localUser.tenantId,
       tenant: localUser.tenant || {
         id: localUser.tenantId,
-        name: 'Royal Auto Spares',
+        name: 'Dealership Hub',
         gstin: '27ABCDE1234F1Z5',
         stateCode: '27',
       },
     };
   }
 
-  return {
-    id: payload.userId,
-    name: payload.name,
-    phone: payload.phone,
-    email: null,
-    role: payload.role as any,
-    tenantId: payload.tenantId,
-    tenant: {
-      id: payload.tenantId,
-      name: 'Royal Auto Spares',
-      gstin: '27ABCDE1234F1Z5',
-      stateCode: '27',
-    } as any,
-  };
+  // If user does not exist in active database or local store, fail closed
+  return null;
 }
 
 export { TOKEN_COOKIE_NAME };

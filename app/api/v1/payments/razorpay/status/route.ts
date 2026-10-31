@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRazorpayClient } from '@/server/lib/razorpay';
 import { localStore } from '@/server/lib/store';
+import { getAuthenticatedUser } from '@/server/lib/auth';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { LedgerEntryType, PaymentMode, PaymentStatus } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
   try {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const tenantId = authUser.tenantId;
+
     const { searchParams } = new URL(req.url);
     const linkId = searchParams.get('linkId');
     const customerId = searchParams.get('customerId');
@@ -73,7 +80,6 @@ export async function GET(req: NextRequest) {
           const alreadyRecorded = existingLedger.some((e: any) => e.refNo === rzpPaymentId || e.refNo === linkId);
 
           if (!alreadyRecorded && customerId) {
-            const tenantId = localStore.getTenants()[0]?.id || 'tenant-default';
             localStore.createPayment({
               tenantId,
               customerId,
@@ -180,6 +186,12 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser || !authUser.tenantId) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication and tenant context required' }, { status: 401 });
+    }
+    const tenantId = authUser.tenantId;
+
     const body = await req.json();
     const { linkId, customerId, invoiceId, amountPaise, action = 'SUCCESS', reason } = body;
 
@@ -187,7 +199,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'linkId is required' }, { status: 400 });
     }
 
-    const tenantId = localStore.getTenants()[0]?.id || 'tenant-default';
     const finalPaise = BigInt(amountPaise || '0');
 
     if (action === 'SUCCESS') {

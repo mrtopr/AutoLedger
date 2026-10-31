@@ -67,8 +67,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Interactive First-Time Onboarding Tour */}
       <OnboardingTour />
 
-      {/* Fixed Desktop Sidebar */}
-      <Sidebar />
+      {/* Desktop Sidebar & Mobile Drawer */}
+      <Sidebar mobileOpen={mobileMenuOpen} onCloseMobile={() => setMobileMenuOpen(false)} />
 
       {/* Main Content Area (Offset for 240px Sidebar on Desktop) */}
       <div className={`lg:pl-[240px] flex flex-col ${pathname === '/pos' ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>

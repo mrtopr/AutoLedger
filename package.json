@@ -19,9 +19,14 @@
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status",
     "prisma:seed": "tsx prisma/seed.ts",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:init:fresh": "prisma db push",
+    "db:studio": "prisma studio",
+    "release:check": "node scripts/pre-deploy-check.js",
+    "backup": "bash ./scripts/backup-db.sh"
   },
   "build": {
     "appId": "com.tradeledger.erp",
@@ -43,11 +48,16 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-slot": "^1.1.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.21.2",
+    "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "cmdk": "^1.0.0",
     "date-fns": "^4.1.0",
     "firebase": "^10.14.1",
+    "framer-motion": "^11.11.11",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.460.0",

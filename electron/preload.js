@@ -2,5 +2,5 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
-  printCurrentPage: () => ipcRenderer.send('print-page'),
+  printCurrentPage: (options) => ipcRenderer.send('print-page', options),
 });
