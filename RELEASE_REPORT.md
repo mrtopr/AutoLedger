@@ -25,9 +25,10 @@ This report tracks local quality assurance, security audits, build validation, a
 | **Lint & Syntax** | ESLint compliance | `npm run lint` | Passed as part of Next.js production build |  PASSED |
 | **Automated Tests** | Vitest test suites (24 suites) | `npm test` | **24 / 24 Passed (252 / 252 tests, 0 failed, 0 skipped)** |  PASSED |
 | **Prisma Schema** | Schema correctness & formatting | `npx prisma validate` | **Valid (Schema verified with 27 models, 11 enums)** |  PASSED |
-| **Prisma Migrations**| Version-controlled migration history | `npx prisma migrate status` | `20261029000000_durable_idempotency_and_tenant_safety` created | ⏳ PENDING |
+| **Prisma Migrations**| Version-controlled migration history | `npx prisma migrate status` | `20261029000000_durable_idempotency_and_tenant_safety` committed & ready |  COMMITTED |
 | **Production Build** | Next.js compilation | `npm run build` | **42 / 42 routes compiled cleanly (0 warnings, 0 errors)** |  PASSED |
-| **Secrets Audit** | Sensitive credentials in git | Custom pattern scan | Verified .env files are in .gitignore | ⏳ PENDING |
+| **Secrets Audit** | Sensitive credentials in git | Custom pattern scan | Verified .env files and *.zip are in .gitignore; 0 leaked secrets |  PASSED |
+| **GitHub Release Push** | Git push to origin/main | `git push origin main` | **Commit 9fb2060 fast-forward pushed to https://github.com/mrtopr/AutoLedger** |  PUSHED |
 
 ---
 
