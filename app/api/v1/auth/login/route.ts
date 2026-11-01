@@ -22,15 +22,38 @@ export async function POST(req: NextRequest) {
     const hasDb = await isPostgresAvailable();
     if (hasDb) {
       try {
-        user = await prisma.user.findFirst({
+        const matchedUsers = await prisma.user.findMany({
           where: {
             OR: [
               { phone: cleanLoginId },
               { email: cleanLoginId.toLowerCase() },
             ],
           },
-          include: { tenant: true }
+          include: { 
+            tenant: {
+              include: {
+                _count: { select: { invoices: true } }
+              }
+            } 
+          }
         });
+
+        if (matchedUsers.length > 0) {
+          // Check each account for password match, prioritizing most active shop
+          matchedUsers.sort((a, b) => (b.tenant?._count?.invoices || 0) - (a.tenant?._count?.invoices || 0));
+          
+          for (const u of matchedUsers) {
+            if (u.password && (await comparePassword(password, u.password))) {
+              user = u;
+              break;
+            }
+          }
+
+          // If no password matched yet, default to most active user to check error conditions
+          if (!user) {
+            user = matchedUsers[0];
+          }
+        }
       } catch (dbErr) {
         console.warn('Postgres unavailable during login, using localStore fallback');
       }

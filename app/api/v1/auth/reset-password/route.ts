@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const sessionUserId = session?.userId;
+
     // Clean up OTP session
     activeOtpStore.delete(cacheKey);
 
@@ -63,31 +65,60 @@ export async function POST(req: NextRequest) {
 
       if (hasDb) {
         try {
-          user = await prisma.user.findFirst({
+          // 1. Update ALL user records matching this email in PostgreSQL
+          await prisma.user.updateMany({
             where: {
               email: { equals: rawEmail, mode: 'insensitive' },
             },
-            include: { tenant: true },
+            data: { password: hashedPassword },
           });
 
-          if (user) {
-            user = await prisma.user.update({
-              where: { id: user.id },
+          // 2. Also update by specific session user ID if available
+          if (sessionUserId) {
+            await prisma.user.update({
+              where: { id: sessionUserId },
               data: { password: hashedPassword },
-              include: { tenant: true },
+            }).catch(() => null);
+          }
+
+          // 3. Select active account for session token (prioritize shop with actual invoices)
+          const matchedUsers = await prisma.user.findMany({
+            where: {
+              email: { equals: rawEmail, mode: 'insensitive' },
+            },
+            include: {
+              tenant: {
+                include: {
+                  _count: { select: { invoices: true } },
+                },
+              },
+            },
+          });
+
+          if (matchedUsers.length > 0) {
+            matchedUsers.sort((a, b) => {
+              const invA = a.tenant?._count?.invoices || 0;
+              const invB = b.tenant?._count?.invoices || 0;
+              if (invB !== invA) return invB - invA;
+              return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
             });
+            user = matchedUsers[0];
           }
         } catch (dbErr) {
-          console.warn('Postgres password reset error, falling back:', dbErr);
+          console.error('Postgres password reset error:', dbErr);
         }
       }
 
       // LocalStore fallback or synchronization
+      localStore.getUsers().forEach((u) => {
+        if (u.email && u.email.toLowerCase() === rawEmail) {
+          localStore.updateUser(u.id, { password: hashedPassword });
+        }
+      });
+
       const localUser = localStore.findUser(rawEmail);
-      if (localUser) {
-        localStore.updateUser(localUser.id, { password: hashedPassword });
-        localUser.password = hashedPassword;
-        if (!user) user = localUser;
+      if (localUser && !user) {
+        user = localUser;
       }
 
       if (!user) {
