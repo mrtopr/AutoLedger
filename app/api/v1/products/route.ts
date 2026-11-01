@@ -26,9 +26,61 @@ export async function GET(req: NextRequest) {
     let formatted: any[] = [];
     let dbSuccess = false;
 
-    // 1. LOCAL-FIRST: Always fetch from local database first (instant <5ms, exact stock & pricing from Excel)
-    const localProducts = localStore.getProducts(targetTenantId);
-    if (localProducts.length > 0) {
+    // 1. Primary: Load from PostgreSQL if database is connected
+    const hasDb = await isPostgresAvailable();
+
+    if (hasDb && isUuid(targetTenantId)) {
+      try {
+        const products = await prisma.product.findMany({
+          where: {
+            tenantId: targetTenantId,
+            isActive: true,
+            ...(query ? {
+              OR: [
+                { name: { contains: query, mode: 'insensitive' } },
+                { partNumber: { contains: query, mode: 'insensitive' } },
+                { brand: { contains: query, mode: 'insensitive' } },
+              ]
+            } : {}),
+            ...(category && category !== 'ALL' ? { category } : {}),
+          },
+          include: {
+            compatibilities: { include: { bikeModel: true } },
+            stockMovements: { select: { qty: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        formatted = products.map((p) => {
+          const stockQty = p.stockMovements.reduce((sum, m) => sum + m.qty, 0);
+          const models = p.compatibilities.map((c) => `${c.bikeModel.make} ${c.bikeModel.model}`);
+          return {
+            id: p.id,
+            name: p.name,
+            partNumber: p.partNumber || '',
+            brand: p.brand || 'Unbranded',
+            category: p.category || 'General',
+            hsnCode: p.hsnCode || '8714',
+            gstRateBp: p.gstRateBp,
+            unit: p.unit,
+            purchasePricePaise: p.purchasePrice?.toString() || '0',
+            salePricePaise: p.salePrice?.toString() || '0',
+            mrpPaise: p.mrp?.toString() || '0',
+            stockQty,
+            reorderLevel: p.reorderLevel,
+            isLowStock: stockQty <= p.reorderLevel,
+            models: models.length > 0 ? models : ['Universal / Multi-Fit'],
+          };
+        });
+        dbSuccess = true;
+      } catch (dbErr) {
+        console.warn('PostgreSQL fetch fallback:', dbErr);
+      }
+    }
+
+    // 2. Offline Fallback: Load from localStore if PostgreSQL is unavailable
+    if (!dbSuccess) {
+      const localProducts = localStore.getProducts(targetTenantId);
       formatted = localProducts.map((p) => ({
         id: p.id,
         name: p.name,
@@ -46,66 +98,6 @@ export async function GET(req: NextRequest) {
         isLowStock: p.stockQty <= p.reorderLevel,
         models: p.models || ['Universal / Multi-Fit'],
       }));
-      dbSuccess = true;
-    }
-
-    // 2. Cloud Fallback: If local store has no products yet, load from PostgreSQL
-    if (!dbSuccess) {
-      const hasDb = await Promise.race([
-        isPostgresAvailable(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000)),
-      ]);
-
-      if (hasDb && isUuid(targetTenantId)) {
-        try {
-          const products = await prisma.product.findMany({
-            where: {
-              tenantId: targetTenantId,
-              isActive: true,
-              ...(query ? {
-                OR: [
-                  { name: { contains: query, mode: 'insensitive' } },
-                  { partNumber: { contains: query, mode: 'insensitive' } },
-                  { brand: { contains: query, mode: 'insensitive' } },
-                ]
-              } : {}),
-              ...(category && category !== 'ALL' ? { category } : {}),
-            },
-            include: {
-              compatibilities: { include: { bikeModel: true } },
-              stockMovements: { select: { qty: true } },
-            },
-            orderBy: { createdAt: 'desc' },
-          });
-
-          if (products.length > 0) {
-            formatted = products.map((p) => {
-              const stockQty = p.stockMovements.reduce((sum, m) => sum + m.qty, 0);
-              const models = p.compatibilities.map((c) => `${c.bikeModel.make} ${c.bikeModel.model}`);
-              return {
-                id: p.id,
-                name: p.name,
-                partNumber: p.partNumber || '',
-                brand: p.brand || 'Unbranded',
-                category: p.category || 'General',
-                hsnCode: p.hsnCode || '8714',
-                gstRateBp: p.gstRateBp,
-                unit: p.unit,
-                purchasePricePaise: p.purchasePrice?.toString() || '0',
-                salePricePaise: p.salePrice?.toString() || '0',
-                mrpPaise: p.mrp?.toString() || '0',
-                stockQty,
-                reorderLevel: p.reorderLevel,
-                isLowStock: stockQty <= p.reorderLevel,
-                models: models.length > 0 ? models : ['Universal / Multi-Fit'],
-              };
-            });
-            dbSuccess = true;
-          }
-        } catch (dbErr) {
-          console.warn('PostgreSQL fetch fallback:', dbErr);
-        }
-      }
     }
 
     // Filter by query and make
