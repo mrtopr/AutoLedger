@@ -197,24 +197,24 @@ npm run dev
 # Terminal 2: Launch Electron Desktop Window
 npm run electron:dev
 ```
-Or simply double-click **`Launch-AutoLedger-ERP.bat`** for 1-click startup!
+Or simply double-click **`Launch-TradeLedger-ERP.bat`** for 1-click startup!
 
 ---
 
 ## 💼 Production Deployment & SaaS Commercialization
 
-To sell AutoLedger ERP to automotive dealerships and workshop owners:
+To sell TradeLedger ERP to wholesale traders, distributors, and retail businesses:
 
 1. **Deploy the Web & API Engine:**
    - Host on **[Vercel](https://vercel.com)** or **Railway**.
    - Connect to a managed PostgreSQL database on **[Neon.tech](https://neon.tech)**.
 2. **Configure Production URL in Electron:**
-   - In `electron/main.js`, point `APP_URL` to your production domain (e.g. `https://app.autoledger-erp.com`).
+   - In `electron/main.js`, point `APP_URL` to your production domain.
 3. **Build the Client Installer (.exe):**
    ```powershell
    npm run electron:build
    ```
-   Distribute `AutoLedger ERP Setup 1.0.0.exe` (found in `/dist`) to clients.
+   Distribute `TradeLedger ERP Setup 1.0.0.exe` (found in `/dist`) to clients.
 
 ---
 
@@ -224,31 +224,40 @@ To sell AutoLedger ERP to automotive dealerships and workshop owners:
 B2B_Platform/
 ├── app/                        # Next.js 14 App Router
 │   ├── api/v1/                 # Backend RESTful API endpoints
-│   │   ├── auth/               # Login, session, token verification
+│   │   ├── auth/               # Login, session, OTP verification & password reset
 │   │   ├── backup/             # Full JSON database export & restore
 │   │   ├── customers/          # Khata ledger, payments, credit limits
 │   │   ├── invoices/           # POS bill creation & sales bills
 │   │   ├── products/           # Inventory catalog & stock adjustments
-│   │   └── settings/           # Dealership profile & store configurations
-│   ├── components/             # Reusable UI components & Topbar/Sidebar
+│   │   └── settings/           # Business profile & store configurations
+│   ├── components/             # Reusable ERP modals & Topbar/Sidebar
 │   ├── context/                # Auth & Bilingual Language Contexts
 │   ├── pos/                    # High-speed POS Counter Billing
 │   ├── customers/              # Customer Khata & Digital Ledger
-│   ├── inventory/              # Spare Parts Catalog & Stock Management
+│   ├── inventory/              # Product Catalog & Stock Management
 │   ├── invoices/               # Bill History & Sales Bill Printables
-│   ├── reports/                # Daybook & Cash Settlement Summaries
-│   └── settings/               # Dealership Settings & Database Backup
+│   ├── settlement/             # Day-End Settlement & Audit Trail
+│   └── settings/               # System Settings & Database Backup
+├── docs/                       # Operational runbooks & architecture docs
+│   ├── DESIGN.md               # UI design specification & style guide
+│   ├── PRODUCT.md              # Product requirements & user stories
+│   ├── OPERATIONAL_RUNBOOK.md  # Day-to-day operations & runbook
+│   ├── DISASTER_RECOVERY_PLAN.md# Backup, restore & DR procedures
+│   └── SECURITY_INCIDENT_RUNBOOK.md # Security audit & response guide
 ├── electron/                   # Desktop application wrapper
 │   ├── main.js                 # Electron main process & splash screen
 │   └── preload.js              # IPC bridge
 ├── prisma/                     # Database schema & migrations
 │   └── schema.prisma           # Prisma Data Model (Paise monetary columns)
+├── public/                     # Static assets & brand media
+│   └── images/                 # Brand emblems & logos
 ├── server/lib/                 # Backend utility libraries
 │   ├── auth.ts                 # JWT verification & password hashing
 │   ├── prisma.ts               # Resilient Prisma client singleton
 │   ├── store.ts                # Atomic offline LocalStore engine
 │   └── tax.ts                  # GST tax calculation engine
-├── Launch-AutoLedger-ERP.bat   # 1-Click Windows Desktop Launcher
+├── tests/                      # Vitest test suite (E2E, security, financial)
+├── Launch-TradeLedger-ERP.bat  # 1-Click Windows Desktop Launcher
 └── package.json                # Project dependencies & build scripts
 ```
 
