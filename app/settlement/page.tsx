@@ -58,6 +58,9 @@ export default function DayEndSettlementPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [isZReportOpen, setIsZReportOpen] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'SETTLE' | 'HISTORY'>('SETTLE');
+  const [settlementHistory, setSettlementHistory] = useState<any[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<'ALL' | 'BALANCED' | 'DISCREPANCY'>('ALL');
 
   // Report Data
   const [savedSettlement, setSavedSettlement] = useState<any | null>(null);
@@ -93,6 +96,9 @@ export default function DayEndSettlementPage() {
         setSavedSettlement(json.savedSettlement || null);
         setSummary(json.summary || {});
         setInvoices(json.invoices || []);
+        if (Array.isArray(json.history)) {
+          setSettlementHistory(json.history);
+        }
 
         if (json.savedSettlement) {
           const s = json.savedSettlement;
@@ -240,6 +246,7 @@ export default function DayEndSettlementPage() {
         const json = await res.json();
         setSavedSettlement(json.settlement);
         setSaveSuccess(true);
+        loadSettlementData(selectedDate);
         setTimeout(() => setSaveSuccess(false), 4000);
       } else {
         alert('Failed to save settlement. Please review values and try again.');
@@ -250,6 +257,29 @@ export default function DayEndSettlementPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const handleOpenPastSettlement = (settle: any) => {
+    setSelectedDate(settle.date);
+    loadSettlementData(settle.date);
+    setActiveTab('SETTLE');
+  };
+
+  const handleViewHistoryZReport = (settle: any) => {
+    setSelectedDate(settle.date);
+    loadSettlementData(settle.date);
+    setIsZReportOpen(true);
   };
 
   // High-Resolution Print / Z-Report
@@ -338,20 +368,70 @@ export default function DayEndSettlementPage() {
         </div>
       </div>
 
-      {/* Save Success Alert Banner */}
-      {saveSuccess && (
-        <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-center justify-between text-emerald-950 animate-in fade-in duration-150">
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Day-End Settlement & Cash Reconciliation closed and saved successfully!</span>
-          </div>
-          <span className="text-[11px] font-mono text-emerald-800 font-semibold">
-            {savedSettlement?.id}
-          </span>
-        </div>
-      )}
+      {/* 2. NAVIGATION TABS: DAILY WORKSPACE VS SETTLEMENT HISTORY */}
+      <div className="border-b border-slate-200 flex items-center gap-2 sm:gap-4 text-xs font-medium overflow-x-auto print:hidden" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'SETTLE'}
+          onClick={() => setActiveTab('SETTLE')}
+          className={`py-3 px-3.5 border-b-2 transition cursor-pointer inline-flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'SETTLE'
+              ? 'border-[#C81E1E] text-[#C81E1E] font-bold'
+              : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+          }`}
+        >
+          <Wallet className="w-3.5 h-3.5" />
+          <span>Daily Till Settlement</span>
+          {savedSettlement ? (
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Settled
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200">
+              Till Open
+            </span>
+          )}
+        </button>
 
-      {/* 2. FOUR KPI SUMMARY CARDS (TILL HERO) */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'HISTORY'}
+          onClick={() => setActiveTab('HISTORY')}
+          className={`py-3 px-3.5 border-b-2 transition cursor-pointer inline-flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'HISTORY'
+              ? 'border-[#C81E1E] text-[#C81E1E] font-bold'
+              : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>Settlement History & Audit Trail</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+            activeTab === 'HISTORY' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {settlementHistory.length}
+          </span>
+        </button>
+      </div>
+
+      {/* TAB 1: DAILY TILL SETTLEMENT WORKSPACE */}
+      {activeTab === 'SETTLE' && (
+        <div className="space-y-4">
+          {/* Save Success Alert Banner */}
+          {saveSuccess && (
+            <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-center justify-between text-emerald-950 animate-in fade-in duration-150">
+              <div className="flex items-center gap-2 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Day-End Settlement & Cash Reconciliation closed and saved successfully!</span>
+              </div>
+              <span className="text-[11px] font-mono text-emerald-800 font-semibold">
+                {savedSettlement?.id}
+              </span>
+            </div>
+          )}
+
+          {/* 2. FOUR KPI SUMMARY CARDS (TILL HERO) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* 1. Opening Cash Float */}
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-2xs space-y-1">
@@ -775,6 +855,189 @@ export default function DayEndSettlementPage() {
           </table>
         </div>
       </div>
+        </div>
+      )}
+
+      {/* TAB 2: SETTLEMENT HISTORY & AUDIT TRAIL */}
+      {activeTab === 'HISTORY' && (
+        <div className="space-y-4">
+          {/* History KPI Metrics Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+              <div className="text-[11px] font-mono text-slate-500 font-semibold uppercase">Total Closed Shifts</div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-0.5">{settlementHistory.length} Days</div>
+              <div className="text-[10px] text-slate-400 font-mono mt-0.5">Recorded till closures</div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+              <div className="text-[11px] font-mono text-slate-500 font-semibold uppercase">Total Cash Settled</div>
+              <div className="text-xl font-bold font-mono text-emerald-700 mt-0.5 tabular-nums">
+                {formatPaiseToRupees(
+                  settlementHistory.reduce((acc, s) => acc + BigInt(s.countedCashPaise || '0'), 0n)
+                )}
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono mt-0.5">Physical till cash tallied</div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+              <div className="text-[11px] font-mono text-slate-500 font-semibold uppercase">Bank Withdrawals / Payouts</div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-0.5 tabular-nums">
+                {formatPaiseToRupees(
+                  settlementHistory.reduce((acc, s) => acc + BigInt(s.withdrawnPaise || '0'), 0n)
+                )}
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono mt-0.5">Deposited to bank / owner safe</div>
+            </div>
+          </div>
+
+          {/* History Table Container */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+            {/* Toolbar */}
+            <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">
+                  Till Settlement Audit Records
+                </h3>
+                <span className="text-[11px] text-slate-400 font-mono">({settlementHistory.length} Records)</span>
+              </div>
+
+              {/* Status Filter Pills */}
+              <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs shadow-2xs">
+                {(['ALL', 'BALANCED', 'DISCREPANCY'] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setHistoryFilter(f)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      historyFilter === f
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {f === 'ALL' ? 'All Days' : f === 'BALANCED' ? 'Balanced' : 'Discrepancies'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-slate-50 text-[10px] font-semibold uppercase text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Settlement Date</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Closed By</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Expected (₹)</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Counted (₹)</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Variance (₹)</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Bank Payout (₹)</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Retained Float (₹)</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">UPI / Digital (₹)</th>
+                    <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-mono text-xs">
+                  {settlementHistory.filter((s) => {
+                    if (historyFilter === 'BALANCED') return s.status === 'BALANCED' || s.differencePaise === '0';
+                    if (historyFilter === 'DISCREPANCY') return s.status !== 'BALANCED' && s.differencePaise !== '0';
+                    return true;
+                  }).length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="py-12 text-center text-slate-400 font-sans">
+                        <div className="space-y-1.5 max-w-sm mx-auto">
+                          <Landmark className="w-8 h-8 text-slate-300 mx-auto" />
+                          <p className="font-semibold text-slate-700 text-xs">No settlement records found</p>
+                          <p className="text-[11px] text-slate-500">
+                            When cashiers count denominations and close the day, permanent audit slips are generated here.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    settlementHistory
+                      .filter((s) => {
+                        if (historyFilter === 'BALANCED') return s.status === 'BALANCED' || s.differencePaise === '0';
+                        if (historyFilter === 'DISCREPANCY') return s.status !== 'BALANCED' && s.differencePaise !== '0';
+                        return true;
+                      })
+                      .map((settle) => {
+                        const diff = BigInt(settle.differencePaise || '0');
+                        const isBalanced = diff === 0n;
+                        const isShort = diff < 0n;
+
+                        return (
+                          <tr key={settle.id || settle.date} className="hover:bg-slate-50 transition">
+                            <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
+                              {formatDateDisplay(settle.date)}
+                            </td>
+                            <td className="py-2.5 px-3 font-sans text-slate-600 whitespace-nowrap">
+                              {settle.closedByName || 'Counter Cashier'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                              {formatPaiseToRupees(BigInt(settle.expectedCashPaise || '0'))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold tabular-nums text-slate-900 whitespace-nowrap">
+                              {formatPaiseToRupees(BigInt(settle.countedCashPaise || '0'))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold tabular-nums whitespace-nowrap">
+                              <span className={isBalanced ? 'text-emerald-700' : isShort ? 'text-rose-600' : 'text-amber-700'}>
+                                {isBalanced ? '₹0.00 (Balanced)' : formatPaiseToRupees(diff)}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                              {formatPaiseToRupees(BigInt(settle.withdrawnPaise || '0'))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                              {formatPaiseToRupees(BigInt(settle.retainedFloatPaise || '0'))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-emerald-700 whitespace-nowrap">
+                              {formatPaiseToRupees(BigInt(settle.upiTotalPaise || '0'))}
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                                  isBalanced
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : isShort
+                                      ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                                }`}
+                              >
+                                {isBalanced ? 'BALANCED' : isShort ? 'SHORT' : 'OVER'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1.5 font-sans">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenPastSettlement(settle)}
+                                  className="h-7 px-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-[11px] rounded border border-slate-300 transition cursor-pointer shadow-2xs"
+                                  title="Open this date in the settlement workstation"
+                                >
+                                  Open Day
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewHistoryZReport(settle)}
+                                  className="h-7 px-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-[11px] rounded transition cursor-pointer shadow-2xs inline-flex items-center gap-1"
+                                  title="View and download Day-End Z-Report"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span className="hidden sm:inline">Z-Report</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 5. OFFICIAL DAY-END Z-REPORT PRINT PREVIEW & EXPORT MODAL */}
       <ZReportModal

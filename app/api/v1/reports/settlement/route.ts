@@ -126,6 +126,10 @@ export async function GET(req: NextRequest) {
       cashExpensesPaise: savedSettlement?.cashExpensesPaise || '0',
     };
 
+    const history = (localStore.getCashSettlements(targetTenantId) || []).sort(
+      (a: any, b: any) => (b.date || '').localeCompare(a.date || '')
+    );
+
     return NextResponse.json({
       success: true,
       date: targetDate,
@@ -133,6 +137,7 @@ export async function GET(req: NextRequest) {
       summary,
       invoices: dayInvoices,
       payments: dayPayments,
+      history,
     });
   } catch (error: any) {
     console.error('Error fetching settlement report:', error);
