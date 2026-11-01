@@ -1,6 +1,7 @@
 /**
  * TradeLedger Email Notification & OTP Dispatcher
  */
+import nodemailer from 'nodemailer';
 
 export interface SendEmailOptions {
   to: string;
@@ -37,7 +38,7 @@ export async function sendOtpEmail(to: string, otp: string, recipientName?: stri
             <h2 style="margin: 0 0 12px 0; font-size: 20px; color: #0f172a; font-weight: 700;">One-Time Verification Code</h2>
             <p style="margin: 0 0 24px 0; font-size: 14px; color: #64748b; line-height: 1.5;">
               Hello <strong style="color: #334155;">${displayName}</strong>,<br>
-              Use the 6-digit code below to securely log in to your account.
+              Use the 6-digit code below to securely verify your account and reset your password.
             </p>
 
             <!-- OTP Box -->
@@ -56,7 +57,7 @@ export async function sendOtpEmail(to: string, otp: string, recipientName?: stri
           <!-- Footer -->
           <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
             <p style="margin: 0; font-size: 11px; color: #94a3b8;">
-              If you did not request this login code, you can safely ignore this email.
+              If you did not request this code, you can safely ignore this email.
             </p>
           </div>
 
@@ -73,7 +74,37 @@ export async function sendOtpEmail(to: string, otp: string, recipientName?: stri
   console.log(`Time:    ${new Date().toLocaleTimeString()}`);
   console.log(`========================================\n`);
 
-  // 1. Try Resend API if API key provided (100 free emails/day, zero card needed)
+  // 1. Try Gmail / SMTP if configured (Works for ANY recipient email, NO custom domain required)
+  const gmailUser = process.env.GMAIL_USER || process.env.SMTP_USER;
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '').replace(/\s+/g, '');
+
+  if (gmailUser && gmailPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: gmailUser,
+          pass: gmailPass,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: process.env.EMAIL_FROM || `TradeLedger <${gmailUser}>`,
+        to,
+        subject,
+        html,
+        text: `Hello ${displayName},\n\nYour TradeLedger verification code is: ${otp}\n\nThis code expires in 10 minutes.`,
+      });
+
+      console.log(`✅ [GMAIL SMTP DELIVERED] Message ID: ${info.messageId} to ${to}`);
+      return { success: true };
+    } catch (smtpErr: any) {
+      console.warn('Gmail SMTP send error:', smtpErr?.message || smtpErr);
+      // Fall through to Resend or simulated dispatch if Gmail SMTP throws
+    }
+  }
+
+  // 2. Try Resend API if API key provided (Requires verified domain for non-owner recipients)
   const resendApiKey = process.env.RESEND_API_KEY;
   if (resendApiKey) {
     try {
@@ -103,6 +134,6 @@ export async function sendOtpEmail(to: string, otp: string, recipientName?: stri
     }
   }
 
-  // 2. Default fallback: Successful simulated dispatch
+  // 3. Default fallback: Successful simulated dispatch
   return { success: true };
 }
