@@ -33,18 +33,46 @@ export async function GET(
         });
 
         if (customer) {
+          const invoiceMap = new Map<string, string>();
+          for (const inv of customer.invoices) {
+            if (inv.id && inv.number) invoiceMap.set(inv.id, inv.number);
+          }
+
           const ledgerChronological = [...customer.ledgerEntries].reverse();
           let currentBalance = 0n;
           const ledgerWithRunning = ledgerChronological.map((entry: any) => {
             const d = entry.debit !== undefined ? BigInt(entry.debit) : BigInt(entry.debitPaise || 0);
             const c = entry.credit !== undefined ? BigInt(entry.credit) : BigInt(entry.creditPaise || 0);
             currentBalance = currentBalance + d - c;
+
+            // Resolve clean reference: avoid raw truncated UUIDs
+            let cleanRef = entry.refNumber || entry.refId || '-';
+            if (entry.refId && invoiceMap.has(entry.refId)) {
+              cleanRef = invoiceMap.get(entry.refId)!;
+            } else if (cleanRef && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(cleanRef)) {
+              const invMatch = entry.narration?.match(/INV\/\d{4}-\d{2}\/\d+/i) || entry.narration?.match(/#([A-Za-z0-9\/-]+)/);
+              if (invMatch) {
+                cleanRef = invMatch[1] || invMatch[0];
+              } else if (/cash/i.test(entry.narration || '')) {
+                cleanRef = 'CASH';
+              } else if (/upi/i.test(entry.narration || '')) {
+                cleanRef = 'UPI';
+              } else {
+                cleanRef = cleanRef.slice(0, 8);
+              }
+            }
+
+            // Clean narration: replace legacy Tax Invoice with Sales Bill
+            const cleanNarration = (entry.narration || '')
+              .replace(/Tax Invoice/gi, 'Sales Bill')
+              .trim();
+
             return {
               id: entry.id,
               date: entry.entryDate ? new Date(entry.entryDate).toISOString().split('T')[0] : entry.createdAt.toISOString().split('T')[0],
               type: entry.entryType,
-              refNo: entry.refId || entry.refNumber || '-',
-              narration: entry.narration,
+              refNo: cleanRef,
+              narration: cleanNarration,
               debitPaise: d.toString(),
               creditPaise: c.toString(),
               runningBalancePaise: currentBalance.toString(),
@@ -64,7 +92,7 @@ export async function GET(
               creditLimitPaise: customer.creditLimit.toString(),
               status: customer.status,
               termsDays: customer.paymentTermsDays,
-              onTimeRate: '94%',
+              onTimeRate: '94',
               relationshipDays: 120,
               aging: {
                 current: currentBalance > 0n ? currentBalance.toString() : '0',
@@ -125,7 +153,7 @@ export async function GET(
         creditLimitPaise: localCust.creditLimitPaise || '5000000',
         status: localCust.status,
         termsDays: localCust.termsDays,
-        onTimeRate: '92%',
+        onTimeRate: '92',
         relationshipDays: 180,
         aging: {
           current: localBal > 0n ? localBal.toString() : '0',

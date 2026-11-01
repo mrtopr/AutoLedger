@@ -334,13 +334,37 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     setTimeout(() => setCopiedRefId(null), 1800);
   };
 
-  const formatRefDisplay = (ref: string) => {
-    if (!ref) return '-';
-    if (ref.length > 20 && !ref.includes('/') && !ref.includes(' ')) {
-      return `${ref.slice(0, 8)}...${ref.slice(-4)}`;
+  // Date and Reference formatting helpers
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
     }
-    return ref;
   };
+
+  const getDisplayRef = (entry: LedgerItem) => {
+    if (!entry.refNo || entry.refNo === '-') {
+      if (entry.type === 'PAYMENT' || entry.type === 'RECEIPT') return 'CASH/UPI';
+      return '-';
+    }
+    // If narration has invoice number, prefer it
+    const invMatch = entry.narration?.match(/INV\/\d{4}-\d{2}\/\d+/i) || entry.narration?.match(/#([A-Za-z0-9\/-]+)/);
+    if (invMatch) return invMatch[1] || invMatch[0];
+
+    // If refNo is a UUID
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(entry.refNo)) {
+      if (/cash/i.test(entry.narration || '')) return 'CASH';
+      if (/upi/i.test(entry.narration || '')) return 'UPI';
+      return entry.refNo.slice(0, 8);
+    }
+    return entry.refNo;
+  };
+
+  const cleanOnTimeRate = customer?.onTimeRate ? String(customer.onTimeRate).replace(/%/g, '') : '94';
 
   const handlePreviewInvoice = (inv: any) => {
     const previewData: InvoicePreviewData = {
@@ -466,149 +490,59 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-16 px-1 sm:px-2">
-      {/* 1. TOP ACTION BAR */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-2xs">
-        {/* Left: Back Link */}
-        <Link
-          href="/customers"
-          className="text-xs text-slate-600 hover:text-slate-900 inline-flex items-center gap-1.5 font-medium transition self-start sm:self-auto group"
-        >
-          <ArrowLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition group-hover:-translate-x-0.5" />
-          <span>Back to Customer Directory</span>
-        </Link>
+      {/* 1. UNIFIED PROFESSIONAL ERP CUSTOMER ACCOUNT HEADER */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+        {/* Top: Identity & Primary Actions */}
+        <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100">
+          {/* Customer Title & Status */}
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-xs text-slate-500 mb-0.5">
+              <Link
+                href="/customers"
+                className="inline-flex items-center gap-1 font-medium hover:text-slate-900 transition text-slate-600"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Customer Directory</span>
+              </Link>
+              <span>/</span>
+              <span className="font-semibold text-slate-800 truncate">{customer.shopName || customer.name}</span>
+            </div>
 
-        {/* Right: Actions Group */}
-        <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
-          {/* Secondary Actions Dropdown */}
-          <div className="relative" ref={moreActionsRef}>
-            <button
-              type="button"
-              onClick={() => setIsMoreActionsOpen(!isMoreActionsOpen)}
-              className="h-8.5 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg border border-slate-300 transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-slate-300"
-              aria-label="More customer actions"
-              aria-expanded={isMoreActionsOpen}
-            >
-              <span>Actions</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${isMoreActionsOpen ? 'rotate-180' : ''}`} />
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                {customer.shopName || customer.name}
+              </h1>
 
-            {isMoreActionsOpen && (
-              <div className="absolute right-0 mt-1.5 w-56 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-40 text-xs text-slate-700 animate-in fade-in slide-in-from-top-1 duration-150">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMoreActionsOpen(false);
-                    setIsEditModalOpen(true);
-                  }}
-                  className="w-full px-3.5 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700 cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Edit Account Details</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMoreActionsOpen(false);
-                    setIsAddLedgerModalOpen(true);
-                  }}
-                  className="w-full px-3.5 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700 cursor-pointer"
-                >
-                  <BookPlus className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Add Manual Udhar / Entry</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMoreActionsOpen(false);
-                    setIsRazorpayModal(true);
-                  }}
-                  className="w-full px-3.5 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700 cursor-pointer"
-                >
-                  <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Generate Payment QR / Link</span>
-                </button>
-
-                <div className="my-1 border-t border-slate-100" />
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMoreActionsOpen(false);
-                    handleDeleteCustomer();
-                  }}
-                  className="w-full px-3.5 py-2 text-left hover:bg-rose-50 flex items-center gap-2.5 transition text-rose-600 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Delete Customer Account</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Secondary Primary Action: Record Payment */}
-          <button
-            type="button"
-            onClick={() => setIsPaymentModal(true)}
-            className="h-8.5 px-3.5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs rounded-lg transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-slate-900/30"
-          >
-            <CreditCard className="w-3.5 h-3.5" />
-            <span>Record Payment</span>
-          </button>
-
-          {/* Primary Action: New Bill (F2) */}
-          <Link
-            href={`/pos?customerId=${customer.id}`}
-            className="h-8.5 px-4 bg-[#C81E1E] hover:bg-[#A81818] text-white font-semibold text-xs rounded-lg transition inline-flex items-center gap-1.5 shadow-xs focus:outline-hidden focus:ring-2 focus:ring-red-500/40"
-          >
-            <Receipt className="w-3.5 h-3.5" />
-            <span>New Bill</span>
-            <kbd className="hidden sm:inline-block px-1 py-0.2 bg-red-900/40 text-red-100 rounded text-[10px] font-mono font-normal">F2</kbd>
-          </Link>
-        </div>
-      </div>
-
-      {/* 2. CUSTOMER IDENTITY & ACCOUNT BALANCE HEADER */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xs">
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
-          {/* Left: Customer Identity */}
-          <div className="space-y-3 flex-1 min-w-0">
-            <div>
-              <div className="flex flex-wrap items-center gap-2.5 mb-1">
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight break-words">
-                  {customer.shopName || customer.name}
-                </h1>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold uppercase border ${
+                  customer.status === 'GREEN'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : customer.status === 'YELLOW'
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
+                }`}
+              >
                 <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase border ${
-                    customer.status === 'GREEN'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      : customer.status === 'YELLOW'
-                        ? 'bg-amber-50 text-amber-800 border-amber-200'
-                        : 'bg-rose-50 text-rose-800 border-rose-200'
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    customer.status === 'GREEN' ? 'bg-emerald-600' : customer.status === 'YELLOW' ? 'bg-amber-600' : 'bg-rose-600'
                   }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      customer.status === 'GREEN' ? 'bg-emerald-600' : customer.status === 'YELLOW' ? 'bg-amber-600' : 'bg-rose-600'
-                    }`}
-                  />
-                  {customer.status || 'GREEN'} ACCOUNT
-                </span>
-                <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
-                  {customer.termsDays || 15}d Net Terms
-                </span>
-              </div>
+                />
+                {customer.status || 'GREEN'} ACCOUNT
+              </span>
+
+              <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">
+                {customer.termsDays || 15}d Net Terms
+              </span>
 
               {customer.shopName && customer.name && customer.shopName !== customer.name && (
-                <p className="text-xs text-slate-600 font-medium">
-                  Proprietor: <span className="font-semibold text-slate-800">{customer.name}</span>
-                </p>
+                <span className="text-xs text-slate-500 font-medium">
+                  Proprietor: <strong className="text-slate-700">{customer.name}</strong>
+                </span>
               )}
             </div>
 
-            {/* Contact & Tax Identification Strip */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 font-sans pt-1">
+            {/* Contact & Legal Tax Identifiers */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 pt-0.5">
               {customer.phone && (
                 <div className="inline-flex items-center gap-1.5 font-mono text-slate-800">
                   <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -619,7 +553,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               {customer.address && (
                 <div className="inline-flex items-center gap-1.5 text-slate-600">
                   <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="truncate max-w-sm sm:max-w-md">{customer.address}</span>
+                  <span className="truncate max-w-xs sm:max-w-md">{customer.address}</span>
                 </div>
               )}
 
@@ -630,257 +564,175 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             </div>
           </div>
 
-          {/* Right: Distinct Financial Overview Block */}
-          <div className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-4 sm:p-5 lg:min-w-[300px] text-left lg:text-right shadow-2xs">
-            <div className="flex items-center justify-between lg:justify-end gap-2 mb-1">
-              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold font-mono">
-                {isAdvance ? 'Advance Credit Surplus' : 'Account Balance (Khata)'}
-              </span>
-              <span
-                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                  isAdvance
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : isDue
-                      ? 'bg-rose-50 text-rose-700 border-rose-200'
-                      : 'bg-slate-100 text-slate-700 border-slate-200'
-                }`}
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 self-start lg:self-center shrink-0 flex-wrap">
+            {/* Secondary Actions Menu */}
+            <div className="relative" ref={moreActionsRef}>
+              <button
+                type="button"
+                onClick={() => setIsMoreActionsOpen(!isMoreActionsOpen)}
+                className="h-8.5 px-3 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded-lg border border-slate-300 transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-slate-300"
+                aria-label="More customer actions"
+                aria-expanded={isMoreActionsOpen}
               >
-                {isAdvance ? 'ADVANCE (Cr)' : isDue ? 'PENDING (Dr)' : 'SETTLED'}
-              </span>
+                <span>Actions</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${isMoreActionsOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isMoreActionsOpen && (
+                <div className="absolute right-0 mt-1.5 w-52 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-40 text-xs text-slate-700 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreActionsOpen(false);
+                      setIsEditModalOpen(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Edit Account Details</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreActionsOpen(false);
+                      setIsAddLedgerModalOpen(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700 cursor-pointer"
+                  >
+                    <BookPlus className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Add Manual Udhar / Entry</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreActionsOpen(false);
+                      setIsRazorpayModal(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700 cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Generate Payment QR / Link</span>
+                  </button>
+
+                  <div className="my-1 border-t border-slate-100" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreActionsOpen(false);
+                      handleDeleteCustomer();
+                    }}
+                    className="w-full px-3.5 py-2 text-left hover:bg-rose-50 flex items-center gap-2.5 transition text-rose-600 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Delete Customer Account</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            <div
-              className={`text-2xl sm:text-3xl font-bold font-mono tracking-tight tabular-nums ${
-                isAdvance ? 'text-emerald-700' : isDue ? 'text-rose-700' : 'text-slate-900'
-              }`}
+            {/* Record Payment */}
+            <button
+              type="button"
+              onClick={() => setIsPaymentModal(true)}
+              className="h-8.5 px-3.5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs rounded-lg transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer focus:outline-hidden"
             >
-              {formatPaiseToRupees(absBalance)}{' '}
-              <span className="text-xs font-bold font-sans">
-                {isAdvance ? 'Cr' : isDue ? 'Dr' : ''}
-              </span>
-            </div>
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Record Payment</span>
+            </button>
 
-            {/* Credit Limit & Utilization Indicator */}
-            <div className="mt-2.5 pt-2 border-t border-slate-200 text-xs text-slate-500 space-y-1.5">
-              <div className="flex items-center justify-between gap-3 text-[11px] font-mono">
-                <span>Credit Limit: <strong className="text-slate-700 font-semibold">{formatPaiseToRupees(creditLimit)}</strong></span>
-                <span className={isAdvance ? 'text-emerald-700 font-medium' : utilizationPct > 80 ? 'text-rose-600 font-bold' : 'text-slate-700'}>
-                  {isAdvance ? '0% Used' : `${utilizationPct}% Used`}
-                </span>
-              </div>
-              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-300 ${
-                    isAdvance
-                      ? 'bg-emerald-500 w-0'
-                      : utilizationPct > 90
-                        ? 'bg-rose-600'
-                        : utilizationPct > 70
-                          ? 'bg-amber-500'
-                          : 'bg-slate-700'
-                  }`}
-                  style={{ width: `${isAdvance ? 0 : Math.min(utilizationPct, 100)}%` }}
-                />
-              </div>
-            </div>
+            {/* New Bill (F2) */}
+            <Link
+              href={`/pos?customerId=${customer.id}`}
+              className="h-8.5 px-4 bg-[#C81E1E] hover:bg-[#A81818] text-white font-semibold text-xs rounded-lg transition inline-flex items-center gap-1.5 shadow-xs focus:outline-hidden"
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              <span>New Bill</span>
+              <kbd className="hidden sm:inline-block px-1 py-0.2 bg-red-900/40 text-red-100 rounded text-[10px] font-mono font-normal">F2</kbd>
+            </Link>
           </div>
         </div>
 
-        {/* 3. COMPACT EXPANDABLE CREDIT PROFILE */}
-        <div className="mt-5 pt-4 border-t border-slate-100">
-          <div className="bg-slate-50 border border-slate-200/90 rounded-xl overflow-hidden transition-all duration-200">
-            {/* Header / Summary Strip (Always Visible) */}
-            <div
-              onClick={() => setIsCreditProfileExpanded(!isCreditProfileExpanded)}
-              className="p-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-100/70 transition select-none"
-            >
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 bg-white border border-slate-200/90 rounded-lg px-2.5 py-1 shadow-2xs font-mono">
-                  <span className="text-[10px] uppercase font-semibold text-slate-500">B2B Score</span>
-                  <span className="text-sm font-bold text-slate-900">{creditScore.score}</span>
-                  <span className="text-[10px] text-slate-400">/900</span>
-                </div>
-
-                <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                    creditScore.color === 'emerald'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      : creditScore.color === 'blue'
-                        ? 'bg-blue-50 text-blue-800 border-blue-200'
-                        : creditScore.color === 'amber'
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-rose-50 text-rose-800 border-rose-200'
-                  }`}
-                >
-                  ★ {creditScore.ratingLabel} ({creditScore.rating})
+        {/* Bottom: Compact Integrated 1-Line Financial Summary Strip */}
+        <div className="bg-slate-50/80 px-4 py-3 sm:px-5 flex flex-wrap items-center justify-between gap-y-2 gap-x-6 text-xs">
+          {/* Main Financial Metrics */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            {/* Current Khata Balance */}
+            <div className="flex items-baseline gap-2">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold font-mono">
+                {isAdvance ? 'Advance Surplus:' : 'Khata Balance:'}
+              </span>
+              <span className={`text-base font-bold font-mono tabular-nums ${isAdvance ? 'text-emerald-700' : isDue ? 'text-rose-700' : 'text-slate-900'}`}>
+                {formatPaiseToRupees(absBalance)}{' '}
+                <span className="text-xs font-sans font-bold">
+                  {isAdvance ? '(Cr)' : isDue ? '(Dr)' : ''}
                 </span>
-
-                <div className="hidden md:flex items-center gap-2 text-xs text-slate-500">
-                  <span>•</span>
-                  <span>On-Time Rate: <strong className="text-slate-700 font-semibold">{customer.onTimeRate ? customer.onTimeRate : '90'}%</strong></span>
-                  <span>•</span>
-                  <span>Payment Terms: <strong className="text-slate-700 font-semibold">{customer.termsDays || 15} Days</strong></span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 self-end sm:self-auto">
-                <span className="text-[11px] text-slate-500">{isCreditProfileExpanded ? 'Hide Details' : 'View Full Credit Profile'}</span>
-                {isCreditProfileExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-slate-500" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-slate-500" />
-                )}
-              </div>
+              </span>
             </div>
 
-            {/* Expandable Details Drawer */}
-            {isCreditProfileExpanded && (
-              <div className="p-4 sm:p-5 border-t border-slate-200 bg-white space-y-4 animate-in fade-in slide-in-from-top-1 duration-150">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
-                    <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">Allowable Credit Limit</div>
-                    <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">{formatPaiseToRupees(creditLimit)}</div>
-                    <div className="text-[11px] text-slate-500 mt-1">Configured max counter credit allowance</div>
-                  </div>
+            <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
-                    <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">Current Limit Utilization</div>
-                    <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
-                      {isAdvance ? '0% (Advance Deposit)' : `${creditScore.utilizationPct}%`}
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1">
-                      {isAdvance ? 'Surplus funds in account' : `${formatPaiseToRupees(absBalance)} active khata balance`}
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
-                    <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">Billing & Khata Invoices</div>
-                    <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">{customerInvoices.length} Bills Issued</div>
-                    <div className="text-[11px] text-slate-500 mt-1">Double-entry recorded transactions</div>
-                  </div>
-                </div>
-
-                {/* Risk Drivers Pills */}
-                <div>
-                  <div className="text-xs font-semibold text-slate-700 mb-2">Algorithm Credit Evaluation Factors:</div>
-                  <div className="flex flex-wrap gap-2">
-                    {creditScore.drivers.map((driver, idx) => (
-                      <span
-                        key={idx}
-                        className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
-                          driver.type === 'POSITIVE'
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : driver.type === 'NEUTRAL'
-                              ? 'bg-slate-100 text-slate-700 border-slate-200'
-                              : 'bg-rose-50 text-rose-800 border-rose-200'
-                        }`}
-                      >
-                        {driver.type === 'POSITIVE' ? '✓ ' : driver.type === 'NEGATIVE' ? '⚠ ' : '• '}
-                        {driver.text}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 4. BALANCED FINANCIAL OVERVIEW & AGING VISUALIZATION */}
-        <div className="mt-5 pt-4 border-t border-slate-100 space-y-3.5">
-          {/* 4 Balanced KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold font-mono">Total Billed</div>
-              <div className="text-base sm:text-lg font-bold font-mono text-slate-900 mt-0.5 tabular-nums">
-                {formatPaiseToRupees(totalBilledPaise)}
-              </div>
-              <div className="text-[10px] text-slate-400 font-mono mt-0.5">Cumulative Debits</div>
+            {/* Total Billed */}
+            <div className="flex items-baseline gap-1.5 text-slate-600">
+              <span className="text-[11px] text-slate-500 font-mono">Billed:</span>
+              <span className="font-bold font-mono text-slate-900 tabular-nums">{formatPaiseToRupees(totalBilledPaise)}</span>
             </div>
 
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold font-mono">Total Paid</div>
-              <div className="text-base sm:text-lg font-bold font-mono text-emerald-700 mt-0.5 tabular-nums">
-                {formatPaiseToRupees(totalPaidPaise)}
-              </div>
-              <div className="text-[10px] text-slate-400 font-mono mt-0.5">Settled Payments</div>
+            <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
+            {/* Total Paid */}
+            <div className="flex items-baseline gap-1.5 text-slate-600">
+              <span className="text-[11px] text-slate-500 font-mono">Paid:</span>
+              <span className="font-bold font-mono text-emerald-700 tabular-nums">{formatPaiseToRupees(totalPaidPaise)}</span>
             </div>
 
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold font-mono">Current Balance</div>
-              <div className={`text-base sm:text-lg font-bold font-mono mt-0.5 tabular-nums ${isAdvance ? 'text-emerald-700' : isDue ? 'text-rose-700' : 'text-slate-900'}`}>
-                {formatPaiseToRupees(absBalance)} {isAdvance ? '(Cr)' : isDue ? '(Dr)' : ''}
-              </div>
-              <div className="text-[10px] text-slate-400 font-mono mt-0.5">{isAdvance ? 'Credit Surplus' : 'Outstanding'}</div>
-            </div>
+            <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold font-mono">Overdue Balance</div>
-              <div className={`text-base sm:text-lg font-bold font-mono mt-0.5 tabular-nums ${overduePaise > 0n ? 'text-rose-700' : 'text-emerald-700'}`}>
+            {/* Overdue */}
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[11px] text-slate-500 font-mono">Overdue:</span>
+              <span className={`font-bold font-mono tabular-nums ${overduePaise > 0n ? 'text-rose-600' : 'text-slate-700'}`}>
                 {formatPaiseToRupees(overduePaise)}
-              </div>
-              <div className="text-[10px] text-slate-400 font-mono mt-0.5">{overduePaise > 0n ? `${daysOverdue}d Past Terms` : 'No Overdue Dues'}</div>
+              </span>
+            </div>
+
+            <div className="h-4 w-px bg-slate-200 hidden md:block" />
+
+            {/* Credit Limit & Utilization */}
+            <div className="hidden md:flex items-baseline gap-1.5 text-slate-600 text-[11px] font-mono">
+              <span className="text-slate-500">Credit Limit:</span>
+              <span className="font-semibold text-slate-800">{formatPaiseToRupees(creditLimit)}</span>
+              <span className="text-slate-400">({isAdvance ? '0%' : `${utilizationPct}%`} used)</span>
             </div>
           </div>
 
-          {/* Aging Buckets: Horizontal Clean Presentation */}
-          <div>
-            {isAdvance ? (
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
-                <div className="flex items-center gap-2 text-emerald-800">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>
-                    <strong>Zero Overdue Dues:</strong> Account has an advance credit surplus of{' '}
-                    <strong className="font-mono font-bold text-emerald-700">
-                      {formatPaiseToRupees(absBalance)} (Cr)
-                    </strong>
-                    . Aging debt buckets are ₹0.00.
-                  </span>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider font-mono">
-                  100% Current Health
-                </span>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-slate-600 px-0.5">
-                  <span className="font-semibold uppercase tracking-wider text-[11px] text-slate-500 font-mono">Account Debt Aging Analysis</span>
-                  <span className="text-[11px] text-slate-500 font-mono">Terms: {customer.termsDays || 15} Days Net</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center">
-                    <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">0-30 Days (Current)</div>
-                    <div className="text-sm font-bold font-mono text-slate-900 mt-1 tabular-nums">
-                      {formatPaiseToRupees(currentAging)}
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center">
-                    <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">31-60 Days</div>
-                    <div className={`text-sm font-bold font-mono mt-1 tabular-nums ${days31to60 > 0n ? 'text-amber-700' : 'text-slate-900'}`}>
-                      {formatPaiseToRupees(days31to60)}
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center">
-                    <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">61-90 Days</div>
-                    <div className={`text-sm font-bold font-mono mt-1 tabular-nums ${days61to90 > 0n ? 'text-amber-800' : 'text-slate-900'}`}>
-                      {formatPaiseToRupees(days61to90)}
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center">
-                    <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">90+ Days (Critical)</div>
-                    <div className={`text-sm font-bold font-mono mt-1 tabular-nums ${days90Plus > 0n ? 'text-rose-700' : 'text-slate-900'}`}>
-                      {formatPaiseToRupees(days90Plus)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* B2B Credit Score & Terms */}
+          <div className="flex items-center gap-2 font-mono text-[11px]">
+            <span className="text-slate-500 font-medium">B2B Score:</span>
+            <span className="font-bold text-slate-900">{creditScore.score} / 900</span>
+            <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold font-sans">
+              {creditScore.rating} · {cleanOnTimeRate}% on-time
+            </span>
           </div>
         </div>
+
+        {/* Overdue Debt Aging breakdown ONLY IF overdue > 0 */}
+        {overduePaise > 0n && (
+          <div className="bg-rose-50/60 border-t border-rose-100 px-4 py-2 sm:px-5 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-rose-800 font-medium">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+              <span>Overdue Debt Aging ({daysOverdue}d past terms):</span>
+            </div>
+            <div className="flex items-center gap-3 font-mono text-[11px]">
+              <span>31-60d: <strong className="text-amber-700">{formatPaiseToRupees(days31to60)}</strong></span>
+              <span>61-90d: <strong className="text-amber-800">{formatPaiseToRupees(days61to90)}</strong></span>
+              <span>90+d: <strong className="text-rose-700">{formatPaiseToRupees(days90Plus)}</strong></span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 5. LEDGER NAVIGATION TABS */}
@@ -1036,12 +888,12 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                     return (
                       <tr key={entry.id} className="hover:bg-slate-50/80 transition group">
                         {/* Date */}
-                        <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
-                          {entry.date}
+                        <td className="py-2.5 px-3.5 text-slate-700 whitespace-nowrap font-medium">
+                          {formatDateDisplay(entry.date)}
                         </td>
 
                         {/* Type Badge */}
-                        <td className="py-3 px-3 whitespace-nowrap">
+                        <td className="py-2.5 px-3 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
                               entry.type === 'INVOICE'
@@ -1051,22 +903,22 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                                   : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}
                           >
-                            {entry.type}
+                            {entry.type === 'INVOICE' ? 'BILL' : entry.type}
                           </span>
                         </td>
 
                         {/* Reference No with Copy Action */}
-                        <td className="py-3 px-4 text-slate-800 font-semibold whitespace-nowrap">
+                        <td className="py-2.5 px-3.5 text-slate-900 font-semibold whitespace-nowrap">
                           <div className="inline-flex items-center gap-1.5">
-                            <span title={entry.refNo}>{formatRefDisplay(entry.refNo)}</span>
+                            <span title={entry.refNo}>{getDisplayRef(entry)}</span>
                             {entry.refNo && entry.refNo !== '-' && (
                               <button
                                 type="button"
-                                onClick={() => handleCopyRef(entry.refNo)}
+                                onClick={() => handleCopyRef(getDisplayRef(entry))}
                                 className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 transition p-0.5 rounded cursor-pointer"
                                 title="Copy reference"
                               >
-                                {copiedRefId === entry.refNo ? (
+                                {copiedRefId === getDisplayRef(entry) ? (
                                   <Check className="w-3 h-3 text-emerald-600" />
                                 ) : (
                                   <Copy className="w-3 h-3" />
@@ -1077,22 +929,22 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                         </td>
 
                         {/* Description / Narration */}
-                        <td className="py-3 px-4 text-slate-600 font-sans text-xs">
-                          {entry.narration || '-'}
+                        <td className="py-2.5 px-3.5 text-slate-600 font-sans text-xs">
+                          {entry.narration ? entry.narration.replace(/Tax Invoice/gi, 'Sales Bill') : '-'}
                         </td>
 
                         {/* Debit Amount */}
-                        <td className="py-3 px-4 text-right font-semibold text-rose-600 tabular-nums whitespace-nowrap">
+                        <td className="py-2.5 px-3.5 text-right font-semibold text-rose-600 tabular-nums whitespace-nowrap">
                           {debitAmt > 0n ? formatPaiseToRupees(debitAmt) : '-'}
                         </td>
 
                         {/* Credit Amount */}
-                        <td className="py-3 px-4 text-right font-semibold text-emerald-600 tabular-nums whitespace-nowrap">
+                        <td className="py-2.5 px-3.5 text-right font-semibold text-emerald-600 tabular-nums whitespace-nowrap">
                           {creditAmt > 0n ? formatPaiseToRupees(creditAmt) : '-'}
                         </td>
 
                         {/* Running Balance */}
-                        <td className={`py-3 px-4 text-right font-bold tabular-nums whitespace-nowrap ${isEntryAdvance ? 'text-emerald-700' : runBal > 0n ? 'text-rose-700' : 'text-slate-800'}`}>
+                        <td className={`py-2.5 px-3.5 text-right font-bold tabular-nums whitespace-nowrap ${isEntryAdvance ? 'text-emerald-700' : runBal > 0n ? 'text-rose-700' : 'text-slate-800'}`}>
                           {formatPaiseToRupees(absRunBal)}
                           {isEntryAdvance ? (
                             <span className="ml-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">Cr</span>
@@ -1238,7 +1090,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
                       return (
                         <tr key={inv.id} className={`transition ${isCancelled ? 'bg-rose-50/25 opacity-70' : 'hover:bg-slate-50/80'}`}>
-                          <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 font-bold text-slate-900 whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => handlePreviewInvoice(inv)}
@@ -1248,18 +1100,18 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                               <span>{inv.invoiceNumber}</span>
                             </button>
                           </td>
-                          <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{inv.date}</td>
-                          <td className="py-3 px-4 text-slate-600 font-sans">{inv.itemsCount || 1} items</td>
-                          <td className={`py-3 px-4 text-right font-bold tabular-nums whitespace-nowrap ${isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                          <td className="py-2.5 px-3.5 text-slate-700 whitespace-nowrap">{formatDateDisplay(inv.date)}</td>
+                          <td className="py-2.5 px-3.5 text-slate-600 font-sans">{inv.itemsCount || 1} items</td>
+                          <td className={`py-2.5 px-3.5 text-right font-bold tabular-nums whitespace-nowrap ${isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}`}>
                             {formatPaiseToRupees(total)}
                           </td>
-                          <td className="py-3 px-4 text-right font-semibold text-emerald-600 tabular-nums whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 text-right font-semibold text-emerald-600 tabular-nums whitespace-nowrap">
                             {formatPaiseToRupees(paid)}
                           </td>
-                          <td className="py-3 px-4 text-right font-bold text-rose-600 tabular-nums whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 text-right font-bold text-rose-600 tabular-nums whitespace-nowrap">
                             {formatPaiseToRupees(due)}
                           </td>
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
                             {isCancelled ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                 CANCELLED
@@ -1278,7 +1130,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5 font-sans">
                               <button
                                 type="button"
