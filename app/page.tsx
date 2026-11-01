@@ -22,6 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
+import QuickReceivePaymentModal from '@/app/components/QuickReceivePaymentModal';
 
 interface DailyTrend {
   day: string;
@@ -101,6 +102,7 @@ export default function DealershipDashboardPage() {
   const [overdueCustomers, setOverdueCustomers] = useState<OverdueCustomer[]>([]);
   const [lowStockParts, setLowStockParts] = useState<LowStockPart[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
+  const [isQuickPaymentModalOpen, setIsQuickPaymentModalOpen] = useState(false);
 
   // Keyboard shortcut listener (e.g. F2 for new bill)
   useEffect(() => {
@@ -376,7 +378,7 @@ export default function DealershipDashboardPage() {
 
         <button
           type="button"
-          onClick={() => router.push('/customers')}
+          onClick={() => setIsQuickPaymentModalOpen(true)}
           className="flex items-center gap-3 bg-white border border-[#E3E8EE] hover:border-[#AEB9C7] rounded-[12px] p-3 text-left font-bold text-[#12161C] shadow-2xs transition-all cursor-pointer group"
         >
           <i className="w-[34px] h-[34px] rounded-[9px] bg-[#EEF1F5] group-hover:bg-amber-50 text-slate-700 group-hover:text-amber-700 flex items-center justify-center not-italic transition-colors">
@@ -773,6 +775,17 @@ export default function DealershipDashboardPage() {
         isOpen={isPreviewModalOpen}
         onClose={() => setIsPreviewModalOpen(false)}
         invoice={selectedPreviewInvoice}
+      />
+
+      {/* Quick Receive Customer Payment Modal */}
+      <QuickReceivePaymentModal
+        isOpen={isQuickPaymentModalOpen}
+        onClose={() => setIsQuickPaymentModalOpen(false)}
+        onSuccess={() => {
+          fetchDashboardData();
+        }}
+        shopName={tenant?.name || 'Apex Trade & Wholesale'}
+        defaultUpiId={tenant?.upiId || 'tradeledger@okhdfcbank'}
       />
     </div>
   );
