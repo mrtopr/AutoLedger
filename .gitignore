@@ -44,3 +44,11 @@ Thumbs.db
 .planning/
 skills-lock.json
 
+
+# Database backups & snapshots
+backups/
+*.json.bak
+
+# Archival project specs & audit documentation
+Requirement_Doc/
+project_audit/
