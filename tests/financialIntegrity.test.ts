@@ -477,6 +477,12 @@ describe('FIX 06 — Financial Integrity, Concurrency, and Production Audit', ()
         tenantId: pgTenantId,
       } as any);
 
+      // Mock prisma.invoice.findFirst for pre-tx idempotency check
+      vi.spyOn(prismaModule.prisma.invoice, 'findFirst').mockResolvedValue(null);
+
+      // Mock prisma.auditLog.create for post-invoice audit trail
+      vi.spyOn(prismaModule.prisma.auditLog, 'create').mockResolvedValue({ id: 'audit-pg-01' } as any);
+
       // Mock prisma.product.findMany for tenant ownership validation
       vi.spyOn(prismaModule.prisma.product, 'findMany').mockResolvedValue([
         { id: pgProductId, tenantId: pgTenantId }

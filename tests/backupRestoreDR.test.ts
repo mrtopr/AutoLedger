@@ -77,6 +77,7 @@ describe('FIX 10 — Backup, Restore & Disaster Recovery Unit Tests', () => {
     it('never exports user passwords or totp secrets in backup payload', async () => {
       vi.spyOn(authModule, 'getAuthenticatedUser').mockResolvedValue(OWNER_USER);
       vi.spyOn(prismaModule, 'isPostgresAvailable').mockResolvedValue(true);
+      vi.spyOn(prismaModule.prisma.auditLog, 'create').mockResolvedValue({ id: 'audit-backup-01' } as any);
 
       const fakeTx = {
         tenant: { findUnique: vi.fn().mockResolvedValue({ id: TENANT_A, name: 'Honda Showroom' }) },
@@ -145,6 +146,7 @@ describe('FIX 10 — Backup, Restore & Disaster Recovery Unit Tests', () => {
     it('rejects restore payload if customer ID belongs to a different tenant in DB (409 collision)', async () => {
       vi.spyOn(authModule, 'getAuthenticatedUser').mockResolvedValue(OWNER_USER);
       vi.spyOn(prismaModule, 'isPostgresAvailable').mockResolvedValue(true);
+      vi.spyOn(prismaModule.prisma.auditLog, 'create').mockResolvedValue({ id: 'audit-backup-01' } as any);
 
       const foreignCustId = '22222222-2222-4000-8000-000000000009';
       vi.spyOn(prismaModule.prisma.customer, 'findFirst').mockResolvedValue({
@@ -168,8 +170,12 @@ describe('FIX 10 — Backup, Restore & Disaster Recovery Unit Tests', () => {
     it('rejects restore payload if invoice references non-existent customer (broken FK)', async () => {
       vi.spyOn(authModule, 'getAuthenticatedUser').mockResolvedValue(OWNER_USER);
       vi.spyOn(prismaModule, 'isPostgresAvailable').mockResolvedValue(true);
+      vi.spyOn(prismaModule.prisma.auditLog, 'create').mockResolvedValue({ id: 'audit-backup-01' } as any);
 
       vi.spyOn(prismaModule.prisma.customer, 'findFirst').mockResolvedValue(null);
+      vi.spyOn(prismaModule.prisma.invoice, 'findFirst').mockResolvedValue(null);
+      vi.spyOn(prismaModule.prisma.product, 'findFirst').mockResolvedValue(null);
+      vi.spyOn(prismaModule.prisma.payment, 'findFirst').mockResolvedValue(null);
 
       const missingCustId = '11111111-1111-4000-8000-000000000099';
       const req = createReq('http://localhost/api/v1/backup', 'POST', {
@@ -196,6 +202,7 @@ describe('FIX 10 — Backup, Restore & Disaster Recovery Unit Tests', () => {
     it('rolls back completely if a database error occurs during restore transaction', async () => {
       vi.spyOn(authModule, 'getAuthenticatedUser').mockResolvedValue(OWNER_USER);
       vi.spyOn(prismaModule, 'isPostgresAvailable').mockResolvedValue(true);
+      vi.spyOn(prismaModule.prisma.auditLog, 'create').mockResolvedValue({ id: 'audit-backup-01' } as any);
       vi.spyOn(prismaModule, 'getStorageMode').mockReturnValue('POSTGRES');
       vi.spyOn(prismaModule.prisma.customer, 'findFirst').mockResolvedValue(null);
 
