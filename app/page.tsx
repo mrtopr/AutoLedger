@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
@@ -18,6 +18,7 @@ import {
   Package,
   User,
   CheckCircle2,
+  CheckCircle,
   AlertCircle
 } from 'lucide-react';
 import InvoicePreviewModal, { InvoicePreviewData } from '@/app/components/InvoicePreviewModal';
@@ -93,9 +94,9 @@ export default function DealershipDashboardPage() {
   const [currentCollections, setCurrentCollections] = useState<number>(0);
   const [cashCollections, setCashCollections] = useState<number>(0);
   const [upiCollections, setUpiCollections] = useState<number>(0);
-  const [totalMarketUdhaar, setTotalMarketUdhaar] = useState<number>(3216);
+  const [totalMarketUdhaar, setTotalMarketUdhaar] = useState<number>(0);
   const [totalOverdue, setTotalOverdue] = useState<number>(0);
-  const [lowStockCount, setLowStockCount] = useState<number>(17118);
+  const [lowStockCount, setLowStockCount] = useState<number>(0);
   const [growthVsPreviousDay, setGrowthVsPreviousDay] = useState<string>('+0.0%');
   const [overdueCustomers, setOverdueCustomers] = useState<OverdueCustomer[]>([]);
   const [lowStockParts, setLowStockParts] = useState<LowStockPart[]>([]);
@@ -141,7 +142,7 @@ export default function DealershipDashboardPage() {
           setCurrentCollections(collRs);
           setCashCollections(cashRs);
           setUpiCollections(upiRs);
-          if (udhaarRs > 0) setTotalMarketUdhaar(udhaarRs);
+          setTotalMarketUdhaar(udhaarRs);
           setTotalOverdue(overdueRs);
           if (dashData.metrics.lowStockCount !== undefined) {
             setLowStockCount(dashData.metrics.lowStockCount);
@@ -159,11 +160,11 @@ export default function DealershipDashboardPage() {
             setDailyData(mappedTrends);
           }
 
-          if (Array.isArray(dashData.overdueCustomers) && dashData.overdueCustomers.length > 0) {
+          if (Array.isArray(dashData.overdueCustomers)) {
             setOverdueCustomers(dashData.overdueCustomers);
           }
 
-          if (Array.isArray(dashData.lowStockParts) && dashData.lowStockParts.length > 0) {
+          if (Array.isArray(dashData.lowStockParts)) {
             setLowStockParts(dashData.lowStockParts);
           }
         }
@@ -240,16 +241,35 @@ export default function DealershipDashboardPage() {
   const todayFormatted = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'short' }).format(new Date());
   const showroomLocation = tenant?.address ? tenant.address.split(',')[0].trim() : 'Honda counter';
 
-  // Fallback 7-day trend if API has no chart items
-  const chartDaysList = dailyData.length === 7 ? dailyData : [
-    { day: '25 Oct', date: '25 Oct', salesRupees: 0, collectionsRupees: 0, billCount: 0 },
-    { day: '26 Oct', date: '26 Oct', salesRupees: 0, collectionsRupees: 0, billCount: 0 },
-    { day: '27 Oct', date: '27 Oct', salesRupees: 0, collectionsRupees: 0, billCount: 0 },
-    { day: '28 Oct', date: '28 Oct', salesRupees: 0, collectionsRupees: 0, billCount: 0 },
-    { day: '29 Oct', date: '29 Oct', salesRupees: 18000, collectionsRupees: 14500, billCount: 4 },
-    { day: '30 Oct', date: '30 Oct', salesRupees: 24000, collectionsRupees: 6500, billCount: 5 },
-    { day: '31 Oct', date: '31 Oct', salesRupees: currentSales, collectionsRupees: currentCollections, billCount: recentInvoices.length },
-  ];
+  // Dynamic 7-day trend ending today
+  const chartDaysList = useMemo(() => {
+    if (dailyData.length === 7) return dailyData;
+    const days: DailyTrend[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayLabel = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      const matched = dailyData.find(item => item.day === dayLabel || item.date === dayLabel);
+      if (matched) {
+        days.push(matched);
+      } else {
+        days.push({
+          day: dayLabel,
+          date: dayLabel,
+          salesRupees: 0,
+          collectionsRupees: 0,
+          billCount: 0,
+        });
+      }
+    }
+    return days;
+  }, [dailyData]);
+
+  // Max value for scaling SVG bar heights
+  const maxChartVal = useMemo(() => {
+    const highest = Math.max(1, ...chartDaysList.map(d => Math.max(d.salesRupees, d.collectionsRupees)));
+    return highest;
+  }, [chartDaysList]);
 
   // Aging calculation buckets
   const agingBuckets = {
@@ -479,7 +499,7 @@ export default function DealershipDashboardPage() {
           </div>
 
           <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-[rgba(227,160,8,.14)] text-[#9A6700] w-fit">
-            {overdueCustomers.length > 0 ? `${overdueCustomers.length} accounts with balance` : '1 account with balance'}
+            {overdueCustomers.length > 0 ? `${overdueCustomers.length} accounts with balance` : '0 accounts with balance'}
           </span>
 
           <div className="flex h-2.5 rounded-[6px] overflow-hidden bg-[#EEF1F5] gap-[2px]" aria-label="Aging distribution">
@@ -523,7 +543,7 @@ export default function DealershipDashboardPage() {
           </div>
 
           <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-[#EEF1F5] text-[#3E4A5A] w-fit">
-            {recentInvoices.length > 0 ? `${recentInvoices.length} sales bills` : '9 sales bills'}
+            {recentInvoices.length > 0 ? `${recentInvoices.length} sales bills` : '0 sales bills'}
           </span>
 
           <p className="text-xs text-[#556273] font-medium m-0">
@@ -559,33 +579,70 @@ export default function DealershipDashboardPage() {
                 <line x1="0" y1="160" x2="640" y2="160" />
               </g>
 
-              {/* Dotted lines for days without sales */}
-              <g stroke="#CDD5DF" strokeWidth="1.5" strokeDasharray="3 5">
-                <line x1="32" y1="180" x2="68" y2="180" />
-                <line x1="122" y1="180" x2="158" y2="180" />
-                <line x1="212" y1="180" x2="248" y2="180" />
-                <line x1="302" y1="180" x2="338" y2="180" />
-                <line x1="572" y1="180" x2="608" y2="180" />
-              </g>
+              {/* Dynamic 7-day Bars and Baselines */}
+              {chartDaysList.map((d, idx) => {
+                const colWidth = 640 / 7;
+                const cx = Math.round((idx + 0.5) * colWidth);
+                const hasActivity = (d.salesRupees || 0) > 0 || (d.collectionsRupees || 0) > 0;
+                const salesH = (d.salesRupees || 0) > 0 ? Math.max(6, Math.min(130, Math.round(((d.salesRupees || 0) / maxChartVal) * 130))) : 0;
+                const collH = (d.collectionsRupees || 0) > 0 ? Math.max(6, Math.min(130, Math.round(((d.collectionsRupees || 0) / maxChartVal) * 130))) : 0;
 
-              {/* 29 Oct Bars */}
-              <rect x="392" y="140" width="22" height="40" rx="4" fill="#6B7F99" />
-              <rect x="420" y="146" width="22" height="34" rx="4" fill="#1A7F37" />
-
-              {/* 30 Oct Bars */}
-              <rect x="482" y="126" width="22" height="54" rx="4" fill="#6B7F99" />
-              <rect x="510" y="168" width="22" height="12" rx="4" fill="#1A7F37" />
-
-              {/* Date Labels on X-Axis */}
-              <g fontSize="12" fill="#556273" textAnchor="middle" fontFamily="inherit" fontWeight="600">
-                <text x="50" y="206">{chartDaysList[0]?.day || '25 Oct'}</text>
-                <text x="140" y="206">{chartDaysList[1]?.day || '26 Oct'}</text>
-                <text x="230" y="206">{chartDaysList[2]?.day || '27 Oct'}</text>
-                <text x="320" y="206">{chartDaysList[3]?.day || '28 Oct'}</text>
-                <text x="428" y="206">{chartDaysList[4]?.day || '29 Oct'}</text>
-                <text x="518" y="206">{chartDaysList[5]?.day || '30 Oct'}</text>
-                <text x="590" y="206">{chartDaysList[6]?.day || '31 Oct'}</text>
-              </g>
+                return (
+                  <g key={d.day || idx} className="group">
+                    {!hasActivity ? (
+                      <line
+                        x1={cx - 18}
+                        y1="180"
+                        x2={cx + 18}
+                        y2="180"
+                        stroke="#CDD5DF"
+                        strokeWidth="1.5"
+                        strokeDasharray="3 5"
+                      />
+                    ) : (
+                      <>
+                        {salesH > 0 && (
+                          <rect
+                            x={cx - 22}
+                            y={180 - salesH}
+                            width="20"
+                            height={salesH}
+                            rx="3"
+                            fill="#6B7F99"
+                            className="transition-opacity hover:opacity-80"
+                          >
+                            <title>{`${d.day}: Billed ₹${(d.salesRupees || 0).toLocaleString('en-IN')}`}</title>
+                          </rect>
+                        )}
+                        {collH > 0 && (
+                          <rect
+                            x={cx + 3}
+                            y={180 - collH}
+                            width="20"
+                            height={collH}
+                            rx="3"
+                            fill="#1A7F37"
+                            className="transition-opacity hover:opacity-80"
+                          >
+                            <title>{`${d.day}: Collected ₹${(d.collectionsRupees || 0).toLocaleString('en-IN')}`}</title>
+                          </rect>
+                        )}
+                      </>
+                    )}
+                    <text
+                      x={cx}
+                      y="206"
+                      fontSize="12"
+                      fill="#556273"
+                      textAnchor="middle"
+                      fontFamily="inherit"
+                      fontWeight="600"
+                    >
+                      {d.day}
+                    </text>
+                  </g>
+                );
+              })}
             </svg>
           </div>
 
@@ -604,9 +661,16 @@ export default function DealershipDashboardPage() {
           </div>
 
           {/* Alert callout chip */}
-          <div className="inline-flex items-center gap-1.5 rounded-[10px] p-3 text-xs font-bold bg-[rgba(227,160,8,.14)] text-[#9A6700] leading-snug">
-            {lowStockCount.toLocaleString('en-IN')} SKUs flagged below reorder level. This looks too high, so check the minimum-stock setting.
-          </div>
+          {lowStockCount > 0 ? (
+            <div className="inline-flex items-center gap-1.5 rounded-[10px] p-3 text-xs font-bold bg-[rgba(227,160,8,.14)] text-[#9A6700] leading-snug">
+              {lowStockCount.toLocaleString('en-IN')} {lowStockCount === 1 ? 'SKU' : 'SKUs'} flagged below reorder level. Review min-stock levels in inventory.
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 rounded-[10px] p-3 text-xs font-semibold bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7] leading-snug">
+              <CheckCircle className="w-4 h-4 text-[#16A34A] shrink-0" />
+              <span>All parts healthy. No items below reorder threshold.</span>
+            </div>
+          )}
 
           {/* Low stock part items */}
           <div className="divide-y divide-[#EDF0F4]">
@@ -619,35 +683,15 @@ export default function DealershipDashboardPage() {
                       {part.partNumber || 'SKU'} · min {part.reorderLevel || 10}
                     </div>
                   </div>
-                  <div className="font-mono font-bold text-[13px] text-[#12161C]">
+                  <div className={`font-mono font-bold text-[13px] ${part.stockQty <= 0 ? 'text-[#DC2626]' : 'text-[#D97706]'}`}>
                     {part.stockQty} left
                   </div>
                 </div>
               ))
             ) : (
-              <>
-                <div className="flex items-center justify-between py-2.5">
-                  <div>
-                    <div className="text-[13px] font-bold text-[#12161C]">[Part name]</div>
-                    <div className="text-xs text-[#5F6B7B] font-mono mt-0.5">[SKU] · min [n]</div>
-                  </div>
-                  <div className="font-mono font-bold text-[13px] text-[#12161C]">[n] left</div>
-                </div>
-                <div className="flex items-center justify-between py-2.5">
-                  <div>
-                    <div className="text-[13px] font-bold text-[#12161C]">[Part name]</div>
-                    <div className="text-xs text-[#5F6B7B] font-mono mt-0.5">[SKU] · min [n]</div>
-                  </div>
-                  <div className="font-mono font-bold text-[13px] text-[#12161C]">[n] left</div>
-                </div>
-                <div className="flex items-center justify-between py-2.5">
-                  <div>
-                    <div className="text-[13px] font-bold text-[#12161C]">[Part name]</div>
-                    <div className="text-xs text-[#5F6B7B] font-mono mt-0.5">[SKU] · min [n]</div>
-                  </div>
-                  <div className="font-mono font-bold text-[13px] text-[#12161C]">[n] left</div>
-                </div>
-              </>
+              <div className="py-6 text-center text-xs text-[#64748B]">
+                No low-stock parts requiring immediate reorder.
+              </div>
             )}
           </div>
         </article>
@@ -693,34 +737,9 @@ export default function DealershipDashboardPage() {
                 </div>
               ))
             ) : (
-              <div className="flex flex-wrap items-center gap-3 py-2">
-                <div className="flex-1 min-w-[140px]">
-                  <div className="text-[13px] font-bold text-[#12161C]">[Customer name]</div>
-                  <div className="text-xs text-[#5F6B7B] font-medium mt-0.5">
-                    Workshop · oldest due [n] days
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-[rgba(63,185,80,.14)] text-[#1A7F37]">
-                  Good standing
-                </span>
-                <div className="font-mono font-bold text-[14px] text-[#12161C]">
-                  ₹3,216
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSendReminder({
-                    id: 'sample',
-                    name: 'Customer',
-                    shopName: 'Customer Workshop',
-                    phone: '9822100000',
-                    balanceRupees: 3216,
-                    daysOverdue: 14,
-                    status: 'NORMAL'
-                  })}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[8px] bg-[#DDF4E4] hover:bg-[#cbf1d4] border border-[#A6DDB5] text-[#1A7F37] text-xs font-bold transition-all cursor-pointer"
-                >
-                  Remind on WhatsApp
-                </button>
+              <div className="py-4 px-3 text-center rounded-[10px] bg-[#F8FAFC] border border-[#E2E8F0]">
+                <p className="text-xs font-semibold text-[#475569] m-0">No overdue customer accounts</p>
+                <p className="text-[11px] text-[#94A3B8] m-0 mt-0.5">All customer accounts are settled or within allowed credit terms.</p>
               </div>
             )}
 

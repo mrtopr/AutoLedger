@@ -666,9 +666,22 @@ export default function QuickBillPosPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch (parseErr) {
+        console.error('Non-JSON response from /api/v1/invoices:', res.status, resText);
+        alert(
+          res.status === 401
+            ? 'Your session has expired. Please log in again.'
+            : `Billing server error (${res.status}). Please restart the dev server or check logs.`
+        );
+        return;
+      }
+
       if (!res.ok) {
-        alert(data.error || 'Failed to issue invoice');
+        alert(data?.error || `Failed to issue invoice (Status: ${res.status})`);
         return;
       }
 

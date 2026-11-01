@@ -115,7 +115,7 @@ export default function InvoicesPage() {
       cancelReason: inv.cancelReason,
       date: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today',
       time: inv.createdAt ? new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Now',
-      placeOfSupply: '27 - Maharashtra',
+      placeOfSupply: tenant?.stateCode || '27 - Maharashtra',
       customer: {
         id: inv.customerId,
         name: inv.customerName || inv.customer,

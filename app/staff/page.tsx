@@ -80,13 +80,20 @@ export default function StaffManagementPage() {
         const data = await res.json();
         if (data.staff && data.staff.length > 0) {
           setStaff(data.staff);
-        } else {
-          // Default initial team members if empty
+        } else if (currentUser) {
           setStaff([
-            { id: 'u1', name: 'Rajesh Sharma', phone: '9822012345', email: 'rajesh@royalautospares.com', role: 'OWNER', isActive: true, createdAt: new Date().toISOString() },
-            { id: 'u2', name: 'Amit Verma', phone: '9822054321', email: 'amit@royalautospares.com', role: 'MANAGER', isActive: true, createdAt: new Date().toISOString() },
-            { id: 'u3', name: 'Suresh Patil', phone: '9822098765', email: 'suresh@royalautospares.com', role: 'COUNTER_STAFF', isActive: true, createdAt: new Date().toISOString() },
+            {
+              id: currentUser.id || 'u1',
+              name: currentUser.name || 'Store Owner',
+              phone: currentUser.phone || '',
+              email: currentUser.email || null,
+              role: (currentUser.role as any) || 'OWNER',
+              isActive: true,
+              createdAt: new Date().toISOString(),
+            }
           ]);
+        } else {
+          setStaff([]);
         }
       }
     } catch (err) {

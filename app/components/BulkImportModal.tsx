@@ -7,27 +7,32 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   ArrowRight, 
-  ArrowLeft,
+  ArrowLeft, 
   X, 
   FileText, 
   Layers, 
   Sparkles, 
   Tag, 
-  HelpCircle,
-  Car,
-  Boxes,
-  Settings2,
-  Search,
-  Trash2,
-  CheckSquare,
-  Square,
-  RefreshCw,
-  PlusCircle,
-  Info,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  Table as TableIcon,
+  HelpCircle, 
+  Boxes, 
+  Settings2, 
+  Search, 
+  Trash2, 
+  CheckSquare, 
+  Square, 
+  RefreshCw, 
+  PlusCircle, 
+  Info, 
+  ChevronLeft, 
+  ChevronRight, 
+  Filter, 
+  Check, 
+  Building2, 
+  AlertCircle,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
   FolderTree
 } from 'lucide-react';
 import ClientPortal from './ClientPortal';
@@ -37,7 +42,7 @@ import {
   TallyParsedItem 
 } from '@/app/lib/tallyParser';
 
-// Fields that columns can be mapped to
+// Target field assignments for spreadsheet columns
 export type TargetField = 
   | 'NAME' 
   | 'PART_NUMBER' 
@@ -47,7 +52,7 @@ export type TargetField =
   | 'COST_PRICE' 
   | 'MRP' 
   | 'STOCK_QTY' 
-  | 'AMOUNT'
+  | 'AMOUNT' 
   | 'UNIT' 
   | 'GST_RATE' 
   | 'HSN_CODE' 
@@ -101,46 +106,57 @@ interface BulkImportModalProps {
   onSuccess: (count: number) => void;
 }
 
+type WizardStep = 1 | 2 | 3;
 type PreviewFilterType = 'ALL' | 'TO_SYNC' | 'NEW' | 'UPDATED' | 'UNCHANGED' | 'UNPRICED';
 
 export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalProps) {
-  const [activeTab, setActiveTab] = useState<'UPLOAD' | 'PASTE' | 'MAPPER' | 'PREVIEW' | 'GUIDE'>('UPLOAD');
+  // 3-Step Wizard Navigation State
+  const [currentStep, setCurrentStep] = useState<WizardStep>(1);
+  const [uploadMethod, setUploadMethod] = useState<'FILE' | 'PASTE'>('FILE');
+
+  // File & Raw Data State
   const [file, setFile] = useState<File | null>(null);
-  
-  // Raw 2D table extracted from file or clipboard
   const [rawTableRows, setRawTableRows] = useState<string[][]>([]);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
-  
-  // Tally Auto-Detection State
+  const [pasteText, setPasteText] = useState('');
+
+  // Tally & Parsed Result State
   const [tallyResult, setTallyResult] = useState<TallyParseResult | null>(null);
+  const [parsedRows, setParsedRows] = useState<ParsedProductRow[]>([]);
+  const [originalRows, setOriginalRows] = useState<ParsedProductRow[]>([]);
+
+  // Filtering & Pagination State (Step 2)
+  const [previewFilter, setPreviewFilter] = useState<PreviewFilterType>('ALL');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('ALL');
-  
-  // Default values for missing columns
+  const [previewSearch, setPreviewSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+
+  // Advanced Drawers (Column Mapper & Format Guide)
+  const [isColumnMapperOpen, setIsColumnMapperOpen] = useState(false);
+  const [isFormatGuideOpen, setIsFormatGuideOpen] = useState(false);
+
+  // Defaults for missing columns
   const [defaultBrand, setDefaultBrand] = useState('Standard');
   const [defaultCategory, setDefaultCategory] = useState('Automobile Spares');
   const [defaultGstPercent, setDefaultGstPercent] = useState('18');
-  
-  // Final preview parsed rows with interactive state
-  const [parsedRows, setParsedRows] = useState<ParsedProductRow[]>([]);
-  const [originalRows, setOriginalRows] = useState<ParsedProductRow[]>([]);
-  const [previewFilter, setPreviewFilter] = useState<PreviewFilterType>('ALL');
-  const [previewSearch, setPreviewSearch] = useState('');
-  const [previewViewMode, setPreviewViewMode] = useState<'TABLE' | 'GROUPS'>('TABLE');
-  const [groupSearchQuery, setGroupSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+
+  // Confirmation & Processing State (Step 3)
+  const [confirmAcknowledged, setConfirmAcknowledged] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
+  const [importCompleted, setImportCompleted] = useState(false);
+  const [syncedCountTotal, setSyncedCountTotal] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
-  
-  // Direct text paste state
-  const [pasteText, setPasteText] = useState('');
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Reset modal state when closed
   useEffect(() => {
     if (!isOpen) {
+      setCurrentStep(1);
+      setUploadMethod('FILE');
       setFile(null);
       setRawTableRows([]);
       setColumnMappings([]);
@@ -152,10 +168,16 @@ export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImpo
       setPasteText('');
       setSelectedGroupFilter('ALL');
       setPreviewFilter('ALL');
-      setActiveTab('UPLOAD');
+      setPreviewSearch('');
+      setIsColumnMapperOpen(false);
+      setIsFormatGuideOpen(false);
+      setConfirmAcknowledged(false);
+      setImportCompleted(false);
+      setSyncedCountTotal(0);
     }
   }, [isOpen]);
 
+  // Accessibility: Escape key handling
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -175,7 +197,8 @@ LED Headlight Bulb H4,15,599,480,LED-H4-35W,Philips,Electrical,18
 Drive V-Belt,20,380,310,BLT-ACT-99,Bando,Belts & Chains,18
 Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
 
-  const handleDownloadSample = () => {
+  const handleDownloadSample = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     const blob = new Blob([sampleCSV], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -187,22 +210,50 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
     URL.revokeObjectURL(url);
   };
 
-  // Dynamically load SheetJS for reading binary .xlsx / .xls files in browser
+  // Robust SheetJS loader: uses bundled npm package first, then local vendor script, then fallback CDNs
   const loadSheetJS = async (): Promise<any> => {
     if (typeof window !== 'undefined' && (window as any).XLSX) {
       return (window as any).XLSX;
     }
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
-      script.async = true;
-      script.onload = () => resolve((window as any).XLSX);
-      script.onerror = () => reject(new Error('Failed to load Excel parsing engine.'));
-      document.head.appendChild(script);
-    });
+
+    try {
+      const mod: any = await import('xlsx');
+      const resolved = mod?.read ? mod : (mod?.default || mod);
+      if (typeof window !== 'undefined') {
+        (window as any).XLSX = resolved;
+      }
+      return resolved;
+    } catch (bundleErr) {
+      console.warn('Bundled import of xlsx failed, attempting fallback loaders:', bundleErr);
+    }
+
+    const loadScript = (src: string): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => resolve((window as any).XLSX);
+        script.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(script);
+      });
+    };
+
+    try {
+      return await loadScript('/vendor/xlsx.full.min.js');
+    } catch {
+      try {
+        return await loadScript('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
+      } catch {
+        try {
+          return await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+        } catch {
+          throw new Error('Failed to load Excel parsing engine.');
+        }
+      }
+    }
   };
 
-  // Column name pattern match
+  // Column name pattern match for automatic column guessing
   const guessTargetField = (header: string, sampleVal: string): TargetField => {
     const h = (header ? String(header) : '').toLowerCase();
     if (h.includes('name') || h.includes('desc') || h.includes('item') || h.includes('particular')) return 'NAME';
@@ -340,10 +391,11 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
 
         setParsedRows(convertedRows);
         setOriginalRows(convertedRows);
-        setActiveTab('PREVIEW');
+        setCurrentStep(2);
       } else {
-        // Fallback to manual column mapper
-        setActiveTab('MAPPER');
+        // If Tally parser returned 0 items, open Step 2 with manual column mapper
+        setIsColumnMapperOpen(true);
+        setCurrentStep(2);
       }
     } catch (err: any) {
       console.error('Error processing table:', err);
@@ -489,7 +541,6 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
       let amountNum = amountCol ? parseFloat(cleanNum(row[amountCol.colIndex], '0')) || 0 : 0;
       let stock = stockCol ? parseInt(cleanNum(row[stockCol.colIndex], '0'), 10) || 0 : 0;
 
-      // Mathematical consistency & reconciliation:
       if (salePriceNum <= 0 && amountNum > 0 && stock > 0) {
         salePriceNum = Math.round((amountNum / stock) * 100) / 100;
       } else if (stock <= 0 && amountNum > 0 && salePriceNum > 0) {
@@ -558,18 +609,16 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
 
     setParsedRows(rows);
     setOriginalRows(rows);
-    setActiveTab('PREVIEW');
+    setIsColumnMapperOpen(false);
+    setCurrentStep(2);
   };
 
-  // ==========================================
-  // Interactive In-Place Editing & Deletion
-  // ==========================================
+  // Row update handlers
   const handleUpdateRowCell = (id: string, field: keyof ParsedProductRow, val: any) => {
     setParsedRows(prev => prev.map(r => {
       if (r.id !== id) return r;
       const updated = { ...r, [field]: val };
 
-      // Auto-recalculate amount when rate or quantity is edited
       if (field === 'stockQty' || field === 'salePriceRupees') {
         const q = field === 'stockQty' ? Number(val || 0) : r.stockQty;
         const p = field === 'salePriceRupees' ? parseFloat(val || '0') : parseFloat(r.salePriceRupees || '0');
@@ -577,7 +626,6 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
           updated.amountRupees = (q * p).toFixed(2);
         }
         if (field === 'salePriceRupees') {
-          // Keep MRP at least equal to Rate
           const currentMrp = parseFloat(r.mrpRupees || '0');
           if (isNaN(currentMrp) || currentMrp < p) {
             updated.mrpRupees = p > 0 ? (p * 1.25).toFixed(2) : '';
@@ -588,7 +636,6 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
         }
       }
 
-      // If user directly edits amount, recalculate rate if quantity exists
       if (field === 'amountRupees') {
         const amt = parseFloat(val || '0');
         if (!isNaN(amt) && amt > 0 && r.stockQty > 0) {
@@ -632,7 +679,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
   const handleCommitImport = async () => {
     const toImport = parsedRows.filter(r => r.isValid && r.isIncluded);
     if (toImport.length === 0) {
-      setErrorMsg('No items selected for sync. Please select at least one row using the checkboxes.');
+      setErrorMsg('No items selected for sync. Please select at least one row.');
       return;
     }
 
@@ -697,14 +744,15 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
         } catch (fetchErr: any) {
           clearTimeout(timeoutId);
           if (fetchErr.name === 'AbortError') {
-            throw new Error(`Batch ${Math.floor(i / CHUNK_SIZE) + 1} timed out. Your connection may be slow. Please try again.`);
+            throw new Error(`Batch ${Math.floor(i / CHUNK_SIZE) + 1} timed out. Please check your connection and retry.`);
           }
           throw fetchErr;
         }
       }
 
+      setSyncedCountTotal(totalSynced);
+      setImportCompleted(true);
       onSuccess(totalSynced);
-      onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to submit inventory feed.');
     } finally {
@@ -713,23 +761,20 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
     }
   };
 
-  // Filter rows for interactive preview
+  // Filter rows for Step 2 table
   const filteredPreview = useMemo(() => {
     return parsedRows.filter(r => {
-      // Group filter (e.g. ACCURA, AS, CASTROL)
       if (selectedGroupFilter !== 'ALL') {
         const itemGroup = r.groupHeading || r.brand || 'Uncategorized';
         if (itemGroup !== selectedGroupFilter) return false;
       }
 
-      // Status filter
       if (previewFilter === 'TO_SYNC' && !r.isIncluded) return false;
       if (previewFilter === 'NEW' && r.syncStatus !== 'NEW') return false;
       if (previewFilter === 'UPDATED' && r.syncStatus !== 'UPDATED') return false;
       if (previewFilter === 'UNCHANGED' && r.syncStatus !== 'UNCHANGED') return false;
       if (previewFilter === 'UNPRICED' && !r.isUnpriced) return false;
 
-      // Text search
       if (!previewSearch.trim()) return true;
       const q = previewSearch.toLowerCase();
       return Boolean(
@@ -744,7 +789,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
     });
   }, [parsedRows, selectedGroupFilter, previewFilter, previewSearch]);
 
-  // Available groups for clean dropdown and sidebar explorer
+  // Available groups for dropdown
   const availableGroups = useMemo(() => {
     const stats: Record<string, { count: number; totalValuation: number }> = {};
     for (const r of parsedRows) {
@@ -758,12 +803,6 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
     }
     return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
   }, [parsedRows]);
-
-  const filteredAvailableGroups = useMemo(() => {
-    if (!groupSearchQuery.trim()) return availableGroups;
-    const q = groupSearchQuery.toLowerCase();
-    return availableGroups.filter(([grp]) => grp.toLowerCase().includes(q));
-  }, [availableGroups, groupSearchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPreview.length / pageSize));
   const paginatedRows = useMemo(() => {
@@ -788,302 +827,501 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
 
   return (
     <ClientPortal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-        <div role="dialog" aria-modal="true" aria-labelledby="bulk-import-modal-title" className="bg-white border border-[#E2E8F0] rounded-2xl shadow-2xl max-w-7xl w-full h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-          
-          {/* Header */}
-          <div className="px-5 py-3 border-b border-[#E2E8F0] bg-[#F8F9FA] flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-red-50 text-[#C81E1E] border border-red-200 flex items-center justify-center font-bold shrink-0">
-                <FileSpreadsheet className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 id="bulk-import-modal-title" className="text-sm font-bold text-[#0F172A]">Tally Stock Summary & Inventory Feeder</h2>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <Sparkles className="w-3 h-3 text-emerald-600" />
-                    <span>Auto-Hierarchy & Smart Sync</span>
-                  </span>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+        <div 
+          role="dialog" 
+          aria-modal="true" 
+          aria-labelledby="bulk-import-modal-title" 
+          className="bg-white border-0 sm:border sm:border-slate-200 rounded-none sm:rounded-2xl shadow-2xl w-full max-w-6xl h-full sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+        >
+          {/* Top Bar: Title & Step Indicator */}
+          <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-red-50 text-[#C81E1E] border border-red-200 flex items-center justify-center font-bold shrink-0">
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
                 </div>
+                <h2 id="bulk-import-modal-title" className="text-sm font-bold text-slate-900">Import Inventory</h2>
+                <span className="text-xs text-slate-400">|</span>
+                <span className="text-xs text-slate-500 font-medium">Auto-Hierarchy & Smart Sync</span>
               </div>
             </div>
 
+            {/* Guided 3-Step Breadcrumb / Indicator */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {/* Step 1 */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentStep > 1 && !isProcessing) setCurrentStep(1);
+                }}
+                disabled={currentStep === 1 || isProcessing}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition ${
+                  currentStep === 1
+                    ? 'bg-[#C81E1E] text-white shadow-2xs'
+                    : currentStep > 1
+                      ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer'
+                      : 'text-slate-400'
+                }`}
+              >
+                <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${currentStep > 1 ? 'bg-emerald-600 text-white' : 'bg-white/20 text-white'}`}>
+                  {currentStep > 1 ? '✓' : '1'}
+                </span>
+                <span>Upload</span>
+              </button>
+
+              <span className="text-slate-300">→</span>
+
+              {/* Step 2 */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (parsedRows.length > 0 && !isProcessing) setCurrentStep(2);
+                }}
+                disabled={parsedRows.length === 0 || isProcessing}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition ${
+                  currentStep === 2
+                    ? 'bg-[#C81E1E] text-white shadow-2xs'
+                    : currentStep > 2
+                      ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer'
+                      : parsedRows.length > 0
+                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer'
+                        : 'text-slate-400'
+                }`}
+              >
+                <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${currentStep > 2 ? 'bg-emerald-600 text-white' : currentStep === 2 ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  {currentStep > 2 ? '✓' : '2'}
+                </span>
+                <span>Review & Correct</span>
+              </button>
+
+              <span className="text-slate-300">→</span>
+
+              {/* Step 3 */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (parsedRows.length > 0 && !isProcessing) setCurrentStep(3);
+                }}
+                disabled={parsedRows.length === 0 || isProcessing}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition ${
+                  currentStep === 3
+                    ? 'bg-[#C81E1E] text-white shadow-2xs'
+                    : 'text-slate-400'
+                }`}
+              >
+                <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${currentStep === 3 ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  3
+                </span>
+                <span>Confirm</span>
+              </button>
+            </div>
+
+            {/* Close Button */}
             <button
               type="button"
               aria-label="Close bulk import dialog"
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-[#64748B] hover:text-[#0F172A] hover:bg-slate-200 transition cursor-pointer"
+              disabled={isProcessing}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer disabled:opacity-40"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="px-5 border-b border-[#E2E8F0] bg-white flex items-center justify-between overflow-x-auto gap-2">
-            <div className="flex items-center space-x-1 sm:space-x-2 text-xs font-semibold py-1.5">
-              <button
-                onClick={() => setActiveTab('UPLOAD')}
-                className={`px-3 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'UPLOAD'
-                    ? 'bg-red-50 text-[#C81E1E] font-bold'
-                    : 'text-[#64748B] hover:text-[#0F172A] hover:bg-slate-50'
-                }`}
-              >
-                <UploadCloud className="w-3.5 h-3.5" />
-                <span>1. Upload Sheet</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('PASTE')}
-                className={`px-3 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'PASTE'
-                    ? 'bg-red-50 text-[#C81E1E] font-bold'
-                    : 'text-[#64748B] hover:text-[#0F172A] hover:bg-slate-50'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Quick Paste (Ctrl+V)</span>
-              </button>
-
-              {parsedRows.length > 0 && (
-                <button
-                  onClick={() => setActiveTab('PREVIEW')}
-                  className={`px-3 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
-                    activeTab === 'PREVIEW'
-                      ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-200'
-                      : 'text-[#64748B] hover:text-[#0F172A] hover:bg-slate-50'
-                  }`}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Interactive Preview ({parsedRows.length})</span>
-                </button>
-              )}
-
-              {rawTableRows.length > 0 && (
-                <button
-                  onClick={() => setActiveTab('MAPPER')}
-                  className={`px-3 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
-                    activeTab === 'MAPPER'
-                      ? 'bg-red-50 text-[#C81E1E] font-bold'
-                      : 'text-[#64748B] hover:text-[#0F172A] hover:bg-slate-50'
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Column Mapper</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => setActiveTab('GUIDE')}
-                className={`px-3 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'GUIDE'
-                    ? 'bg-blue-50 text-blue-700 font-bold'
-                    : 'text-[#64748B] hover:text-[#0F172A] hover:bg-slate-50'
-                }`}
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-                <span>Format Guide</span>
+          {/* Feedback & Error Alerts */}
+          {errorMsg && (
+            <div className="mx-5 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2 font-medium shrink-0 animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span className="flex-1">{errorMsg}</span>
+              <button onClick={() => setErrorMsg(null)} className="text-rose-500 hover:text-rose-800 cursor-pointer">
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
+          )}
 
-            {/* Template Download */}
-            <button
-              onClick={handleDownloadSample}
-              className="text-[11px] font-semibold text-slate-600 hover:text-[#C81E1E] transition underline cursor-pointer shrink-0 hidden sm:inline-block"
-            >
-              Download Sample CSV
-            </button>
-          </div>
+          {statusFeedback && (
+            <div className="mx-5 mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2 font-medium shrink-0 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{statusFeedback}</span>
+            </div>
+          )}
 
-          {/* Modal Body */}
-          <div className={`flex-1 p-3.5 sm:p-4 space-y-3 ${activeTab === 'PREVIEW' ? 'flex flex-col min-h-0 overflow-hidden' : 'overflow-y-auto'}`}>
-            
-            {/* Notifications / Alerts */}
-            {errorMsg && (
-              <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-xl text-xs text-[#B91C1C] flex items-center gap-2 font-medium animate-in fade-in">
-                <AlertTriangle className="w-4 h-4 text-[#EF4444] shrink-0" />
-                <span className="flex-1">{errorMsg}</span>
-                <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-700 cursor-pointer">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+          {/* ========================================================================= */}
+          {/* STEP 1: UPLOAD DATA                                                      */}
+          {/* ========================================================================= */}
+          {currentStep === 1 && (
+            <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-6 max-w-4xl mx-auto w-full">
+              {/* Header text */}
+              <div className="text-center space-y-1">
+                <h3 className="text-lg font-bold text-slate-900 tracking-tight">Upload Your Inventory Spreadsheet</h3>
+                <p className="text-xs text-slate-500 max-w-lg mx-auto">
+                  Drag and drop your spreadsheet or copy-paste directly from TallyPrime or Excel. TradeLedger automatically classifies groups, part numbers, and selling rates.
+                </p>
               </div>
-            )}
 
-            {statusFeedback && (
-              <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded-xl text-xs text-[#15803D] flex items-center gap-2 font-medium animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
-                <span>{statusFeedback}</span>
-              </div>
-            )}
-
-            {/* ======================================================== */}
-            {/* TAB 1: UPLOAD FILE                                       */}
-            {/* ======================================================== */}
-            {activeTab === 'UPLOAD' && (
-              <div className="space-y-4">
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-[#CBD5E1] hover:border-[#C81E1E] bg-[#F8F9FA] hover:bg-red-50/20 rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition flex flex-col items-center justify-center space-y-3 group"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <div className="w-14 h-14 rounded-2xl bg-white group-hover:bg-red-50 text-[#64748B] group-hover:text-[#C81E1E] border border-[#E2E8F0] group-hover:border-red-200 flex items-center justify-center transition shadow-2xs">
-                    <UploadCloud className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-[#0F172A] group-hover:text-[#C81E1E] transition">
-                      Click to browse or drag & drop your Tally / Excel inventory export here
-                    </div>
-                    <div className="text-xs text-[#64748B] mt-1 max-w-lg mx-auto">
-                      Directly handles <strong>TallyPrime Stock Summary</strong> spreadsheets, multi-level headers, and price sheets.
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] font-mono font-medium text-slate-500 pt-1">
-                    <span className="px-2 py-0.5 rounded bg-white border border-[#E2E8F0]">Tally Excel (.xlsx)</span>
-                    <span className="px-2 py-0.5 rounded bg-white border border-[#E2E8F0]">Excel 97-2003 (.xls)</span>
-                    <span className="px-2 py-0.5 rounded bg-white border border-[#E2E8F0]">CSV (.csv)</span>
-                  </div>
+              {/* Method Switcher */}
+              <div className="flex items-center justify-center">
+                <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('FILE')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
+                      uploadMethod === 'FILE'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <UploadCloud className="w-3.5 h-3.5 text-[#C81E1E]" />
+                    <span>Upload Spreadsheet (.xlsx, .csv)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('PASTE')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
+                      uploadMethod === 'PASTE'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Quick Paste (Ctrl+V)</span>
+                  </button>
                 </div>
-
-                {isProcessing && (
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
-                    <RefreshCw className="w-4 h-4 animate-spin text-[#C81E1E]" />
-                    <span>Analyzing Tally hierarchy, comparing with existing stock...</span>
-                  </div>
-                )}
               </div>
-            )}
 
-            {/* ======================================================== */}
-            {/* TAB 2: QUICK PASTE                                       */}
-            {/* ======================================================== */}
-            {activeTab === 'PASTE' && (
-              <div className="space-y-4">
-                <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-xl p-3 text-xs text-[#1E40AF] flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-bold">Instant Copy-Paste from Tally or Excel</div>
-                    <p className="text-[#3B82F6] mt-0.5">
-                      Copy rows directly from your open Tally screen or Excel sheet (<strong>Ctrl+C</strong>) and paste here (<strong>Ctrl+V</strong>).
-                    </p>
+              {/* Primary Dropzone */}
+              {uploadMethod === 'FILE' ? (
+                <div className="space-y-3">
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-300 hover:border-[#C81E1E] bg-slate-50/60 hover:bg-red-50/20 rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition flex flex-col items-center justify-center space-y-3 group"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <div className="w-16 h-16 rounded-2xl bg-white group-hover:bg-red-50 text-slate-500 group-hover:text-[#C81E1E] border border-slate-200 group-hover:border-red-200 flex items-center justify-center transition shadow-2xs">
+                      <UploadCloud className="w-8 h-8" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-bold text-slate-900 group-hover:text-[#C81E1E] transition">
+                        Click to browse or drag & drop inventory file here
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Supports Tally Stock Summary exports, Excel spreadsheets, and CSV price lists.
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] font-mono text-slate-500 pt-1">
+                      <span className="px-2.5 py-0.5 rounded-md bg-white border border-slate-200 font-medium">Tally Excel (.xlsx)</span>
+                      <span className="px-2.5 py-0.5 rounded-md bg-white border border-slate-200 font-medium">Excel 97-2003 (.xls)</span>
+                      <span className="px-2.5 py-0.5 rounded-md bg-white border border-slate-200 font-medium">Standard CSV (.csv)</span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-2">
+                  {file && (
+                    <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                        <span className="font-semibold text-slate-800">{file.name}</span>
+                        <span className="text-slate-400 font-mono text-[11px]">({(file.size / 1024).toFixed(1)} KB)</span>
+                      </div>
+                      {isProcessing && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#C81E1E]" />
+                          <span>Parsing inventory hierarchy...</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Quick Paste Textarea */
+                <div className="space-y-3">
                   <textarea
-                    rows={8}
+                    rows={9}
                     value={pasteText}
                     onChange={(e) => setPasteText(e.target.value)}
                     placeholder={`Particulars\tClosing Balance Qty\tRate\tValue\nACCURA\t\t\t14905.81\nACR.HLV,DIS 100 ( RED )\t\t\t\nACR.HLV, D-YUGA (BLK/GREY)\t1 PCS\t180.70\t180.70\nAS. 6003 BEARING\t9 PCS\t33.50\t301.50`}
-                    className="w-full p-3 font-mono text-xs bg-[#F8F9FA] border border-[#CBD5E1] rounded-xl focus:bg-white focus:border-[#C81E1E] outline-hidden transition resize-y"
+                    className="w-full p-4 font-mono text-xs bg-slate-50 border border-slate-300 rounded-2xl focus:bg-white focus:border-[#C81E1E] focus:ring-1 focus:ring-red-200 outline-hidden transition resize-y"
                   />
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-slate-500">
+                      Copy rows directly from open Tally screen or Excel table (Ctrl+C) and paste here.
+                    </p>
                     <button
+                      type="button"
                       onClick={handlePasteSubmit}
                       disabled={isProcessing || !pasteText.trim()}
-                      className="h-8 px-4 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      className="h-8.5 px-4 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <span>Analyze Pasted Data</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* Discreet Utility Links */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 text-xs text-slate-600">
+                <button
+                  type="button"
+                  onClick={handleDownloadSample}
+                  className="hover:text-[#C81E1E] underline transition cursor-pointer flex items-center gap-1"
+                >
+                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Download sample CSV template</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsFormatGuideOpen(!isFormatGuideOpen)}
+                  className="hover:text-slate-900 transition cursor-pointer flex items-center gap-1 text-slate-500"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{isFormatGuideOpen ? 'Hide format tips' : 'View Tally format guide'}</span>
+                </button>
               </div>
-            )}
 
-            {/* ======================================================== */}
-            {/* TAB 3: COLUMN MAPPER (Fallback)                          */}
-            {/* ======================================================== */}
-            {activeTab === 'MAPPER' && (
-              <div className="space-y-4">
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700">
-                  Assign each column manually if your spreadsheet does not follow standard Tally formatting:
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {columnMappings.map((col, idx) => (
-                    <div key={idx} className="p-3 border border-[#E2E8F0] rounded-xl bg-white space-y-1.5">
-                      <div className="text-[11px] font-bold text-[#0F172A] truncate" title={col.rawHeader}>
-                        {col.rawHeader}
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-mono truncate" title={col.sampleValue}>
-                        Sample: {col.sampleValue || '—'}
-                      </div>
-                      <select
-                        value={col.targetField}
-                        onChange={(e) => {
-                          const updated = [...columnMappings];
-                          updated[idx].targetField = e.target.value as TargetField;
-                          setColumnMappings(updated);
-                        }}
-                        className="w-full h-7 text-xs bg-slate-50 border border-slate-300 rounded-md px-2 font-medium"
-                      >
-                        <option value="NAME">Product Name / Particulars</option>
-                        <option value="STOCK_QTY">Quantity / Stock</option>
-                        <option value="MRP">MRP / List Price (₹)</option>
-                        <option value="SALE_PRICE">Selling Rate (₹)</option>
-                        <option value="AMOUNT">Total Amount / Value (₹)</option>
-                        <option value="COST_PRICE">Purchase / Cost Price (₹)</option>
-                        <option value="PART_NUMBER">Part / SKU Number</option>
-                        <option value="BRAND">Brand / Make</option>
-                        <option value="CATEGORY">Category</option>
-                        <option value="UNIT">Unit (PCS, NOS, SET)</option>
-                        <option value="GST_RATE">GST Rate (%)</option>
-                        <option value="HSN_CODE">HSN Code</option>
-                        <option value="IGNORE">— Ignore Column —</option>
-                      </select>
+              {/* Collapsible Format Guide Drawer */}
+              {isFormatGuideOpen && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 space-y-3 animate-in fade-in duration-150">
+                  <div className="font-bold text-slate-800">Tally & Excel Ingestion Guidelines</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-white border border-slate-200/80 rounded-lg">
+                      <div className="font-bold text-slate-800 mb-1">1. Auto-Hierarchy</div>
+                      <p className="text-[11px] text-slate-500">Parent rows with totals are detected as Brands / Stock Groups automatically.</p>
                     </div>
-                  ))}
+                    <div className="p-3 bg-white border border-slate-200/80 rounded-lg">
+                      <div className="font-bold text-slate-800 mb-1">2. Smart Deduplication</div>
+                      <p className="text-[11px] text-slate-500">Existing catalog products update only when rate or stock changed. Unchanged items are skipped.</p>
+                    </div>
+                    <div className="p-3 bg-white border border-slate-200/80 rounded-lg">
+                      <div className="font-bold text-slate-800 mb-1">3. Unpriced Items</div>
+                      <p className="text-[11px] text-slate-500">Items with blank prices or stock are queued for on-the-fly pricing during POS billing.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 2: REVIEW AND CORRECT                                               */}
+          {/* ========================================================================= */}
+          {currentStep === 2 && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden p-3.5 sm:p-5 space-y-3">
+              {/* Dataset Header Bar */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <Building2 className="w-4 h-4 text-slate-500" />
+                  <span className="font-bold text-slate-900 text-sm">
+                    {tallyResult?.companyTitle || file?.name || 'Inventory Dataset'}
+                  </span>
+                  {tallyResult?.dateRange && (
+                    <span className="text-[11px] font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {tallyResult.dateRange}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    ({parsedRows.length.toLocaleString('en-IN')} total extracted)
+                  </span>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={generatePreviewFromManualMappings}
-                    className="h-8 px-4 bg-[#C81E1E] hover:bg-[#A81818] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    type="button"
+                    onClick={() => setIsColumnMapperOpen(!isColumnMapperOpen)}
+                    className="h-7 px-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
                   >
-                    <span>Proceed to Interactive Preview</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <SlidersHorizontal className="w-3 h-3 text-slate-500" />
+                    <span>{isColumnMapperOpen ? 'Hide Column Settings' : 'Column Settings'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="h-7 px-2.5 text-xs text-slate-600 hover:text-slate-900 underline transition cursor-pointer"
+                  >
+                    Change File
                   </button>
                 </div>
               </div>
-            )}
 
-            {/* ======================================================== */}
-            {/* TAB 4: INTERACTIVE PREVIEW & CORRECTION (Main Engine)    */}
-            {/* ======================================================== */}
-            {activeTab === 'PREVIEW' && (
-              <div className="space-y-2.5 animate-in fade-in flex-1 flex flex-col min-h-0">
-                
-                {/* 1. Executive Top Bar: Company Info + Group Dropdown + View Switcher */}
-                <div className="bg-slate-50 border border-slate-200/90 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-sm">
-                      {tallyResult?.companyTitle || 'Tally Stock Summary'}
-                    </span>
-                    {tallyResult?.dateRange && (
-                      <span className="text-[11px] font-mono font-medium text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                        {tallyResult.dateRange}
-                      </span>
-                    )}
-                    <span className="text-[11px] font-mono text-slate-500 font-medium">
-                      ({parsedRows.length.toLocaleString('en-IN')} SKUs parsed)
-                    </span>
+              {/* Column Mapping Drawer (Optional / Collapsible) */}
+              {isColumnMapperOpen && (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 shrink-0 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Assign Column Mappings Manually:</span>
+                    <button
+                      type="button"
+                      onClick={generatePreviewFromManualMappings}
+                      className="h-7 px-3 bg-[#C81E1E] text-white rounded text-xs font-bold transition hover:bg-[#A81818]"
+                    >
+                      Re-apply Mappings
+                    </button>
                   </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                    {columnMappings.map((col, idx) => (
+                      <div key={idx} className="bg-white p-2 rounded-lg border border-slate-200 space-y-1">
+                        <div className="text-[11px] font-bold text-slate-800 truncate" title={col.rawHeader}>{col.rawHeader}</div>
+                        <select
+                          value={col.targetField}
+                          onChange={(e) => {
+                            const updated = [...columnMappings];
+                            updated[idx].targetField = e.target.value as TargetField;
+                            setColumnMappings(updated);
+                          }}
+                          className="w-full h-6 text-[11px] bg-slate-50 border border-slate-300 rounded px-1"
+                        >
+                          <option value="NAME">Product Name</option>
+                          <option value="STOCK_QTY">Quantity</option>
+                          <option value="MRP">MRP (₹)</option>
+                          <option value="SALE_PRICE">Selling Rate (₹)</option>
+                          <option value="AMOUNT">Amount (₹)</option>
+                          <option value="COST_PRICE">Cost Price (₹)</option>
+                          <option value="PART_NUMBER">Part / SKU</option>
+                          <option value="BRAND">Brand</option>
+                          <option value="CATEGORY">Category</option>
+                          <option value="UNIT">Unit</option>
+                          <option value="GST_RATE">GST %</option>
+                          <option value="HSN_CODE">HSN</option>
+                          <option value="IGNORE">Ignore</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                  <div className="flex items-center gap-2">
-                    {/* Group Filter Dropdown */}
-                    <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 shadow-2xs">
-                      <Filter className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-[11px] font-semibold text-slate-500">Group:</span>
+              {/* 4 Summary Metric Cards (Compact) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">Selected to Sync</div>
+                  <div className="text-base font-bold text-slate-900 font-mono mt-0.5">
+                    {includedCount.toLocaleString('en-IN')} <span className="text-xs font-normal text-slate-400">/ {parsedRows.length}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">New Products</div>
+                  <div className="text-base font-bold text-emerald-700 font-mono mt-0.5">
+                    +{newCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">Rate/Stock Updates</div>
+                  <div className="text-base font-bold text-amber-700 font-mono mt-0.5">
+                    {updateCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500 font-mono">Skipped (Unchanged)</div>
+                  <div className="text-base font-bold text-slate-600 font-mono mt-0.5">
+                    {unchangedCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter Tabs & Search Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white p-2.5 border border-slate-200 rounded-xl shrink-0">
+                {/* Filter Tabs */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                      previewFilter === 'ALL'
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>All</span>
+                    <span className="text-[10px] font-mono opacity-80">({parsedRows.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('TO_SYNC')}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                      previewFilter === 'TO_SYNC'
+                        ? 'bg-emerald-700 text-white shadow-2xs'
+                        : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                    }`}
+                  >
+                    <span>To Sync</span>
+                    <span className="text-[10px] font-mono opacity-80">({includedCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('NEW')}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                      previewFilter === 'NEW'
+                        ? 'bg-emerald-700 text-white shadow-2xs'
+                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <span>New</span>
+                    <span className="text-[10px] font-mono opacity-80">({newCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('UPDATED')}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                      previewFilter === 'UPDATED'
+                        ? 'bg-amber-600 text-white shadow-2xs'
+                        : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                    }`}
+                  >
+                    <span>Updates</span>
+                    <span className="text-[10px] font-mono opacity-80">({updateCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('UNCHANGED')}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                      previewFilter === 'UNCHANGED'
+                        ? 'bg-slate-700 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>Skipped</span>
+                    <span className="text-[10px] font-mono opacity-80">({unchangedCount})</span>
+                  </button>
+
+                  {unpricedCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFilter('UNPRICED')}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                        previewFilter === 'UNPRICED'
+                          ? 'bg-purple-700 text-white shadow-2xs'
+                          : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                      }`}
+                    >
+                      <span>Unpriced</span>
+                      <span className="text-[10px] font-mono opacity-80">({unpricedCount})</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Right controls: Optional Group Filter & Search */}
+                <div className="flex items-center gap-2">
+                  {availableGroups.length > 1 && (
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
+                      <FolderTree className="w-3 h-3 text-slate-400" />
                       <select
                         value={selectedGroupFilter}
                         onChange={(e) => setSelectedGroupFilter(e.target.value)}
-                        className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer max-w-[190px] truncate"
+                        className="bg-transparent font-medium text-slate-700 text-xs focus:outline-none max-w-[150px] truncate"
                       >
                         <option value="ALL">All Groups ({parsedRows.length})</option>
                         {availableGroups.map(([grp, data]) => (
@@ -1093,623 +1331,507 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
                         ))}
                       </select>
                     </div>
+                  )}
 
-                    {/* View Switcher: Table vs Groups */}
-                    <div className="flex items-center bg-slate-200/80 p-0.5 rounded-lg border border-slate-300">
-                      <button
-                        onClick={() => setPreviewViewMode('TABLE')}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                          previewViewMode === 'TABLE'
-                            ? 'bg-white text-slate-900 shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        <TableIcon className="w-3.5 h-3.5 text-[#C81E1E]" />
-                        <span>Table</span>
-                      </button>
-                      <button
-                        onClick={() => setPreviewViewMode('GROUPS')}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                          previewViewMode === 'GROUPS'
-                            ? 'bg-white text-slate-900 shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        <FolderTree className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Groups</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Unified Live Filter Chips + Search Toolbar */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 bg-white px-3 py-2 border border-slate-200 rounded-xl shrink-0">
-                  {/* Status Pills with Dynamic Counts */}
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <button
-                      onClick={() => setPreviewFilter('ALL')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                        previewFilter === 'ALL'
-                          ? 'bg-slate-900 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      <span>All</span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${previewFilter === 'ALL' ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-700'}`}>
-                        {parsedRows.length}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => setPreviewFilter('TO_SYNC')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                        previewFilter === 'TO_SYNC'
-                          ? 'bg-[#16A34A] text-white shadow-2xs'
-                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      <span>To Sync</span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${previewFilter === 'TO_SYNC' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                        {includedCount}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => setPreviewFilter('NEW')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                        previewFilter === 'NEW'
-                          ? 'bg-emerald-700 text-white shadow-2xs'
-                          : 'bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100'
-                      }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>New</span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${previewFilter === 'NEW' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                        +{newCount}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => setPreviewFilter('UPDATED')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                        previewFilter === 'UPDATED'
-                          ? 'bg-amber-600 text-white shadow-2xs'
-                          : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-                      }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      <span>Updates</span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${previewFilter === 'UPDATED' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-800'}`}>
-                        {updateCount}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => setPreviewFilter('UNCHANGED')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                        previewFilter === 'UNCHANGED'
-                          ? 'bg-slate-700 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                      <span>Skipped</span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${previewFilter === 'UNCHANGED' ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-700'}`}>
-                        {unchangedCount}
-                      </span>
-                    </button>
-
-                    {unpricedCount > 0 && (
-                      <button
-                        onClick={() => setPreviewFilter('UNPRICED')}
-                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                          previewFilter === 'UNPRICED'
-                            ? 'bg-purple-700 text-white shadow-2xs'
-                            : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                        <span>Unpriced</span>
-                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${previewFilter === 'UNPRICED' ? 'bg-purple-800 text-white' : 'bg-purple-100 text-purple-700'}`}>
-                          {unpricedCount}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Search Bar */}
-                  <div className="relative w-full lg:w-72">
+                  <div className="relative">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       value={previewSearch}
                       onChange={(e) => setPreviewSearch(e.target.value)}
-                      placeholder="Search items, models, brands..."
-                      className="w-full h-7.5 pl-8 pr-3 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-[#C81E1E] outline-hidden transition"
+                      placeholder="Search items..."
+                      className="h-8 pl-8 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-[#C81E1E] outline-hidden w-48 sm:w-56"
                     />
                   </div>
                 </div>
+              </div>
 
-                {/* 3. Batch Action & Counter Strip */}
-                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs shrink-0">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleSelectAll(true)}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 rounded-md border border-slate-200 transition cursor-pointer flex items-center gap-1"
-                    >
-                      <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Select All</span>
-                    </button>
-                    <button
-                      onClick={() => handleSelectAll(false)}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 rounded-md border border-slate-200 transition cursor-pointer flex items-center gap-1"
-                    >
-                      <Square className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Deselect All</span>
-                    </button>
-                    <button
-                      onClick={handleDeleteUnselected}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50 rounded-md border border-red-200 transition cursor-pointer flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                      <span>Delete Unselected</span>
-                    </button>
-                    <button
-                      onClick={handleResetToOriginal}
-                      className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer"
-                    >
-                      Reset Edits
-                    </button>
-                  </div>
-
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    Showing {filteredPreview.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredPreview.length)} of {filteredPreview.length} items
-                  </div>
+              {/* Selection Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAll(true)}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 rounded-md border border-slate-200 transition cursor-pointer flex items-center gap-1"
+                  >
+                    <CheckSquare className="w-3 h-3 text-emerald-600" />
+                    <span>Select All</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAll(false)}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 rounded-md border border-slate-200 transition cursor-pointer flex items-center gap-1"
+                  >
+                    <Square className="w-3 h-3 text-slate-400" />
+                    <span>Deselect All</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteUnselected}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition cursor-pointer flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3 h-3 text-rose-600" />
+                    <span>Delete Unselected</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetToOriginal}
+                    className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                  >
+                    Reset Edits
+                  </button>
                 </div>
 
-                {/* 4. Main Body: Split View (Group Explorer) OR Full-Width Table */}
-                <div className={`flex-1 min-h-0 ${previewViewMode === 'GROUPS' ? 'grid grid-cols-1 md:grid-cols-4 gap-3 items-stretch' : 'flex flex-col'}`}>
-                  
-                  {/* Left Sidebar: Groups & Brands (Shown only in Group Explorer mode) */}
-                  {previewViewMode === 'GROUPS' && (
-                    <div className="md:col-span-1 border border-slate-200 rounded-xl bg-white p-2.5 space-y-2 flex flex-col h-full shadow-2xs">
-                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <FolderTree className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Stock Groups ({availableGroups.length})</span>
-                        </span>
-                        <button
-                          onClick={() => setSelectedGroupFilter('ALL')}
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition ${
-                            selectedGroupFilter === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-                          }`}
-                        >
-                          All ({parsedRows.length})
-                        </button>
-                      </div>
+                <div className="text-[11px] text-slate-500 font-mono">
+                  Showing {filteredPreview.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredPreview.length)} of {filteredPreview.length} items
+                </div>
+              </div>
 
-                      <div className="relative">
-                        <Search className="w-3 h-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+              {/* Review Table (Paginated / Fast Scroll) */}
+              <div className="border border-slate-200 rounded-xl overflow-auto flex-1 min-h-0 bg-white shadow-2xs">
+                <table className="min-w-[1050px] w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 text-slate-600 text-[10px] uppercase font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-3 text-center w-10">
                         <input
-                          type="text"
-                          value={groupSearchQuery}
-                          onChange={(e) => setGroupSearchQuery(e.target.value)}
-                          placeholder="Search groups..."
-                          className="w-full h-7 pl-6 pr-2 text-[11px] bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:border-[#C81E1E] outline-hidden"
+                          type="checkbox"
+                          checked={paginatedRows.length > 0 && paginatedRows.every(r => r.isIncluded)}
+                          onChange={(e) => {
+                            const check = e.target.checked;
+                            setParsedRows(prev => prev.map(r => paginatedRows.some(pr => pr.id === r.id) ? { ...r, isIncluded: check } : r));
+                          }}
+                          className="rounded border-slate-300 text-[#C81E1E] focus:ring-0 cursor-pointer"
                         />
+                      </th>
+                      <th className="py-2.5 px-2 text-center w-24">Status</th>
+                      <th className="py-2.5 px-3 min-w-[300px]">Product Name (Click to edit)</th>
+                      <th className="py-2.5 px-2 min-w-[140px]">Group / Category</th>
+                      <th className="py-2.5 px-2 min-w-[100px]">Brand</th>
+                      <th className="py-2.5 px-2 text-center w-16">Stock</th>
+                      <th className="py-2.5 px-2 text-center w-14">Unit</th>
+                      <th className="py-2.5 px-2 text-right w-22">MRP (₹)</th>
+                      <th className="py-2.5 px-2 text-right w-22">Rate (₹)</th>
+                      <th className="py-2.5 px-2 text-right w-24">Amount (₹)</th>
+                      <th className="py-2.5 px-2 text-center w-12">Delete</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-mono">
+                    {paginatedRows.map((row) => (
+                      <tr 
+                        key={row.id} 
+                        className={`transition ${
+                          !row.isIncluded 
+                            ? 'bg-slate-50/70 opacity-40' 
+                            : row.syncStatus === 'UPDATED'
+                            ? 'bg-amber-50/20 hover:bg-amber-50/40'
+                            : row.syncStatus === 'NEW'
+                            ? 'hover:bg-emerald-50/20'
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <td className="py-2 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={row.isIncluded}
+                            onChange={() => handleToggleInclude(row.id)}
+                            className="rounded border-slate-300 text-[#C81E1E] focus:ring-0 cursor-pointer"
+                          />
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="py-2 px-2 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            {row.syncStatus === 'NEW' ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                New
+                              </span>
+                            ) : row.syncStatus === 'UPDATED' ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200" title={row.statusReason}>
+                                Update
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200" title={row.statusReason}>
+                                Skipped
+                              </span>
+                            )}
+                            {row.isUnpriced && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Unpriced item">
+                                Unpriced
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Product Name (Editable) */}
+                        <td className="py-1.5 px-3 font-sans">
+                          <input
+                            type="text"
+                            value={row.name}
+                            onChange={(e) => handleUpdateRowCell(row.id, 'name', e.target.value)}
+                            className="w-full text-xs font-medium text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1.5 py-0.5 outline-hidden transition"
+                          />
+                        </td>
+
+                        {/* Subcategory & Category (Editable) */}
+                        <td className="py-1.5 px-2 font-sans">
+                          <input
+                            type="text"
+                            value={row.subcategory || row.category}
+                            onChange={(e) => handleUpdateRowCell(row.id, 'subcategory', e.target.value)}
+                            className="w-full text-[11px] text-slate-700 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
+                          />
+                        </td>
+
+                        {/* Brand (Editable) */}
+                        <td className="py-1.5 px-2 font-sans">
+                          <input
+                            type="text"
+                            value={row.brand}
+                            onChange={(e) => handleUpdateRowCell(row.id, 'brand', e.target.value)}
+                            className="w-full text-[11px] font-semibold text-slate-700 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
+                          />
+                        </td>
+
+                        {/* Stock Qty (Editable) */}
+                        <td className="py-1.5 px-2 text-center">
+                          <input
+                            type="number"
+                            value={row.isUnpriced && row.stockQty === 0 ? '' : row.stockQty}
+                            placeholder={row.isUnpriced ? '—' : '0'}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              handleUpdateRowCell(row.id, 'stockQty', isNaN(val) ? 0 : val);
+                              if (!isNaN(val) && val > 0) {
+                                handleUpdateRowCell(row.id, 'isUnpriced', false);
+                              }
+                            }}
+                            className="w-14 text-center text-xs font-bold font-mono text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
+                          />
+                        </td>
+
+                        {/* Unit (Editable) */}
+                        <td className="py-1.5 px-2 text-center">
+                          <input
+                            type="text"
+                            value={row.unit}
+                            onChange={(e) => handleUpdateRowCell(row.id, 'unit', e.target.value.toLowerCase())}
+                            className="w-12 text-center text-[11px] font-mono text-slate-600 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
+                          />
+                        </td>
+
+                        {/* MRP (Editable) */}
+                        <td className="py-1.5 px-2 text-right">
+                          <input
+                            type="text"
+                            value={row.mrpRupees || ''}
+                            placeholder={row.isUnpriced ? '—' : '0.00'}
+                            onChange={(e) => handleUpdateRowCell(row.id, 'mrpRupees', e.target.value)}
+                            className="w-18 text-right text-xs font-mono text-slate-700 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition tabular-nums"
+                          />
+                        </td>
+
+                        {/* Rate (Editable) */}
+                        <td className="py-1.5 px-2 text-right">
+                          <input
+                            type="text"
+                            value={row.salePriceRupees || ''}
+                            placeholder={row.isUnpriced ? '—' : '0.00'}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              handleUpdateRowCell(row.id, 'salePriceRupees', v);
+                              if (parseFloat(v) > 0) {
+                                handleUpdateRowCell(row.id, 'isUnpriced', false);
+                              }
+                            }}
+                            className="w-18 text-right text-xs font-bold font-mono text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition tabular-nums"
+                          />
+                        </td>
+
+                        {/* Amount (Editable) */}
+                        <td className="py-1.5 px-2 text-right">
+                          <input
+                            type="text"
+                            value={row.amountRupees || ''}
+                            placeholder={row.isUnpriced ? '—' : '0.00'}
+                            onChange={(e) => handleUpdateRowCell(row.id, 'amountRupees', e.target.value)}
+                            className="w-20 text-right text-xs font-mono font-semibold text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100/50 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1.5 py-0.5 outline-hidden transition tabular-nums"
+                          />
+                        </td>
+
+                        {/* Delete Action */}
+                        <td className="py-1.5 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRow(row.id)}
+                            title="Remove row"
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {paginatedRows.length === 0 && (
+                      <tr>
+                        <td colSpan={11} className="py-12 text-center text-xs text-slate-400 font-sans">
+                          No product items match your search or filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-xs bg-slate-50 rounded-xl border border-slate-200 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-500 font-medium">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="h-7 text-xs font-semibold bg-white border border-slate-300 rounded-md px-2 focus:outline-hidden"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={250}>250</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                    className="h-7 px-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 transition flex items-center gap-1 font-semibold cursor-pointer shadow-2xs"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Previous</span>
+                  </button>
+                  <span className="px-2 text-[11px] font-mono text-slate-600">
+                    Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                    className="h-7 px-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 transition flex items-center gap-1 font-semibold cursor-pointer shadow-2xs"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 3: CONFIRM IMPORT                                                   */}
+          {/* ========================================================================= */}
+          {currentStep === 3 && (
+            <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-6 max-w-3xl mx-auto w-full">
+              {!importCompleted ? (
+                <>
+                  <div className="text-center space-y-1">
+                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Review & Confirm Synchronization</h3>
+                    <p className="text-xs text-slate-500">
+                      Verify the summary below before applying changes to your inventory catalog.
+                    </p>
+                  </div>
+
+                  {/* Summary Breakdown Card */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                    <div className="font-bold text-xs uppercase tracking-wider text-slate-600 font-mono">
+                      Ingestion Impact Summary
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 font-medium">New Products to Add:</span>
+                          <span className="font-bold font-mono text-emerald-700">+{newCount.toLocaleString('en-IN')}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">Fresh items not currently in catalog</p>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-50 text-xs">
-                        <button
-                          onClick={() => setSelectedGroupFilter('ALL')}
-                          className={`w-full text-left p-2 rounded-lg transition cursor-pointer flex items-center justify-between ${
-                            selectedGroupFilter === 'ALL'
-                              ? 'bg-red-50 text-[#C81E1E] border border-red-200 font-bold'
-                              : 'hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <span className="truncate">All Groups & Items</span>
-                          <span className="font-mono text-[10px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 shrink-0">
-                            {parsedRows.length}
-                          </span>
-                        </button>
+                      <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 font-medium">Existing Items to Update:</span>
+                          <span className="font-bold font-mono text-amber-700">{updateCount.toLocaleString('en-IN')}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">Stock quantity or rate changed in file</p>
+                      </div>
 
-                        {filteredAvailableGroups.map(([grp, data]) => (
-                          <button
-                            key={grp}
-                            onClick={() => setSelectedGroupFilter(grp)}
-                            className={`w-full text-left p-2 rounded-lg transition cursor-pointer flex items-center justify-between ${
-                              selectedGroupFilter === grp
-                                ? 'bg-red-50 text-[#C81E1E] border border-red-200 font-bold'
-                                : 'hover:bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            <div className="truncate pr-2">
-                              <div className="truncate font-semibold text-[11px]">{grp}</div>
-                              {data.totalValuation > 0 && (
-                                <div className="text-[10px] font-mono text-slate-400">
-                                  ₹{data.totalValuation.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                                </div>
-                              )}
-                            </div>
-                            <span className="font-mono text-[10px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 shrink-0">
-                              {data.count}
-                            </span>
-                          </button>
-                        ))}
+                      <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 font-medium">Unchanged Items Skipped:</span>
+                          <span className="font-bold font-mono text-slate-600">{unchangedCount.toLocaleString('en-IN')}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">Identical rate & stock already recorded</p>
+                      </div>
+
+                      <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 font-medium">Total Quantity to Sync:</span>
+                          <span className="font-bold font-mono text-slate-900">{totalUnits.toLocaleString('en-IN')} units</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Valuation: ₹{totalValuation.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+
+                    {unpricedCount > 0 && (
+                      <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-800 flex items-center gap-2">
+                        <Info className="w-4 h-4 text-purple-600 shrink-0" />
+                        <span>
+                          <strong>{unpricedCount} unpriced items</strong> will be added to the catalog so you can enter rates at the counter during sales.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Operational Safeguards & Consent */}
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="space-y-1 text-xs text-amber-900">
+                        <div className="font-bold">Catalog Synchronization Safeguard</div>
+                        <p className="text-amber-800 leading-relaxed text-[11px]">
+                          This action will apply updates to your store catalog in batches of 500 items. Inventory quantities and wholesale prices will be updated in your database.
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2.5 text-xs text-slate-800 pt-1 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={confirmAcknowledged}
+                        onChange={(e) => setConfirmAcknowledged(e.target.checked)}
+                        className="rounded border-slate-300 text-[#C81E1E] focus:ring-0 cursor-pointer w-4 h-4"
+                      />
+                      <span className="font-semibold">
+                        I have reviewed the summary and confirm syncing {includedCount.toLocaleString('en-IN')} items.
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Syncing Progress Bar */}
+                  {isProcessing && syncProgress && (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between text-xs text-slate-700 font-semibold font-mono">
+                        <span>Synchronizing items in batches...</span>
+                        <span>{syncProgress.current.toLocaleString()} / {syncProgress.total.toLocaleString()}</span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-[#C81E1E] h-full transition-all duration-300"
+                          style={{ width: `${Math.round((syncProgress.current / syncProgress.total) * 100)}%` }}
+                        />
                       </div>
                     </div>
                   )}
-
-                  {/* Right Main Column (or Full Width): Table */}
-                  <div className={`flex flex-col min-h-0 flex-1 ${previewViewMode === 'GROUPS' ? 'md:col-span-3' : 'w-full'}`}>
-                    
-                    {/* Interactive Paginated Data Table */}
-                    <div className="border border-[#E2E8F0] rounded-xl overflow-auto flex-1 min-h-0 bg-white shadow-2xs">
-                      <table className="min-w-[1150px] w-full text-left text-xs border-collapse">
-                        <thead className="sticky top-0 bg-[#F8F9FA] z-10 border-b border-[#E2E8F0]">
-                          <tr className="text-[#64748B] text-[10px] uppercase font-semibold">
-                            <th className="py-2.5 px-2 text-center w-10">
-                              <input
-                                type="checkbox"
-                                checked={paginatedRows.length > 0 && paginatedRows.every(r => r.isIncluded)}
-                                onChange={(e) => {
-                                  const check = e.target.checked;
-                                  setParsedRows(prev => prev.map(r => paginatedRows.some(pr => pr.id === r.id) ? { ...r, isIncluded: check } : r));
-                                }}
-                                className="rounded border-slate-300 text-[#C81E1E] focus:ring-0 cursor-pointer"
-                              />
-                            </th>
-                            <th className="py-2.5 px-2 text-center w-24">Status</th>
-                            <th className="py-2.5 px-3 min-w-[340px]">Product Name (Click to Edit)</th>
-                            <th className="py-2.5 px-2 min-w-[160px]">Subcategory / Category</th>
-                            <th className="py-2.5 px-2 min-w-[110px]">Brand</th>
-                            <th className="py-2.5 px-2 min-w-[160px]">Model</th>
-                            <th className="py-2.5 px-2 text-center w-16">Stock</th>
-                            <th className="py-2.5 px-2 text-center w-14">Unit</th>
-                            <th className="py-2.5 px-2 text-right w-22">MRP / Price (₹)</th>
-                            <th className="py-2.5 px-2 text-right w-22">Rate (₹)</th>
-                            <th className="py-2.5 px-2 text-right w-24">Amount (₹)</th>
-                            <th className="py-2.5 px-2 text-center w-12">Remove</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#E2E8F0] text-xs">
-                          {paginatedRows.map((row) => (
-                            <tr 
-                              key={row.id} 
-                              className={`transition ${
-                                !row.isIncluded 
-                                  ? 'bg-slate-50/70 opacity-50' 
-                                  : row.syncStatus === 'UPDATED'
-                                  ? 'bg-amber-50/30 hover:bg-amber-50/60'
-                                  : row.syncStatus === 'NEW'
-                                  ? 'hover:bg-[#F0FDF4]/30'
-                                  : 'hover:bg-slate-50'
-                              }`}
-                            >
-                              {/* Checkbox */}
-                              <td className="py-1.5 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={row.isIncluded}
-                                  onChange={() => handleToggleInclude(row.id)}
-                                  className="rounded border-slate-300 text-[#C81E1E] focus:ring-0 cursor-pointer"
-                                />
-                              </td>
-
-                              {/* Sync Action Badge */}
-                              <td className="py-1.5 px-2 text-center whitespace-nowrap">
-                                <div className="flex items-center justify-center gap-1">
-                                  {row.syncStatus === 'NEW' ? (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]">
-                                      New
-                                    </span>
-                                  ) : row.syncStatus === 'UPDATED' ? (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300" title={row.statusReason}>
-                                      Updated
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300" title={row.statusReason}>
-                                      Skipped
-                                    </span>
-                                  )}
-                                  {row.isUnpriced && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Unpriced item — rate entered during billing">
-                                      Unpriced
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-
-                              {/* Product Name (Editable) */}
-                              <td className="py-1.5 px-3">
-                                <input
-                                  type="text"
-                                  value={row.name}
-                                  title={row.name}
-                                  onChange={(e) => handleUpdateRowCell(row.id, 'name', e.target.value)}
-                                  className="w-full text-xs font-semibold text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1.5 py-0.5 outline-hidden transition"
-                                />
-                                {row.warnings.filter(w => !w.toLowerCase().includes('rate & qty missing')).length > 0 && (
-                                  <div className="text-[10px] text-amber-600 px-1.5 font-medium truncate">
-                                    {row.warnings.filter(w => !w.toLowerCase().includes('rate & qty missing')).join('; ')}
-                                  </div>
-                                )}
-                              </td>
-
-                              {/* Subcategory & Category (Editable) */}
-                              <td className="py-1.5 px-2">
-                                <input
-                                  type="text"
-                                  value={row.subcategory || row.category}
-                                  title={row.subcategory || row.category}
-                                  onChange={(e) => handleUpdateRowCell(row.id, 'subcategory', e.target.value)}
-                                  className="w-full text-[11px] font-medium text-slate-800 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
-                                />
-                              </td>
-
-                              {/* Brand (Editable) */}
-                              <td className="py-1.5 px-2">
-                                <input
-                                  type="text"
-                                  value={row.brand}
-                                  title={row.brand}
-                                  onChange={(e) => handleUpdateRowCell(row.id, 'brand', e.target.value)}
-                                  className="w-full text-[11px] font-semibold text-slate-800 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
-                                />
-                              </td>
-
-                              {/* Compatible Models (Editable) */}
-                              <td className="py-1.5 px-2">
-                                <input
-                                  type="text"
-                                  value={row.models.join(', ')}
-                                  title={row.models.join(', ')}
-                                  onChange={(e) => handleUpdateRowCell(row.id, 'models', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                                  className="w-full text-[11px] font-medium text-blue-700 bg-transparent hover:bg-blue-50/50 focus:bg-white focus:border-blue-400 border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
-                                />
-                              </td>
-
-                              {/* Stock Qty (Editable) */}
-                              <td className="py-1.5 px-2 text-center">
-                                <input
-                                  type="number"
-                                  value={row.isUnpriced && row.stockQty === 0 ? '' : row.stockQty}
-                                  placeholder={row.isUnpriced ? '—' : '0'}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10);
-                                    handleUpdateRowCell(row.id, 'stockQty', isNaN(val) ? 0 : val);
-                                    if (!isNaN(val) && val > 0) {
-                                      handleUpdateRowCell(row.id, 'isUnpriced', false);
-                                    }
-                                  }}
-                                  className="w-14 text-center text-xs font-bold font-mono text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
-                                />
-                              </td>
-
-                              {/* Unit (Editable) */}
-                              <td className="py-1.5 px-2 text-center">
-                                <input
-                                  type="text"
-                                  value={row.unit}
-                                  onChange={(e) => handleUpdateRowCell(row.id, 'unit', e.target.value.toLowerCase())}
-                                  className="w-12 text-center text-[11px] font-mono text-slate-600 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition"
-                                />
-                              </td>
-
-                              {/* MRP / Price (Editable) */}
-                              <td className="py-1.5 px-2 text-right">
-                                <input
-                                  type="text"
-                                  value={row.mrpRupees || ''}
-                                  placeholder={row.isUnpriced ? '—' : '0.00'}
-                                  onChange={(e) => handleUpdateRowCell(row.id, 'mrpRupees', e.target.value)}
-                                  className="w-18 text-right text-xs font-mono text-slate-700 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition tabular-nums"
-                                  title="Maximum Retail Price (Printed / MRP)"
-                                />
-                              </td>
-
-                              {/* Rate (Editable) */}
-                              <td className="py-1.5 px-2 text-right">
-                                <input
-                                  type="text"
-                                  value={row.salePriceRupees || ''}
-                                  placeholder={row.isUnpriced ? '—' : '0.00'}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    handleUpdateRowCell(row.id, 'salePriceRupees', v);
-                                    if (parseFloat(v) > 0) {
-                                      handleUpdateRowCell(row.id, 'isUnpriced', false);
-                                    }
-                                  }}
-                                  className="w-18 text-right text-xs font-bold font-mono text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1 py-0.5 outline-hidden transition tabular-nums"
-                                  title="Wholesale / Selling Rate"
-                                />
-                              </td>
-
-                              {/* Amount (Auto or Editable) */}
-                              <td className="py-1.5 px-2 text-right">
-                                <input
-                                  type="text"
-                                  value={row.amountRupees || ''}
-                                  placeholder={row.isUnpriced ? '—' : '0.00'}
-                                  onChange={(e) => handleUpdateRowCell(row.id, 'amountRupees', e.target.value)}
-                                  className="w-20 text-right text-xs font-mono font-semibold text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100/50 focus:bg-white focus:border-[#C81E1E] border border-transparent focus:border rounded px-1.5 py-0.5 outline-hidden transition tabular-nums"
-                                  title="Total Value (Stock × Rate)"
-                                />
-                              </td>
-
-                              {/* Delete Action */}
-                              <td className="py-1.5 px-2 text-center">
-                                <button
-                                  onClick={() => handleDeleteRow(row.id)}
-                                  title="Delete row from import batch"
-                                  className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-
-                          {paginatedRows.length === 0 && (
-                            <tr>
-                              <td colSpan={12} className="py-12 text-center text-xs text-slate-500">
-                                No items match your active filter or search criteria.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Pagination Navigation Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-xs bg-slate-50 rounded-xl border border-slate-200 shrink-0 mt-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-500 font-medium">Rows per page:</span>
-                        <select
-                          value={pageSize}
-                          onChange={(e) => {
-                            setPageSize(Number(e.target.value));
-                            setCurrentPage(1);
-                          }}
-                          className="h-7 text-xs font-semibold bg-white border border-slate-300 rounded-md px-2"
-                        >
-                          <option value={25}>25</option>
-                          <option value={50}>50</option>
-                          <option value={100}>100</option>
-                          <option value={250}>250</option>
-                        </select>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                          disabled={currentPage <= 1}
-                          className="h-7 px-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 transition flex items-center gap-1 font-semibold cursor-pointer shadow-2xs"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5" />
-                          <span>Previous</span>
-                        </button>
-                        <span className="px-2.5 text-[11px] font-mono text-slate-600">
-                          Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
-                        </span>
-                        <button
-                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                          disabled={currentPage >= totalPages}
-                          className="h-7 px-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 transition flex items-center gap-1 font-semibold cursor-pointer shadow-2xs"
-                        >
-                          <span>Next</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
+                </>
+              ) : (
+                /* Success State */
+                <div className="text-center py-8 space-y-4">
+                  <div className="w-16 h-16 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-xs">
+                    <CheckCircle2 className="w-8 h-8" />
                   </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* ======================================================== */}
-            {/* TAB 5: FORMAT GUIDE                                      */}
-            {/* ======================================================== */}
-            {activeTab === 'GUIDE' && (
-              <div className="space-y-4">
-                <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-xl p-3.5 text-xs text-[#1E40AF] flex items-start gap-3">
-                  <Sparkles className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <div className="font-bold">Automated TallyPrime Dissection & Synchronization</div>
-                    <p className="text-[#3B82F6] leading-relaxed">
-                      TradeLedger parses your detailed Tally Stock Summary directly without needing reformatting. It understands parent groups like <code>ACCURA</code>, sub-categories like <code>HLV</code> (Head Light Visor), vehicle models like <code>DIS 100</code>, and respects items with missing rates by queuing them for billing.
+                    <h3 className="text-lg font-bold text-slate-900">Import Successful!</h3>
+                    <p className="text-xs text-slate-600 max-w-md mx-auto">
+                      Successfully imported and updated <strong>{syncedCountTotal.toLocaleString('en-IN')} products</strong> into your TradeLedger inventory catalog.
                     </p>
+                  </div>
+                  <div className="pt-4">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="h-9 px-6 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                    >
+                      Done / View Inventory
+                    </button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="p-3.5 bg-white border border-[#E2E8F0] rounded-xl space-y-1">
-                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5 text-[#C81E1E]" />
-                      <span>1. Group Headings</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Parent rows like <code>ACCURA</code> or <code>AS</code> with total valuations are recognized as Brands & Groups, not products.
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 bg-white border border-[#E2E8F0] rounded-xl space-y-1">
-                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
-                      <span>2. Smart Deduplication</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      If an item is already present in TradeLedger, it updates only when rates or quantities change. Unchanged items are automatically skipped!
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 bg-white border border-[#E2E8F0] rounded-xl space-y-1">
-                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <PlusCircle className="w-3.5 h-3.5 text-purple-600" />
-                      <span>3. Missing Rates & Stock</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Items with blank rates or quantities are added as valid catalog items so you can assign prices on the fly during counter billing.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer Actions */}
-          <div className="px-5 py-3 border-t border-[#E2E8F0] bg-[#F8F9FA] flex items-center justify-between">
-            <div>
-              {activeTab === 'PREVIEW' && (
-                <button
-                  onClick={() => setActiveTab('UPLOAD')}
-                  className="h-8 px-3 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition flex items-center gap-1 cursor-pointer"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Choose Another File</span>
-                </button>
               )}
             </div>
+          )}
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onClose}
-                className="h-8 px-4 bg-white hover:bg-[#F8F9FA] text-[#475569] border border-[#CBD5E1] rounded-lg text-xs font-medium transition cursor-pointer"
-              >
-                Cancel
-              </button>
+          {/* Sticky Footer */}
+          {!importCompleted && (
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+              {/* Back / Cancel button */}
+              <div>
+                {currentStep === 1 ? (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isProcessing}
+                    className="h-8.5 px-4 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep((s) => (s - 1) as WizardStep)}
+                    disabled={isProcessing}
+                    className="h-8.5 px-3.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
+                )}
+              </div>
 
-              {activeTab === 'PREVIEW' ? (
-                <button
-                  onClick={handleCommitImport}
-                  disabled={isProcessing || includedCount === 0}
-                  className="h-8 px-5 bg-[#16A34A] hover:bg-[#15803D] disabled:opacity-60 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <CheckCircle2 className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>
-                    {isProcessing
-                      ? (syncProgress
-                          ? `Syncing ${syncProgress.current.toLocaleString()} / ${syncProgress.total.toLocaleString()}...`
-                          : 'Synchronizing...')
-                      : `Confirm & Sync (${includedCount.toLocaleString()} Items)`}
-                  </span>
-                </button>
-              ) : activeTab === 'MAPPER' ? (
-                <button
-                  onClick={generatePreviewFromManualMappings}
-                  className="h-8 px-5 bg-[#C81E1E] hover:bg-[#A81818] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <span>Preview Ingestion</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              ) : null}
+              {/* Primary Forward Action */}
+              <div>
+                {currentStep === 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (parsedRows.length > 0) setCurrentStep(2);
+                    }}
+                    disabled={parsedRows.length === 0 || isProcessing}
+                    className="h-8.5 px-5 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <span>Continue to Review</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                ) : currentStep === 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(3)}
+                    disabled={includedCount === 0 || isProcessing}
+                    className="h-8.5 px-5 bg-[#C81E1E] hover:bg-[#A81818] disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <span>Review & Confirm ({includedCount.toLocaleString('en-IN')})</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCommitImport}
+                    disabled={!confirmAcknowledged || includedCount === 0 || isProcessing}
+                    className="h-8.5 px-6 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <CheckCircle2 className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
+                    <span>
+                      {isProcessing
+                        ? 'Synchronizing Products...'
+                        : `Commit Import (${includedCount.toLocaleString('en-IN')} Items)`}
+                    </span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-
+          )}
         </div>
       </div>
     </ClientPortal>

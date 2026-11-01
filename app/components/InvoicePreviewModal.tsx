@@ -6,11 +6,7 @@ import {
   X,
   MessageCircle,
   FileText,
-  Phone,
-  MapPin,
-  CreditCard,
   Building2,
-  Mail,
   ShieldCheck,
   CheckCircle2,
   Download,
@@ -562,8 +558,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
               <div className="space-y-4 print:space-y-3">
                 {invoice.status === 'CANCELLED' && (
                   <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between print:bg-red-100 shadow-2xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+                    <div>
                       <span><strong>CANCELLED BILL:</strong> {invoice.cancelReason ? `Reason: ${invoice.cancelReason}` : 'This bill has been cancelled and reversed.'}</span>
                     </div>
                     <span className="font-mono text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded border border-red-200">
@@ -595,22 +590,13 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
                       )}
                     </div>
 
-                    <div className="text-[11px] text-slate-600 space-y-1 pt-0.5 leading-tight">
-                      <div className="flex items-center gap-1.5 text-slate-700">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{showroomAddress}</span>
-                      </div>
+                    <div className="text-[11px] text-slate-600 space-y-0.5 pt-0.5 leading-tight">
+                      <div>{showroomAddress}</div>
 
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-700">
-                        <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="font-mono font-medium">{showroomPhone}</span>
-                        </span>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-slate-700">
+                        <span>Tel: <strong className="font-mono font-medium text-slate-900">{showroomPhone}</strong></span>
                         {showroomEmail && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span>{showroomEmail}</span>
-                          </span>
+                          <span>Email: <span className="font-medium text-slate-900">{showroomEmail}</span></span>
                         )}
                         <span>
                           State: <strong className="font-semibold text-slate-900">{stateDisplay}</strong>
@@ -631,10 +617,15 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
                         <span className="font-mono font-black text-slate-900 text-xs sm:text-sm">{invoice.invoiceNumber}</span>
                       </div>
                       <div className="bg-[#F8FAFC] px-3 py-1.5 rounded-lg border border-slate-200 mt-1 inline-block text-left shadow-2xs">
-                        <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Date & Time:</div>
-                        <div className="font-mono font-bold text-slate-900 text-xs flex items-center gap-2 mt-0.5">
-                          <span>📅 {invoiceDate}</span>
-                          <span>🕒 {invoiceTime}</span>
+                        <div className="flex items-center gap-4 text-[11px] font-mono leading-tight">
+                          <div>
+                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-sans block">Date:</span>
+                            <span className="font-bold text-slate-900">{invoiceDate}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-sans block">Time:</span>
+                            <span className="font-bold text-slate-900">{invoiceTime}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -679,7 +670,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
                             ? 'bg-blue-50 text-blue-800 border-blue-200'
                             : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {creditBalance === 0n ? '● Fully Paid (Cash Receipt)' : paidNow > 0n ? '● Partially Paid' : '● Khata Balance Due'}
+                        {creditBalance === 0n ? 'Fully Paid (Cash Receipt)' : paidNow > 0n ? 'Partially Paid' : 'Khata Balance Due'}
                       </span>
                     </div>
                   </div>
@@ -759,9 +750,8 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
 
                     {/* Direct Bank Settlement */}
                     <div className="border border-slate-200 p-2.5 rounded-xl space-y-1 text-[10px] text-slate-600 bg-white shadow-2xs">
-                      <div className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px]">
-                        <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Direct Bank & UPI Settlement Details:</span>
+                      <div className="font-bold text-slate-900 text-[11px] uppercase tracking-wide">
+                        Direct Bank & UPI Settlement Details:
                       </div>
                       <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-slate-700">
                         <div>Bank: <span className="font-semibold text-slate-900">{bankName}</span></div>
@@ -813,15 +803,15 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
                       </div>
 
                       {cashPaid > 0n && (
-                        <div className="flex justify-between text-slate-600 text-[10px] pl-2">
-                          <span>• Cash Paid:</span>
+                        <div className="flex justify-between text-slate-600 text-[10px] pl-1">
+                          <span>Cash Paid:</span>
                           <span className="font-mono-numeric">{formatPaiseToRupees(cashPaid)}</span>
                         </div>
                       )}
 
                       {upiPaid > 0n && (
-                        <div className="flex justify-between text-slate-600 text-[10px] pl-2">
-                          <span>• UPI Paid:</span>
+                        <div className="flex justify-between text-slate-600 text-[10px] pl-1">
+                          <span>UPI Paid:</span>
                           <span className="font-mono-numeric">{formatPaiseToRupees(upiPaid)} {invoice.upiRef ? `(${invoice.upiRef})` : ''}</span>
                         </div>
                       )}
@@ -865,13 +855,9 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice }: Props)
                   </div>
                 </div>
 
-                {/* Footer Brand note */}
-                <div className="text-center flex flex-col items-center justify-center pt-3 border-t border-slate-100 mt-2 print-avoid-break">
-                  <div className="flex items-center justify-center gap-1.5 mb-1 opacity-60 mix-blend-multiply print:opacity-50">
-                    <span className="text-[9px] font-semibold tracking-widest text-slate-500 uppercase">POWERED BY</span>
-                    <img src="/logo.png" alt="TradeLedger" className="h-3.5 w-auto" />
-                  </div>
-                  <div className="text-[9px] text-slate-400 font-mono">
+                {/* Footer Note */}
+                <div className="text-center pt-3 border-t border-slate-100 mt-2 print-avoid-break">
+                  <div className="text-[9.5px] text-slate-400 font-mono">
                     Digitally generated sales bill & cash receipt. Physical signature not required.
                   </div>
                 </div>

@@ -160,10 +160,18 @@ export async function GET(req: NextRequest) {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
         sevenDaysAgo.setHours(0, 0, 0, 0);
 
+        const earliestDate = periodParam === 'all'
+          ? undefined
+          : periodParam === 'year'
+          ? (startOfCurrentYear < sevenDaysAgo ? startOfCurrentYear : sevenDaysAgo)
+          : periodParam === 'month'
+          ? (startOfCurrentMonth < sevenDaysAgo ? startOfCurrentMonth : sevenDaysAgo)
+          : sevenDaysAgo;
+
         const allRecentPayments = await prisma.payment.findMany({
           where: { 
             tenantId: targetTenantId, 
-            createdAt: { gte: sevenDaysAgo, lte: dayEnd } 
+            createdAt: earliestDate ? { gte: earliestDate, lte: dayEnd } : { lte: dayEnd }
           },
           select: { amount: true, mode: true, createdAt: true },
         });
@@ -173,7 +181,7 @@ export async function GET(req: NextRequest) {
           if (weekMap[pDate]) {
             weekMap[pDate].collPaise += p.amount;
           }
-          if (pDate === selectedDateStr) {
+          if (isMatchPeriod(new Date(p.createdAt), pDate)) {
             dayCollectedPaise += p.amount;
             if (p.mode === 'CASH') {
               dayCashPaise += p.amount;
@@ -187,7 +195,7 @@ export async function GET(req: NextRequest) {
         const allRecentInvoices = await prisma.invoice.findMany({
           where: { 
             tenantId: targetTenantId,
-            createdAt: { gte: sevenDaysAgo, lte: dayEnd },
+            createdAt: earliestDate ? { gte: earliestDate, lte: dayEnd } : { lte: dayEnd },
             status: { notIn: ['CANCELLED', 'DRAFT'] }
           },
           orderBy: { createdAt: 'desc' },
