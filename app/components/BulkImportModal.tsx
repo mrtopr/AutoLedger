@@ -144,7 +144,7 @@ export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImpo
   // Confirmation & Processing State (Step 3)
   const [confirmAcknowledged, setConfirmAcknowledged] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
+  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; statusText?: string } | null>(null);
   const [importCompleted, setImportCompleted] = useState(false);
   const [syncedCountTotal, setSyncedCountTotal] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -707,46 +707,93 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
         isUnpriced: r.isUnpriced,
       }));
 
-      // Chunk in batches of 500 for lightning-fast network requests & instant visual progress
-      const CHUNK_SIZE = 500;
+      // Chunk in batches of 100 for rapid network requests, sub-second latency & continuous progress
+      const CHUNK_SIZE = 100;
       let totalSynced = 0;
-      setSyncProgress({ current: 0, total: payloadItems.length });
+      const totalBatches = Math.ceil(payloadItems.length / CHUNK_SIZE);
+      setSyncProgress({ current: 0, total: payloadItems.length, statusText: `Starting sync of ${totalBatches} batches...` });
 
       for (let i = 0; i < payloadItems.length; i += CHUNK_SIZE) {
         const chunk = payloadItems.slice(i, i + CHUNK_SIZE);
+        const batchNum = Math.floor(i / CHUNK_SIZE) + 1;
         
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 35000);
+        let attempt = 0;
+        const maxRetries = 3;
+        let success = false;
+        let lastError: any = null;
 
-        try {
-          const res = await fetch('/api/v1/products/bulk-import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: chunk }),
-            signal: controller.signal,
-          });
-
-          clearTimeout(timeoutId);
-
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || `Server responded with status ${res.status}`);
+        while (attempt < maxRetries && !success) {
+          attempt++;
+          if (attempt > 1) {
+            setSyncProgress({
+              current: Math.min(i, payloadItems.length),
+              total: payloadItems.length,
+              statusText: `Retrying batch ${batchNum} of ${totalBatches} (attempt ${attempt}/${maxRetries})...`,
+            });
+          } else {
+            setSyncProgress({
+              current: Math.min(i, payloadItems.length),
+              total: payloadItems.length,
+              statusText: `Syncing batch ${batchNum} of ${totalBatches}...`,
+            });
           }
 
-          const data = await res.json();
-          const count = (data.importedCount || 0) + (data.updatedCount || 0);
-          totalSynced += count;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 45000);
 
-          setSyncProgress({
-            current: Math.min(i + chunk.length, payloadItems.length),
-            total: payloadItems.length,
-          });
-        } catch (fetchErr: any) {
-          clearTimeout(timeoutId);
-          if (fetchErr.name === 'AbortError') {
-            throw new Error(`Batch ${Math.floor(i / CHUNK_SIZE) + 1} timed out. Please check your connection and retry.`);
+          try {
+            const res = await fetch('/api/v1/products/bulk-import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ items: chunk }),
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (res.status === 429) {
+              const retryAfterHeader = res.headers.get('Retry-After');
+              const waitSec = Math.min(Math.max(parseInt(retryAfterHeader || '2', 10), 1), 5);
+              setSyncProgress({
+                current: Math.min(i, payloadItems.length),
+                total: payloadItems.length,
+                statusText: `Pacing requests, waiting ${waitSec}s before retrying batch ${batchNum}...`,
+              });
+              await new Promise((r) => setTimeout(r, waitSec * 1000));
+              continue;
+            }
+
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || `Server responded with status ${res.status}`);
+            }
+
+            const data = await res.json();
+            const count = (data.importedCount || 0) + (data.updatedCount || 0);
+            totalSynced += count;
+            success = true;
+
+            setSyncProgress({
+              current: Math.min(i + chunk.length, payloadItems.length),
+              total: payloadItems.length,
+              statusText: `Completed batch ${batchNum} of ${totalBatches}`,
+            });
+          } catch (fetchErr: any) {
+            clearTimeout(timeoutId);
+            lastError = fetchErr;
+
+            if (attempt < maxRetries) {
+              // Exponential backoff before retry (1.5s, 3s)
+              await new Promise((r) => setTimeout(r, 1500 * attempt));
+            }
           }
-          throw fetchErr;
+        }
+
+        if (!success) {
+          if (lastError?.name === 'AbortError') {
+            throw new Error(`Batch ${batchNum} of ${totalBatches} timed out after ${maxRetries} attempts. Please check your connection and retry.`);
+          }
+          throw lastError || new Error(`Batch ${batchNum} failed after ${maxRetries} attempts.`);
         }
       }
 
@@ -1725,7 +1772,7 @@ Clutch Cable Complete,30,165,120,CC-HON-110,Endurance,Control Cables,18`;
                   {isProcessing && syncProgress && (
                     <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                       <div className="flex items-center justify-between text-xs text-slate-700 font-semibold font-mono">
-                        <span>Synchronizing items in batches...</span>
+                        <span className="truncate max-w-[280px] sm:max-w-md">{syncProgress.statusText || 'Synchronizing items in batches...'}</span>
                         <span>{syncProgress.current.toLocaleString()} / {syncProgress.total.toLocaleString()}</span>
                       </div>
                       <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">

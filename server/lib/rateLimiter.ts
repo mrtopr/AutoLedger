@@ -9,7 +9,7 @@
  * 5. Standards-compliant HTTP 429 response metadata (Retry-After, X-RateLimit headers).
  */
 
-export type RateLimitTier = 'AUTH' | 'RESOURCE' | 'GENERAL';
+export type RateLimitTier = 'AUTH' | 'RESOURCE' | 'GENERAL' | 'SYNC';
 
 export interface RateLimitConfig {
   maxRequests: number;
@@ -39,6 +39,10 @@ export const TIER_CONFIGS: Record<RateLimitTier, RateLimitConfig> = {
   GENERAL: {
     maxRequests: parseInt(process.env.RATE_LIMIT_GENERAL_MAX || '120', 10),
     windowSeconds: parseInt(process.env.RATE_LIMIT_GENERAL_WINDOW_SEC || '60', 10),
+  },
+  SYNC: {
+    maxRequests: parseInt(process.env.RATE_LIMIT_SYNC_MAX || '300', 10),
+    windowSeconds: parseInt(process.env.RATE_LIMIT_SYNC_WINDOW_SEC || '60', 10),
   },
 };
 
@@ -78,12 +82,18 @@ export function classifyPathTier(pathname: string): RateLimitTier {
     return 'AUTH';
   }
 
-  // 2. Resource-intensive queries, exports, bulk mutations, and payment links
+  // 2. High-volume inventory & data sync endpoints (generous ceiling for batch mutations)
+  if (
+    pathname.startsWith('/api/v1/products/bulk-import') ||
+    pathname.startsWith('/api/v1/customers/bulk-opening-balance')
+  ) {
+    return 'SYNC';
+  }
+
+  // 3. Resource-intensive exports, system operations, and bulk deletions
   if (
     pathname.startsWith('/api/v1/backup') ||
-    pathname.startsWith('/api/v1/products/bulk-import') ||
     pathname.startsWith('/api/v1/products/bulk-delete') ||
-    pathname.startsWith('/api/v1/customers/bulk-opening-balance') ||
     pathname.startsWith('/api/v1/reports/settlement') ||
     pathname.startsWith('/api/v1/payments/razorpay/link')
   ) {

@@ -247,27 +247,30 @@ export async function executeCloudSync(
         },
       });
 
-      for (const up of dbProductsToUpdate) {
-        try {
-          await prisma.product.update({
-            where: { id: up.id },
-            data: {
-              isActive: true,
-              salePrice: up.salePrice,
-              purchasePrice: up.purchasePrice,
-              mrp: up.mrp,
-              reorderLevel: up.reorderLevel,
-              ...(up.partNumber ? { partNumber: up.partNumber } : {}),
-              ...(up.brand ? { brand: up.brand } : {}),
-              ...(up.category ? { category: up.category } : {}),
-              ...(up.unit ? { unit: up.unit } : {}),
-              ...(up.hsnCode ? { hsnCode: up.hsnCode } : {}),
-              ...(up.gstRateBp ? { gstRateBp: up.gstRateBp } : {}),
-            },
-          });
-        } catch {
-          // ignore single item update error
-        }
+      // Update product attributes in concurrent batches of 20 to prevent sequential network bottleneck
+      const UPDATE_BATCH_SIZE = 20;
+      for (let k = 0; k < dbProductsToUpdate.length; k += UPDATE_BATCH_SIZE) {
+        const batch = dbProductsToUpdate.slice(k, k + UPDATE_BATCH_SIZE);
+        await Promise.all(
+          batch.map((up) =>
+            prisma.product.update({
+              where: { id: up.id },
+              data: {
+                isActive: true,
+                salePrice: up.salePrice,
+                purchasePrice: up.purchasePrice,
+                mrp: up.mrp,
+                reorderLevel: up.reorderLevel,
+                ...(up.partNumber ? { partNumber: up.partNumber } : {}),
+                ...(up.brand ? { brand: up.brand } : {}),
+                ...(up.category ? { category: up.category } : {}),
+                ...(up.unit ? { unit: up.unit } : {}),
+                ...(up.hsnCode ? { hsnCode: up.hsnCode } : {}),
+                ...(up.gstRateBp ? { gstRateBp: up.gstRateBp } : {}),
+              },
+            }).catch(() => null)
+          )
+        );
       }
     }
 

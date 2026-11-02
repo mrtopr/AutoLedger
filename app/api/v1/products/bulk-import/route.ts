@@ -5,6 +5,9 @@ import { queueCloudSync, executeCloudSync } from '@/server/lib/cloudSync';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { createAuditLog } from '@/server/lib/audit';
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export interface BulkImportItem {
   name: string;
   partNumber?: string;
