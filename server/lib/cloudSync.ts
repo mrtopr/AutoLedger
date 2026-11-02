@@ -103,7 +103,7 @@ async function processSyncQueue() {
 /**
  * Executes a single cloud sync task with chunking and strict UUID verification.
  */
-async function executeCloudSync(
+export async function executeCloudSync(
   dbTenantId: string,
   items: CloudSyncProductItem[],
   userId?: string | null
@@ -113,20 +113,26 @@ async function executeCloudSync(
   for (let i = 0; i < items.length; i += CHUNK_SIZE) {
     const chunk = items.slice(i, i + CHUNK_SIZE);
     const chunkNames = chunk.map((it) => (it.name || '').trim()).filter(Boolean);
+    const chunkParts = chunk.map((it) => (it.partNumber || '').trim()).filter(Boolean);
 
     // Find any products that already exist in PostgreSQL for this chunk
     let existingDbByName = new Map<string, string>();
+    let existingDbByPart = new Map<string, string>();
     try {
       const existingDbProducts = await prisma.product.findMany({
         where: {
           tenantId: dbTenantId,
-          name: { in: chunkNames },
+          OR: [
+            ...(chunkNames.length > 0 ? [{ name: { in: chunkNames } }] : []),
+            ...(chunkParts.length > 0 ? [{ partNumber: { in: chunkParts } }] : []),
+          ],
         },
-        select: { id: true, name: true },
+        select: { id: true, name: true, partNumber: true },
       });
 
       for (const ep of existingDbProducts) {
         if (ep.name) existingDbByName.set(ep.name.trim().toLowerCase(), ep.id);
+        if (ep.partNumber) existingDbByPart.set(ep.partNumber.trim().toLowerCase(), ep.id);
       }
     } catch {
       // Continue if lookup fails
@@ -134,6 +140,20 @@ async function executeCloudSync(
 
     const dbNewProducts: any[] = [];
     const dbStockMovements: any[] = [];
+    const dbExistingIdsToReactivate: string[] = [];
+    const dbProductsToUpdate: Array<{
+      id: string;
+      partNumber?: string;
+      brand?: string;
+      category?: string;
+      unit?: string;
+      hsnCode?: string;
+      gstRateBp?: number;
+      purchasePrice: bigint;
+      salePrice: bigint;
+      mrp: bigint;
+      reorderLevel: number;
+    }> = [];
 
     for (let j = 0; j < chunk.length; j++) {
       const item = chunk[j];
@@ -150,9 +170,25 @@ async function executeCloudSync(
       // Only accept existing ID if it is a valid UUID
       const dbExistingId =
         (item.existingProductId && isValidUuid(item.existingProductId) ? item.existingProductId : null) ||
-        existingDbByName.get(trimmedName.toLowerCase());
+        existingDbByName.get(trimmedName.toLowerCase()) ||
+        (item.partNumber ? existingDbByPart.get(item.partNumber.trim().toLowerCase()) : null);
 
       if (dbExistingId && isValidUuid(dbExistingId)) {
+        dbExistingIdsToReactivate.push(dbExistingId);
+        dbProductsToUpdate.push({
+          id: dbExistingId,
+          partNumber: item.partNumber || undefined,
+          brand: item.brand || undefined,
+          category: item.category || undefined,
+          unit: item.unit || undefined,
+          hsnCode: item.hsnCode || undefined,
+          gstRateBp: Number(item.gstRateBp) || undefined,
+          purchasePrice: BigInt(purchasePricePaise),
+          salePrice: BigInt(salePricePaise),
+          mrp: BigInt(mrpPaise),
+          reorderLevel,
+        });
+
         if (stockQty !== 0) {
           dbStockMovements.push({
             id: randomUUID(),
@@ -199,7 +235,43 @@ async function executeCloudSync(
       }
     }
 
-    // Insert products
+    // Reactivate and update existing products
+    if (dbExistingIdsToReactivate.length > 0) {
+      await prisma.product.updateMany({
+        where: {
+          id: { in: dbExistingIdsToReactivate },
+          tenantId: dbTenantId,
+        },
+        data: {
+          isActive: true,
+        },
+      });
+
+      for (const up of dbProductsToUpdate) {
+        try {
+          await prisma.product.update({
+            where: { id: up.id },
+            data: {
+              isActive: true,
+              salePrice: up.salePrice,
+              purchasePrice: up.purchasePrice,
+              mrp: up.mrp,
+              reorderLevel: up.reorderLevel,
+              ...(up.partNumber ? { partNumber: up.partNumber } : {}),
+              ...(up.brand ? { brand: up.brand } : {}),
+              ...(up.category ? { category: up.category } : {}),
+              ...(up.unit ? { unit: up.unit } : {}),
+              ...(up.hsnCode ? { hsnCode: up.hsnCode } : {}),
+              ...(up.gstRateBp ? { gstRateBp: up.gstRateBp } : {}),
+            },
+          });
+        } catch {
+          // ignore single item update error
+        }
+      }
+    }
+
+    // Insert new products
     const validNewProducts = dbNewProducts.filter((p) => isValidUuid(p.id) && isValidUuid(p.tenantId));
     if (validNewProducts.length > 0) {
       await prisma.product.createMany({

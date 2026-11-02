@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
-import { queueCloudSync } from '@/server/lib/cloudSync';
-import { prisma } from '@/server/lib/prisma';
+import { queueCloudSync, executeCloudSync } from '@/server/lib/cloudSync';
+import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
 import { createAuditLog } from '@/server/lib/audit';
 
 export interface BulkImportItem {
@@ -87,9 +87,23 @@ export async function POST(req: NextRequest) {
 
     const localSummary = localStore.bulkUpsertProducts(targetTenantId, localStorePayload);
 
-    // 2. Background cloud synchronization: queue non-blocking sync with automatic retries
+    // 2. Direct Cloud Synchronization: when connected to PostgreSQL, directly commit to cloud
     const syncTenantId = isValidUuid(targetTenantId) ? targetTenantId : null;
-    if (syncTenantId) {
+    const hasDb = await isPostgresAvailable();
+
+    if (hasDb && syncTenantId) {
+      try {
+        await executeCloudSync(
+          syncTenantId,
+          items,
+          (authUser?.id && isValidUuid(authUser.id)) ? authUser.id : null
+        );
+      } catch (cloudErr) {
+        console.warn('Direct cloud sync warning, enqueuing background retry:', cloudErr);
+        queueCloudSync(syncTenantId, items, (authUser?.id && isValidUuid(authUser.id)) ? authUser.id : null);
+      }
+    } else if (syncTenantId) {
+      // Offline desktop mode: queue for background sync when connection is restored
       queueCloudSync(syncTenantId, items, (authUser?.id && isValidUuid(authUser.id)) ? authUser.id : null);
     }
 
