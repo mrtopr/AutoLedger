@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable } from '@/server/lib/prisma';
-import { comparePassword, signToken, TOKEN_COOKIE_NAME } from '@/server/lib/auth';
+import { comparePassword, signToken, TOKEN_COOKIE_NAME, hashPassword } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
 
 export async function POST(req: NextRequest) {
@@ -104,18 +104,18 @@ export async function POST(req: NextRequest) {
           gstin: '27AABCA1234F1Z9',
           address: 'Shop No. 12-14, Pune Auto Spare Market, Nana Peth, Pune - 411002',
           stateCode: '27',
-          phone: '9822012345',
+          phone: '9822000000',
           email: 'demo@autoledger.app',
         });
       }
       user = localStore.findUser('demo@autoledger.app');
       if (!user) {
-        const hashedDemoPass = await comparePassword('Demo@123', '$2a$10$wT8f6u7UuHl8rXo6x.4DveR6.VvB1zJvX4a3nI2tQ7zF5rVbYxQeK') ? '$2a$10$wT8f6u7UuHl8rXo6x.4DveR6.VvB1zJvX4a3nI2tQ7zF5rVbYxQeK' : undefined;
+        const hashedDemoPass = await hashPassword('Demo@123');
         user = localStore.createUser({
           tenantId: demoTenant.id,
           name: 'Rajesh Sharma (Owner)',
           email: 'demo@autoledger.app',
-          phone: '9822012345',
+          phone: '9822000000',
           password: hashedDemoPass,
           role: 'OWNER',
           isActive: true,

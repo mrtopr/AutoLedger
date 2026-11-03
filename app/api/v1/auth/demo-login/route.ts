@@ -7,7 +7,7 @@ import { Role, CustomerType, CreditStatus, InvoiceStatus, InvoiceType, StockReas
 export const dynamic = 'force-dynamic';
 
 const DEMO_EMAIL = 'demo@autoledger.app';
-const DEMO_PHONE = '9822012345';
+const DEMO_PHONE = '9822000000';
 const DEMO_PASS = 'Demo@123';
 const DEMO_TENANT_NAME = 'AutoLedger Demo Motors';
 

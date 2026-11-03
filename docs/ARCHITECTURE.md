@@ -177,3 +177,4 @@ The architecture is continuously verified through an automated test suite enforc
 * `tests/durableIdempotencyAndStockSafety.test.ts`: Verifies duplicate requests never double-decrement inventory.
 * `tests/backupRestoreDR.test.ts`: Tests point-in-time snapshot exports and cross-tenant collision rejection.
 * `tests/tenantIsolation.test.ts`: Proves complete multi-tenant cryptographic and relational isolation across all CRUD boundaries.
+

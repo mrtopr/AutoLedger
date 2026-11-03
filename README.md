@@ -24,6 +24,8 @@ Experience AutoLedger ERP live in your browser with a fully pre-seeded automotiv
 | **Demo Password** | `Demo@123` |
 | **Pre-Seeded Data** | **1 Dealership Owner**, **3 Workshop Khata Accounts** (*Speed Motors, Sharma Auto Care, National Bike Point*), **10 Genuine Spare Parts** (*NGK, Motul, Rolon, Bosch, etc.*), and **2 Sample Sales Bills**. |
 
+![TradeLedger 1-Click Demo Login](docs/screenshots/00_demo_login.jpg)
+
 ---
 
 ## 📸 Visual Product Tour
