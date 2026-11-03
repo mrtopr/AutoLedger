@@ -1,5 +1,6 @@
 # 🏍️ AutoLedger ERP — Automotive Dealership, Workshop & B2B Khata Platform
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2.18-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
@@ -7,31 +8,66 @@
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20%7C%20Neon%20Serverless-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Electron](https://img.shields.io/badge/Desktop-Electron%20Windows%20App-47848F?style=flat-square&logo=electron)](https://www.electronjs.org/)
 
-**AutoLedger ERP** is an enterprise-grade Dealership Management System (DMS), Fast Counter POS Billing, and B2B Khata Ledger platform engineered for automotive dealerships, two-wheeler workshops, spare parts distributors, and multi-brand service centers.
+**AutoLedger ERP** is an enterprise-grade Dealership Management System (DMS), Fast Counter POS Billing, and B2B Khata Ledger platform engineered specifically for automotive dealerships, two-wheeler workshops, spare parts distributors, and multi-brand service centers.
 
 ---
 
+## 🌟 Live Interactive Demo & Instant Access
+
+Experience AutoLedger ERP live in your browser with a fully pre-seeded automotive dealership:
+
+| Parameter | Details |
+| :--- | :--- |
+| **Live Web App** | **[Launch AutoLedger Live Demo](https://auto-ledger-git-main-sachins-projects-01fef6f8.vercel.app/login)** |
+| **Instant 1-Click Access** | Click **"Launch Demo"** directly on the login page for instant authentication |
+| **Demo Owner Email** | `demo@autoledger.app` |
+| **Demo Password** | `Demo@123` |
+| **Pre-Seeded Data** | **1 Dealership Owner**, **3 Workshop Khata Accounts** (*Speed Motors, Sharma Auto Care, National Bike Point*), **10 Genuine Spare Parts** (*NGK, Motul, Rolon, Bosch, etc.*), and **2 Sample Sales Bills**. |
+
+---
+
+## 📸 Visual Product Tour
+
+### 1. Executive Dealership Dashboard (`/`)
+*Real-time visibility into daily gross billed sales, realized cash/UPI collections, overdue garage Khata aging, and critical reorder alerts.*
+![Executive Dealership Dashboard](docs/screenshots/01_dashboard.jpg)
+
+---
+
+### 2. High-Speed Counter POS Billing (`/pos`)
+*Sub-10ms part search with barcode scanning, OEM part number matching, instant cash/UPI split payments, and 3-inch thermal slip / A4 sales bill generation.*
+![POS Counter Billing](docs/screenshots/02_pos_billing.jpg)
+
+---
+
+### 3. Customer Directory & B2B Garage Khata (`/customers`)
+*Double-entry digital Khata ledger tracking running balances, payment settlements, aging brackets (0-30d, 31-60d, 90+d), and 1-click WhatsApp payment reminders.*
+![Customer Khata & Digital Ledger](docs/screenshots/03_customer_khata.jpg)
+
+---
+
+### 4. Parts Catalog & Stock Inventory (`/inventory`)
+*Wholesale valuation, SKU management, compatible bike models (Activa, Shine, Splendor, Pulsar), min-level thresholds, and batch inward/outward adjustments.*
+![Inventory & Stock Management](docs/screenshots/04_inventory_catalog.jpg)
+
+---
+
+### 5. Day-End Cash Settlement & Audit Trail (`/settlement`)
+*Shift till balancing, cash denomination counting, drawer variance tracking, non-GST sales bill reconciliation, and full system backup/restore.*
+![Day-End Settlement & Audit Trail](docs/screenshots/05_day_end_settlement.jpg)
+
+---
 
 ## 📑 Table of Contents
 
+- [Live Interactive Demo](#-live-interactive-demo--instant-access)
+- [Visual Product Tour](#-visual-product-tour)
 - [Key Highlights](#-key-highlights)
-- [Architecture & Tech Stack](#-architecture--tech-stack)
+- [Architecture & Dual-Engine Resilience](#-architecture--dual-engine-resilience)
 - [Core Functional Modules](#-core-functional-modules)
-  - [1. Executive Dealership Dashboard](#1-executive-dealership-dashboard-)
-  - [2. Quick POS & Counter Billing](#2-quick-pos--counter-billing-pos)
-  - [3. Customer Khata & Digital Ledger](#3-customer-khata--digital-ledger-customers)
-  - [4. Parts Catalog & Stock Inventory](#4-parts-catalog--stock-inventory-products--inventory)
-  - [5. Invoices & Billing History](#5-invoices--billing-history-invoices)
-  - [6. Daily Cash Settlement & GST Reports](#6-daily-cash-settlement--gst-reports-reports)
-  - [7. Dealership Settings & Full System Backups](#7-dealership-settings--full-system-backups-settings)
-- [Dual-Engine Data Resilience (Zero Downtime)](#-dual-engine-data-resilience-zero-downtime)
+- [Type-Safe API Boundary](#-type-safe-api-boundary)
 - [Multi-Language Support (English & हिन्दी)](#-multi-language-support-english--हिन्दी)
 - [Getting Started](#-getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Environment Configuration](#environment-configuration)
-  - [Running the Web Platform](#running-the-web-platform)
-  - [Running the Desktop App (Electron)](#running-the-desktop-app-electron)
 - [Production Deployment & SaaS Commercialization](#-production-deployment--saas-commercialization)
 - [Project Directory Structure](#-project-directory-structure)
 - [License](#-license)
@@ -41,7 +77,7 @@
 ## ⚡ Key Highlights
 
 * **Sub-10ms Counter Billing:** Ultra-fast part search with barcode scanning, SKU lookup, and vehicle compatibility filters (*Activa, Shine, Splendor, Pulsar, etc.*).
-* **Dual-Engine Zero-Downtime Mode:** Connects to PostgreSQL (Neon Serverless) for cloud sync, with an instant fallback to an atomic local store (`.data/db_store.json`) when offline.
+* **Dual-Engine Zero-Downtime Mode:** Connects to PostgreSQL (Neon Serverless) for cloud sync, with an instantaneous fallback to an atomic local store (`.data/db_store.json`) when offline.
 * **Non-GST Sales Bill Engine:** Clean price calculation with line discounts, itemized quantities, and auto round-off adjustment without tax markup.
 * **Strict Khata Credit Guardrails:** Real-time credit limits, overdue day tracking (30/60/90+ days), and automated credit status classification (`GREEN`, `YELLOW`, `RED`).
 * **Multi-Format Sales Bills:** Instant A4 Sales Bills and 3-inch Thermal Receipts with dynamic UPI payment QR codes and bank details.
@@ -50,17 +86,46 @@
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+## 🛠️ Architecture & Dual-Engine Resilience
 
-| Layer | Technology | Description |
+> 📖 **Deep Dive Available:** For the complete architectural specification, conflict resolution invariants, and v2 roadmap, see [**`docs/ARCHITECTURE.md`**](docs/ARCHITECTURE.md).
+
+AutoLedger ERP is designed specifically around the physical realities of automotive wholesale markets (e.g. Nana Peth Pune, Kashmiri Gate Delhi). During peak evening rush hours (6:30 PM), **the counter POS billing terminal must NEVER freeze on network hops or database cold starts**.
+
+| Layer | Technology | Operational Function |
 | :--- | :--- | :--- |
 | **Frontend** | Next.js 14 (App Router), React 18 | High-speed server & client rendering with streaming states |
 | **Styling** | Tailwind CSS, Lucide Icons | Responsive design system with dark slate & crimson accents |
 | **Desktop Client**| Electron 44 + Electron Builder | Native Windows `.exe` desktop application with splash loader |
-| **Backend API** | Next.js Route Handlers (`app/api/v1`) | RESTful JSON endpoints with Zod schema validation |
-| **Cloud Database**| PostgreSQL + Prisma ORM 5.22 | Relational schema with index optimization for ledger and stock queries |
+| **API Boundary** | Next.js Route Handlers + Zod | Strict runtime schema parsing and typed DTO boundaries |
+| **Cloud Database**| PostgreSQL + Prisma ORM 5.22 | Relational source of truth on Neon Serverless |
 | **Local Fallback**| Atomic LocalStore (`.data/db_store.json`) | Atomic file-persisted store for offline counter operations |
 | **Authentication**| JWT + HTTP-Only Cookies | Secure session tokens with bcrypt password hashing & UUID validation |
+
+### Consistency & Conflict Protection Invariants
+1. **Append-Only Invoices:** Invoices are immutable business records. Adjustments occur via compensating credit notes or cancellation events, preventing overwrite conflicts.
+2. **Monotonic Sequence Watermarking:** `InvoiceSeries` preserves a high-water mark sequence ($\max(\text{Cloud}, \text{Local}) + 1$) preventing duplicate bill numbers.
+3. **Event-Sourced Delta Stock:** `StockMovement` logs commutative delta quantities ($\Delta \in \mathbb{Z}$), eliminating write-write clobbering.
+4. **Durable Idempotency:** Client-generated UUIDv4 idempotency keys prevent duplicate bill creation or double stock deduction upon network retries.
+
+---
+
+## 🔒 Type-Safe API Boundary
+
+All mutation boundaries are protected by **Zod-inferred Data Transfer Objects (DTOs)**, eliminating runtime type ambiguity across the route edge:
+
+```typescript
+// Example: Validated API Boundary in app/api/v1/invoices/route.ts
+const parseResult = CreateInvoiceSchema.safeParse(body);
+if (!parseResult.success) {
+  return NextResponse.json({ error: parseResult.error.errors[0]?.message }, { status: 400 });
+}
+const validated: CreateInvoiceInput = parseResult.data;
+```
+
+* **Invoices Schema:** [`app/api/v1/invoices/schema.ts`](app/api/v1/invoices/schema.ts)
+* **Customers Schema:** [`app/api/v1/customers/schema.ts`](app/api/v1/customers/schema.ts)
+* **Products Schema:** [`app/api/v1/products/bulk-import/route.ts`](app/api/v1/products/bulk-import/route.ts)
 
 ---
 
@@ -94,51 +159,14 @@
 * **Interactive A4 Sales Bill Preview:** Clean non-GST sales bill / cash receipt with showroom details, line items, net totals, bank details, and dynamic payment QR code.
 * **Direct Actions:** Print, Download, or Share via WhatsApp.
 
-### 6. Daily Cash Settlement & Reconciliation (`/reports`)
+### 6. Daily Cash Settlement & Reconciliation (`/reports` & `/settlement`)
 * **Day-End Cash Reconciliation:** Realized cash in drawer, UPI collections, credit given, and credit recovered.
-* **Cash Desk Balancing:** Fast end-of-day closing with denomination counting and variance tracking. *(Note: Statutory GSTR-1 tax return filing is scoped out as this system is configured for basic non-GST sales bills).*
+* **Cash Desk Balancing:** Fast end-of-day closing with denomination counting and variance tracking.
 
 ### 7. Dealership Settings & Disaster Recovery Backups (`/settings`)
 * **Business Profile:** Configure showroom name, legal entity name, GSTIN, contact numbers, and bank account details.
-* **Consistent System Backup (`GET /api/v1/backup`):**
-  - Exports a transactionally consistent point-in-time snapshot using PostgreSQL `RepeatableRead` transaction isolation.
-  - Complete data capture: includes invoices, invoice items, products, bike models, stock movements, customers, payments, payment allocations, Khata ledger entries, invoice audit events, invoice series counters, and tenant settings.
-  - Excludes sensitive credentials (passwords, TOTP secrets are scrubbed).
-  - Downloaded with attachment filename header `tradeledger-backup-<tenantId>-<date>.json`.
-* **Safe Idempotent Restore (`POST /api/v1/backup`):**
-  - **Semantics:** Transactional Idempotent Upsert. Merges missing records, updates attributes, preserves original IDs and foreign-key relationships.
-  - **Atomicity:** Entire restore runs inside a single database transaction with automatic 100% rollback on failure.
-  - **Tenant Boundary Safety:** Restores strictly into the authenticated OWNER's tenant. Rejects cross-tenant ID collisions with HTTP 409 and broken foreign keys with HTTP 400.
-  - **Sequence Watermark:** `InvoiceSeries` counter is preserved monotonically (`GREATEST(existing, backup)`) to prevent duplicate bill numbers.
-
----
-
-## 🛡️ Fresh Database Provisioning & Disaster Recovery Architecture
-
-### 1. Fresh Database Provisioning (Zero-to-Running)
-To provision an isolated staging or disposable recovery database from scratch:
-```powershell
-# Option A (Recommended for development/staging environments):
-npx prisma db push
-
-# Option B (Pure SQL Baseline execution for cold PostgreSQL instances):
-# Execute the generated baseline DDL script containing all 37 tables, enums, indexes:
-psql $DATABASE_URL -f prisma/baseline_init.sql
-
-# Mark migrations as deployed on top of baseline:
-npm run prisma:migrate:deploy
-```
-
-### 2. Production Disaster Recovery Recommendations
-* **Automated Offsite Snapshots:** In addition to manual JSON exports via the app UI, production deployments should enable managed daily logical backups (`pg_dump -Fc`) uploaded to private cloud storage (AWS S3 / GCS) with 30-day lifecycle retention.
-* **Point-in-Time Recovery (PITR):** Enable WAL archiving / continuous backup on PostgreSQL (enabled by default on AWS RDS / Neon / Supabase Pro) for 7-day granular rollback in case of physical disk failure.
-* **Regular Recovery Drills:** Run monthly restore dry-runs into disposable staging databases to continuously verify backup validity and financial reconciliation.
-
-## 🔄 Dual-Engine Data Resilience (Zero Downtime)
-
-AutoLedger ERP implements an intelligent **Dual-Engine Architecture**:
-1. **PostgreSQL Mode:** When connected to cloud database (Neon/Supabase), all reads and writes sync across devices.
-2. **LocalStore Fallback:** If PostgreSQL is unreachable or offline, the platform automatically routes requests to `.data/db_store.json`. The POS counter never stops billing.
+* **Consistent System Backup (`GET /api/v1/backup`):** Exports a transactionally consistent snapshot using PostgreSQL `RepeatableRead` isolation.
+* **Safe Idempotent Restore (`POST /api/v1/backup`):** Transactional idempotent restore inside a single database transaction with automatic 100% rollback on failure.
 
 ---
 
@@ -161,8 +189,8 @@ AutoLedger ERP features full bilingual support:
 ### Installation
 ```powershell
 # 1. Clone repository
-git clone <your-repo-url>
-cd B2B_Platform
+git clone https://github.com/mrtopr/AutoLedger.git
+cd AutoLedger
 
 # 2. Install dependencies
 npm install
@@ -204,8 +232,6 @@ Or simply double-click **`Launch-TradeLedger-ERP.bat`** for 1-click startup!
 
 ## 💼 Production Deployment & SaaS Commercialization
 
-To sell TradeLedger ERP to wholesale traders, distributors, and retail businesses:
-
 1. **Deploy the Web & API Engine:**
    - Host on **[Vercel](https://vercel.com)** or **Railway**.
    - Connect to a managed PostgreSQL database on **[Neon.tech](https://neon.tech)**.
@@ -224,11 +250,11 @@ To sell TradeLedger ERP to wholesale traders, distributors, and retail businesse
 ```
 B2B_Platform/
 ├── app/                        # Next.js 14 App Router
-│   ├── api/v1/                 # Backend RESTful API endpoints
-│   │   ├── auth/               # Login, session, OTP verification & password reset
+│   ├── api/v1/                 # Backend RESTful API endpoints with Zod DTOs
+│   │   ├── auth/               # Login, demo access, OTP verification & password reset
 │   │   ├── backup/             # Full JSON database export & restore
-│   │   ├── customers/          # Khata ledger, payments, credit limits
-│   │   ├── invoices/           # POS bill creation & sales bills
+│   │   ├── customers/          # Khata ledger, payments, credit limits + schema.ts
+│   │   ├── invoices/           # POS bill creation & sales bills + schema.ts
 │   │   ├── products/           # Inventory catalog & stock adjustments
 │   │   └── settings/           # Business profile & store configurations
 │   ├── components/             # Reusable ERP modals & Topbar/Sidebar
@@ -240,24 +266,25 @@ B2B_Platform/
 │   ├── settlement/             # Day-End Settlement & Audit Trail
 │   └── settings/               # System Settings & Database Backup
 ├── docs/                       # Operational runbooks & architecture docs
+│   ├── ARCHITECTURE.md         # Comprehensive Dual-Engine architecture & conflict invariants
+│   ├── screenshots/            # High-resolution production UI screenshots
 │   ├── DESIGN.md               # UI design specification & style guide
 │   ├── PRODUCT.md              # Product requirements & user stories
 │   ├── OPERATIONAL_RUNBOOK.md  # Day-to-day operations & runbook
-│   ├── DISASTER_RECOVERY_PLAN.md# Backup, restore & DR procedures
-│   └── SECURITY_INCIDENT_RUNBOOK.md # Security audit & response guide
+│   └── DISASTER_RECOVERY_PLAN.md# Backup, restore & DR procedures
 ├── electron/                   # Desktop application wrapper
 │   ├── main.js                 # Electron main process & splash screen
 │   └── preload.js              # IPC bridge
 ├── prisma/                     # Database schema & migrations
 │   └── schema.prisma           # Prisma Data Model (Paise monetary columns)
-├── public/                     # Static assets & brand media
-│   └── images/                 # Brand emblems & logos
+├── public/                     # Static assets, brand media & screenshots
 ├── server/lib/                 # Backend utility libraries
 │   ├── auth.ts                 # JWT verification & password hashing
 │   ├── prisma.ts               # Resilient Prisma client singleton
 │   ├── store.ts                # Atomic offline LocalStore engine
 │   └── tax.ts                  # GST tax calculation engine
-├── tests/                      # Vitest test suite (E2E, security, financial)
+├── tests/                      # Vitest test suite (E2E, security, financial, idempotency)
+├── LICENSE                     # MIT Open Source License
 ├── Launch-TradeLedger-ERP.bat  # 1-Click Windows Desktop Launcher
 └── package.json                # Project dependencies & build scripts
 ```
@@ -266,4 +293,4 @@ B2B_Platform/
 
 ## 📄 License
 
-Proprietary — All Rights Reserved © 2026 AutoLedger ERP.
+This project is licensed under the [MIT License](LICENSE) — free for use, modification, and commercialization.

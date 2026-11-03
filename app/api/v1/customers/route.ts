@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isPostgresAvailable, getStorageMode } from '@/server/lib/prisma';
 import { getAuthenticatedUser } from '@/server/lib/auth';
 import { localStore } from '@/server/lib/store';
-import { CreditStatus, CustomerType } from '@prisma/client';
+import { CreditStatus, CustomerType, LedgerEntryType } from '@prisma/client';
+import { CreateCustomerSchema, CustomerDTO } from './schema';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get('q') || '';
     const status = searchParams.get('status') || '';
 
-    let formatted: any[] = [];
+    let formatted: CustomerDTO[] = [];
     let dbSuccess = false;
 
     // 1. Try Prisma first if Postgres is available
@@ -117,9 +118,10 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, count: filtered.length, customers: filtered });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMessage = error instanceof Error ? error.message : 'Failed to fetch customers';
     console.error('Error fetching customers:', error);
-    return NextResponse.json({ error: error.message || 'Failed to fetch customers' }, { status: 500 });
+    return NextResponse.json({ error: errMessage }, { status: 500 });
   }
 }
 
@@ -131,7 +133,12 @@ export async function POST(req: NextRequest) {
     }
     const targetTenantId = authUser.tenantId;
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const parseResult = CreateCustomerSchema.safeParse(body);
+    if (!parseResult.success) {
+      const firstError = parseResult.error.errors[0]?.message || 'Invalid customer input';
+      return NextResponse.json({ error: firstError, details: parseResult.error.flatten() }, { status: 400 });
+    }
 
     const {
       name,
@@ -144,10 +151,10 @@ export async function POST(req: NextRequest) {
       paymentTermsDays = 15,
       customerType = 'RETAILER',
       openingBalancePaise = '0',
-      openingBalanceType = 'DUE', // 'DUE' (Dr / Udhar) or 'ADVANCE' (Cr)
+      openingBalanceType = 'DUE',
       openingBalanceDate,
       openingBalanceNarration,
-    } = body;
+    } = parseResult.data;
 
     const creditLimitPaise = rawCreditLimitPaise !== undefined
       ? BigInt(rawCreditLimitPaise)
@@ -163,7 +170,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let createdCust: any = null;
+    let createdCust: Partial<CustomerDTO> | null = null;
     const initialBalPaise = BigInt(openingBalancePaise || 0);
     const isDueBal = openingBalanceType === 'DUE';
     const netBalPaise = isDueBal ? initialBalPaise : -initialBalPaise;
@@ -194,13 +201,13 @@ export async function POST(req: NextRequest) {
         const customer = await prisma.customer.create({
           data: {
             tenantId: dbTenantId,
-            name: name || shopName,
-            shopName: shopName || name,
+            name: name || shopName || 'Walk-in Customer',
+            shopName: shopName || name || 'Walk-in Workshop',
             phone,
             address: address || null,
             gstin: gstin || null,
             creditLimit: BigInt(creditLimitPaise || 5000000),
-            paymentTermsDays: parseInt(paymentTermsDays, 10) || 15,
+            paymentTermsDays: Number(paymentTermsDays) || 15,
             customerType: cType,
             status: CreditStatus.GREEN,
             isActive: true,
@@ -212,7 +219,7 @@ export async function POST(req: NextRequest) {
             data: {
               tenantId: dbTenantId,
               customerId: customer.id,
-              entryType: 'ADJUSTMENT' as any,
+              entryType: LedgerEntryType.ADJUSTMENT,
               debit: isDueBal ? initialBalPaise : 0n,
               credit: isDueBal ? 0n : initialBalPaise,
               entryDate: entryDate,
@@ -224,14 +231,15 @@ export async function POST(req: NextRequest) {
         createdCust = {
           id: customer.id,
           name: customer.name,
-          shopName: customer.shopName,
-          phone: customer.phone,
+          shopName: customer.shopName || customer.name,
+          phone: customer.phone || '',
           balancePaise: netBalPaise.toString(),
           creditLimitPaise: customer.creditLimit.toString(),
         };
-      } catch (dbErr: any) {
+      } catch (dbErr: unknown) {
+        const dbMsg = dbErr instanceof Error ? dbErr.message : 'Database error';
         if (getStorageMode() === 'POSTGRES') {
-          console.error('Postgres error during customer create:', dbErr?.message);
+          console.error('Postgres error during customer create:', dbMsg);
           return NextResponse.json(
             { error: 'Failed to create customer in database' },
             { status: 500 }
@@ -244,8 +252,8 @@ export async function POST(req: NextRequest) {
     // 2. Always persist in localStore as well
     const localCust = localStore.createCustomer({
       tenantId: targetTenantId,
-      name: name || shopName,
-      shopName: shopName || name,
+      name: name || shopName || 'Walk-in Customer',
+      shopName: shopName || name || 'Walk-in Workshop',
       phone,
       address: address || 'Pune, Maharashtra',
       gstin: gstin || null,
@@ -253,7 +261,7 @@ export async function POST(req: NextRequest) {
       balancePaise: netBalPaise.toString(),
       creditLimitPaise: String(creditLimitPaise || 5000000),
       status: 'GREEN',
-      termsDays: parseInt(paymentTermsDays, 10) || 15,
+      termsDays: Number(paymentTermsDays) || 15,
       overduePaise: '0',
     });
 
@@ -276,10 +284,11 @@ export async function POST(req: NextRequest) {
       success: true,
       customer: createdCust || localCust,
     }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to create customer';
     console.error('Error creating customer:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to create customer' },
+      { error: errMsg },
       { status: 500 }
     );
   }

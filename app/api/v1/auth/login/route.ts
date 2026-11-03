@@ -95,6 +95,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!user && cleanLoginId.toLowerCase() === 'demo@autoledger.app' && password === 'Demo@123') {
+      let demoTenant = localStore.getTenants().find((t) => t.name === 'AutoLedger Demo Motors');
+      if (!demoTenant) {
+        demoTenant = localStore.createTenant({
+          name: 'AutoLedger Demo Motors',
+          legalName: 'AutoLedger Demo Motors LLP',
+          gstin: '27AABCA1234F1Z9',
+          address: 'Shop No. 12-14, Pune Auto Spare Market, Nana Peth, Pune - 411002',
+          stateCode: '27',
+          phone: '9822012345',
+          email: 'demo@autoledger.app',
+        });
+      }
+      user = localStore.findUser('demo@autoledger.app');
+      if (!user) {
+        const hashedDemoPass = await comparePassword('Demo@123', '$2a$10$wT8f6u7UuHl8rXo6x.4DveR6.VvB1zJvX4a3nI2tQ7zF5rVbYxQeK') ? '$2a$10$wT8f6u7UuHl8rXo6x.4DveR6.VvB1zJvX4a3nI2tQ7zF5rVbYxQeK' : undefined;
+        user = localStore.createUser({
+          tenantId: demoTenant.id,
+          name: 'Rajesh Sharma (Owner)',
+          email: 'demo@autoledger.app',
+          phone: '9822012345',
+          password: hashedDemoPass,
+          role: 'OWNER',
+          isActive: true,
+        });
+        user = { ...user, tenant: demoTenant };
+      }
+    }
+
     if (!user) {
       return NextResponse.json(
         { error: 'No account found with this phone/email. Please sign up.' },

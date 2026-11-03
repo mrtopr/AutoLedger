@@ -17,7 +17,8 @@ import {
   Mail,
   CheckCircle2,
   KeyRound,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 
 function LoginFormContent() {
@@ -51,6 +52,27 @@ function LoginFormContent() {
   // Status & Error state
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDemoSubmitting, setIsDemoSubmitting] = useState(false);
+
+  const handleDemoLogin = async () => {
+    setIsDemoSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/auth/demo-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to initialize demo session');
+      }
+      window.location.href = '/';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Demo access failed';
+      setError(msg);
+      setIsDemoSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (searchParams?.get('tab') === 'customer') {
@@ -257,6 +279,42 @@ function LoginFormContent() {
               <span>Customer Portal</span>
             </button>
           </div>
+
+          {/* 1-Click Interactive Demo Access Banner */}
+          {!isForgotPassword && (
+            <div className="mb-4 p-3.5 rounded-xl border border-rose-200 bg-rose-50/80 text-slate-900 shadow-xs">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold flex items-center gap-1.5 text-rose-800">
+                    <Sparkles className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span>Live Interactive Demo Showroom</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                    Instant access to seeded dealership: 10 parts, 3 customers & 2 invoices.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDemoLogin}
+                  disabled={isDemoSubmitting}
+                  className="shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg bg-[#C81E1E] hover:bg-[#991B1B] text-white shadow-xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isDemoSubmitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Launch Demo</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="mt-2 pt-2 border-t border-rose-200/60 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                <span>Demo Email: <strong>demo@autoledger.app</strong></span>
+                <span>Password: <strong>Demo@123</strong></span>
+              </div>
+            </div>
+          )}
 
           {/* Heading */}
           <div className="mb-2">

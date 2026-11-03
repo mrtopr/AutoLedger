@@ -10,6 +10,7 @@ import {
   getIndianFinancialYear,
 } from '@/server/lib/invoiceNumbering';
 import { createAuditLog } from '@/server/lib/audit';
+import { CreateInvoiceSchema, InvoiceDTO, InvoiceItemDTO } from './schema';
 
 const isUuid = (id?: string | null): boolean =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     }
     const targetTenantId = authUser.tenantId;
 
-    let invoices: any[] = [];
+    let invoices: InvoiceDTO[] = [];
     let dbSuccess = false;
     const hasDb = await isPostgresAvailable();
     const effectiveTenantId = isUuid(targetTenantId) ? targetTenantId : null;
@@ -114,19 +115,20 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, invoices });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to get invoices';
     console.error('Error getting invoices:', error);
-    return NextResponse.json({ error: error.message || 'Failed to get invoices' }, { status: 500 });
+    return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 }
 
 const invoiceIdempotencyCache = new Map<string, {
-  invoice: any;
+  invoice: unknown;
   invoiceNumber: string;
   customerId?: string;
   itemCount?: number;
   grandTotalPaise: string;
-  taxSummary: any;
+  taxSummary: unknown;
   timestamp: number;
 }>();
 
@@ -138,7 +140,12 @@ export async function POST(req: NextRequest) {
     }
     const targetTenantId = authUser.tenantId;
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const parseResult = CreateInvoiceSchema.safeParse(body);
+    if (!parseResult.success) {
+      const firstError = parseResult.error.errors[0]?.message || 'Invalid invoice payload';
+      return NextResponse.json({ error: firstError, details: parseResult.error.flatten() }, { status: 400 });
+    }
 
     const {
       customerId,
@@ -149,7 +156,7 @@ export async function POST(req: NextRequest) {
       customerName,
       customerPhone,
       customerGstin,
-    } = body;
+    } = parseResult.data;
 
     let cashPaidPaise = body.cashPaidPaise !== undefined ? body.cashPaidPaise : 0;
     let upiPaidPaise = body.upiPaidPaise !== undefined ? body.upiPaidPaise : 0;
@@ -862,9 +869,10 @@ export async function POST(req: NextRequest) {
         grandTotal: taxSummary.grandTotal.toString(),
       }
     }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to issue invoice';
     console.error('Invoice create error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to issue invoice' }, { status: 500 });
+    return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 }
 
@@ -1112,10 +1120,11 @@ export async function DELETE(req: NextRequest) {
       storage: 'localStore',
       message: 'Invoice cancelled successfully in local store. Inventory stock and Khata ledger have been reversed.',
     });
-  } catch (error: any) {
-    console.error('Invoice cancel error:', error?.message || error);
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to cancel invoice';
+    console.error('Invoice cancel error:', errMsg);
     return NextResponse.json(
-      { error: error?.message || 'Failed to cancel invoice' },
+      { error: errMsg },
       { status: 500 }
     );
   }
